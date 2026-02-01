@@ -2,7 +2,7 @@ import os
 import subprocess
 from pydub import AudioSegment
 from status import update
-from utils import format_peak_time
+from utils import format_peak_time, MATERIAL_DIR, EXPORT_DIR, TEMP_DIR, ASSETS_DIR
 from peaks import (
     get_peaks,
     get_mode,
@@ -17,8 +17,7 @@ CONTEXT_DURATION_MS = 15000
 PAUSE_DURATION_MS = 500
 
 def extract_guest_name():
-    material_folder = os.path.join(os.getcwd(), "material")
-    for f in os.listdir(material_folder):
+    for f in os.listdir(MATERIAL_DIR):
         if "mix" in f.lower():
             base = os.path.splitext(f)[0]
             parts = base.split(" - ")
@@ -28,9 +27,8 @@ def extract_guest_name():
 
 def generate_tts_number(n):
     """Generate number via macOS TTS (say command)."""
-    temp_folder = os.path.join(os.getcwd(), "temp")
-    os.makedirs(temp_folder, exist_ok=True)
-    aiff_path = os.path.join(temp_folder, f"tts_{n}.aiff")
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    aiff_path = os.path.join(TEMP_DIR, f"tts_{n}.aiff")
 
     try:
         # macOS say: -v Anna (German voice), -o output file
@@ -59,7 +57,7 @@ def load_spoken_number(n):
 
     # 2. Fallback: existing MP3/WAV files
     for ext in [".mp3", ".wav"]:
-        path = os.path.join("assets", "zahlen", f"{n}{ext}")
+        path = os.path.join(ASSETS_DIR, "zahlen", f"{n}{ext}")
         if os.path.exists(path):
             update(f"🔊 Number {n} loaded ({ext}) [Fallback]")
             return AudioSegment.from_file(path)
@@ -72,8 +70,7 @@ def load_spoken_number(n):
 def run_export():
     update("✅ [EXPORT] Starting audio export...")
 
-    export_folder = os.path.join(os.getcwd(), "export")
-    os.makedirs(export_folder, exist_ok=True)
+    os.makedirs(EXPORT_DIR, exist_ok=True)
 
     peaks = get_peaks()
     ignored = get_ignored_peaks()
@@ -125,8 +122,8 @@ def run_export():
 
     gastname = extract_guest_name()
     base_filename = f"Keyboardstellen - {gastname}"
-    mp3_path = os.path.join(export_folder, base_filename + ".mp3")
-    txt_path = os.path.join(export_folder, base_filename + ".txt")
+    mp3_path = os.path.join(EXPORT_DIR, base_filename + ".mp3")
+    txt_path = os.path.join(EXPORT_DIR, base_filename + ".txt")
 
     result.export(mp3_path, format="mp3")
 

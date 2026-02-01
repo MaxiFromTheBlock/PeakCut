@@ -5,14 +5,14 @@ import soundfile as sf
 import numpy as np
 from scipy.signal import correlate
 from moviepy.editor import VideoFileClip
+from utils import MATERIAL_DIR, EXPORT_DIR, TEMP_DIR
 
 
 def cleanup_temp():
-    """Löscht alle Dateien im temp-Ordner."""
-    temp_folder = os.path.join(os.getcwd(), 'temp')
-    if os.path.exists(temp_folder):
-        for f in os.listdir(temp_folder):
-            file_path = os.path.join(temp_folder, f)
+    """Delete all files in temp folder."""
+    if os.path.exists(TEMP_DIR):
+        for f in os.listdir(TEMP_DIR):
+            file_path = os.path.join(TEMP_DIR, f)
             try:
                 if os.path.isfile(file_path):
                     os.remove(file_path)
@@ -49,18 +49,14 @@ def format_offset(offset_seconds, fps=25):
 def run_sync():
     update("✅ [SYNC] Starting sync...")
 
-    material_folder = os.path.join(os.getcwd(), 'material')
-    export_folder = os.path.join(os.getcwd(), 'export')
-    temp_folder = os.path.join(os.getcwd(), 'temp')
-
     # Cleanup temp folder before starting
     cleanup_temp()
 
-    os.makedirs(temp_folder, exist_ok=True)
-    os.makedirs(export_folder, exist_ok=True)
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    os.makedirs(EXPORT_DIR, exist_ok=True)
 
-    video_files = [f for f in os.listdir(material_folder) if f.lower().endswith(('.mp4', '.mov'))]
-    audio_files = [f for f in os.listdir(material_folder) if f.lower().endswith(('.wav', '.mp3'))]
+    video_files = [f for f in os.listdir(MATERIAL_DIR) if f.lower().endswith(('.mp4', '.mov'))]
+    audio_files = [f for f in os.listdir(MATERIAL_DIR) if f.lower().endswith(('.wav', '.mp3'))]
 
     update(f"Found videos: {video_files}")
     update(f"Found audio files: {audio_files}")
@@ -74,14 +70,14 @@ def run_sync():
         update("❌ No reference audio file with 'mix' in name found.")
         return
 
-    reference_path = os.path.join(material_folder, reference_file[0])
+    reference_path = os.path.join(MATERIAL_DIR, reference_file[0])
     reference_data, ref_sr = load_audio_as_array(reference_path)
 
     results = []
 
     for video in video_files:
-        video_path = os.path.join(material_folder, video)
-        temp_audio_path = os.path.join(temp_folder, f"{os.path.splitext(video)[0]}_audio.wav")
+        video_path = os.path.join(MATERIAL_DIR, video)
+        temp_audio_path = os.path.join(TEMP_DIR, f"{os.path.splitext(video)[0]}_audio.wav")
 
         update(f"🎬 Extracting audio from {video}...")
         extract_audio_from_video(video_path, temp_audio_path)
@@ -100,7 +96,7 @@ def run_sync():
         results.append((video, formatted_offset))
         update(f"✅ {video} Offset: {formatted_offset}")
 
-    output_file = os.path.join(export_folder, 'video_offsets.txt')
+    output_file = os.path.join(EXPORT_DIR, 'video_offsets.txt')
     with open(output_file, 'w') as f:
         for video, offset in results:
             f.write(f"{video}: {offset}\n")

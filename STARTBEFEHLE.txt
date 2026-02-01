@@ -2,8 +2,8 @@
 PEAKCUT STARTBEFEHLE
 ===========================================
 
---- PeakCut selbst starten ---
-cd ~/Desktop/PeakCut/App && source venv311/bin/activate && python src/main.py
+--- PeakCut starten (von überall) ---
+source ~/Desktop/PeakCut/App/venv311/bin/activate && python ~/Desktop/PeakCut/App/src/main.py
 
 
 --- Mit Claude Code an PeakCut arbeiten ---
@@ -14,9 +14,11 @@ cd ~/Desktop/PeakCut/App && claude
 AKTUELLER STAND (1. Feb 2025)
 ===========================================
 Branch: develop
-Letzter Commit: TTS + English UI
 
-Nächste Schritte:
-- Doppelte print() Ausgaben fixen
-- Duplizierten Code (format_peak_time) aufräumen
-- Leere utils.py aufräumen
+Erledigt:
+- TTS für unbegrenzte Zahlen
+- UI auf Englisch
+- Temp-Ordner Cleanup
+- Doppelte prints gefixt
+- Code konsolidiert (utils.py)
+- Portable Pfade (läuft auf jedem Mac)

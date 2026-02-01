@@ -61,6 +61,10 @@ In `peaks.py`:
 
 Numbers are generated via macOS `say -v Anna` (German voice). Fallback to `assets/zahlen/*.mp3` if TTS fails.
 
-## Known Issues (TODO)
+## Paths
 
-1. **Relative paths** - App relies on CWD being the App directory
+All paths are relative to the app directory (not CWD). Defined in `utils.py`:
+- `APP_DIR` - Root of the application
+- `MATERIAL_DIR`, `EXPORT_DIR`, `TEMP_DIR`, `ASSETS_DIR` - Working directories
+
+The app can be started from any location.

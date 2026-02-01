@@ -2,6 +2,7 @@ import tkinter as tk
 from PIL import Image, ImageTk
 import os
 
+from utils import ASSETS_DIR
 from sync import run_sync
 from peaks import run_peak_analysis, get_peaks, play_current_peak, go_back, go_forward, repeat_current, switch_mode, ignore_current_peak, stop_playback
 from export import run_export
@@ -49,7 +50,7 @@ def start_gui():
     root.geometry("1050x250")
     root.configure(bg="#0A1D3D")
 
-    logo_path = os.path.join("assets", "pictures", "peakcut_logo.png")
+    logo_path = os.path.join(ASSETS_DIR, "pictures", "peakcut_logo.png")
     if os.path.exists(logo_path):
         logo_img = Image.open(logo_path)
         logo_img = logo_img.resize((150, 150), Image.Resampling.LANCZOS)

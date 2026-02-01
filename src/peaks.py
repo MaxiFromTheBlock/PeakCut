@@ -3,6 +3,7 @@ import numpy as np
 from pydub import AudioSegment
 import simpleaudio as sa
 from status import update
+from utils import MATERIAL_DIR, EXPORT_DIR
 
 # Global navigation state
 _peaks = []
@@ -39,19 +40,17 @@ def run_peak_analysis():
     global _peaks, _current_peak, _keyboard_audio, _mic_audios, _mode
     update("✅ [PEAKS] Starting peak analysis...")
 
-    material_folder = os.path.join(os.getcwd(), 'material')
-    export_folder = os.path.join(os.getcwd(), 'export')
-    os.makedirs(export_folder, exist_ok=True)
+    os.makedirs(EXPORT_DIR, exist_ok=True)
 
-    files = os.listdir(material_folder)
+    files = os.listdir(MATERIAL_DIR)
     keyboard_file = None
     mic_files = []
 
     for f in files:
         if any(kw in f.lower() for kw in ["keyboard", "keys", "klavier"]):
-            keyboard_file = os.path.join(material_folder, f)
+            keyboard_file = os.path.join(MATERIAL_DIR, f)
         elif f.lower().endswith(".wav"):
-            mic_files.append(os.path.join(material_folder, f))
+            mic_files.append(os.path.join(MATERIAL_DIR, f))
 
     mic_files = [f for f in mic_files if keyboard_file not in f]
 
