@@ -1,0 +1,4 @@
+versions/ChatGPT Export und Workflow Video/
+venv*/
+*.mov
+.DS_Store
