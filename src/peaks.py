@@ -4,17 +4,17 @@ from pydub import AudioSegment
 import simpleaudio as sa
 from status import update
 
-# Globale Variablen zur Navigation
+# Global navigation state
 _peaks = []
 _current_peak = 0
 _keyboard_audio = None
 _mic_audios = []
-_mode = "keyboard"  # oder "mic"
+_mode = "keyboard"  # or "mic"
 _ignored_peaks = set()
 
-# Parameter
-PREVIEW_DURATION_MS = 1000   # Bei Keyboard
-CONTEXT_DURATION_MS = 15000  # Bei Mikrofon
+# Parameters
+PREVIEW_DURATION_MS = 1000   # Keyboard mode
+CONTEXT_DURATION_MS = 15000  # Mic mode
 
 def detect_peaks(audio_path, threshold_factor=0.4, min_gap_ms=15000):
     audio = AudioSegment.from_wav(audio_path)
@@ -45,7 +45,7 @@ def format_peak_time(ms, fps=25):
 
 def run_peak_analysis():
     global _peaks, _current_peak, _keyboard_audio, _mic_audios, _mode
-    update("✅ [PEAKS] Starte Peakanalyse...")
+    update("✅ [PEAKS] Starting peak analysis...")
 
     material_folder = os.path.join(os.getcwd(), 'material')
     export_folder = os.path.join(os.getcwd(), 'export')
@@ -64,7 +64,7 @@ def run_peak_analysis():
     mic_files = [f for f in mic_files if keyboard_file not in f]
 
     if not keyboard_file:
-        update("❌ Keine Keyboard-Datei gefunden.")
+        update("❌ No keyboard file found.")
         return
 
     _peaks = detect_peaks(keyboard_file)
@@ -73,23 +73,23 @@ def run_peak_analysis():
     _current_peak = 0
     _mode = "keyboard"
 
-    update(f"✅ {_peaks.__len__()} Peaks erkannt.")
+    update(f"✅ {len(_peaks)} peaks detected.")
     for idx, t in enumerate(_peaks, 1):
         update(f"{idx}: {t / 1000:.2f}s")
 
-    update("▶️ Analyse abgeschlossen. Drücke PLAY, um zu starten.")
+    update("▶️ Analysis complete. Press Play to start.")
 
 def play_current_peak(index=None):
     global _current_peak
     if not _peaks:
-        update("❌ Keine Peaks geladen.")
+        update("❌ No peaks loaded.")
         return
 
     if index is not None:
         _current_peak = index
 
     if _current_peak >= len(_peaks):
-        update("❌ Ungültiger Peakindex.")
+        update("❌ Invalid peak index.")
         return
 
     time_ms = _peaks[_current_peak]
@@ -103,7 +103,7 @@ def play_current_peak(index=None):
         for audio in _mic_audios[1:]:
             segment = segment.overlay(audio[start:end])
 
-    update(f"▶️ Spiele Peak {_current_peak + 1} ({_mode})...")
+    update(f"▶️ Playing peak {_current_peak + 1} ({_mode})...")
     play_audio(segment)
 
 def play_audio(segment):
@@ -113,14 +113,14 @@ def play_audio(segment):
         sa.stop_all()
         sa.play_buffer(raw, 1, 2, 44100)
     except Exception as e:
-        update(f"❌ Fehler bei der Audiowiedergabe: {e}")
+        update(f"❌ Audio playback error: {e}")
 
 def stop_playback():
     try:
         sa.stop_all()
-        update("🛑 Wiedergabe gestoppt.")
+        update("🛑 Playback stopped.")
     except Exception as e:
-        update(f"⚠ Fehler beim Stoppen: {e}")
+        update(f"⚠ Error stopping playback: {e}")
 
 def go_forward():
     global _current_peak
@@ -128,7 +128,7 @@ def go_forward():
         _current_peak += 1
         play_current_peak()
     else:
-        update("✅ Ende der Liste erreicht.")
+        update("✅ End of list reached.")
 
 def go_back():
     global _current_peak
@@ -136,7 +136,7 @@ def go_back():
         _current_peak -= 1
         play_current_peak()
     else:
-        update("✅ Anfang der Liste erreicht.")
+        update("✅ Beginning of list reached.")
 
 def repeat_current():
     play_current_peak()
@@ -144,15 +144,15 @@ def repeat_current():
 def switch_mode():
     global _mode
     _mode = "mic" if _mode == "keyboard" else "keyboard"
-    update(f"🔀 Modus gewechselt: {_mode.upper()}")
+    update(f"🔀 Mode switched: {_mode.upper()}")
     play_current_peak()
 
 def ignore_current_peak():
     global _ignored_peaks
     _ignored_peaks.add(_current_peak)
-    update(f"🚫 Peak {_current_peak + 1} ignoriert.")
+    update(f"🚫 Peak {_current_peak + 1} ignored.")
 
-# 🔓 Getter für Exportmodul
+# Getters for export module
 def get_peaks():
     return _peaks
 

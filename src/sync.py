@@ -1,9 +1,23 @@
 from status import update
 import os
+import shutil
 import soundfile as sf
 import numpy as np
 from scipy.signal import correlate
 from moviepy.editor import VideoFileClip
+
+
+def cleanup_temp():
+    """Löscht alle Dateien im temp-Ordner."""
+    temp_folder = os.path.join(os.getcwd(), 'temp')
+    if os.path.exists(temp_folder):
+        for f in os.listdir(temp_folder):
+            file_path = os.path.join(temp_folder, f)
+            try:
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                update(f"⚠️ Could not delete {f}: {e}")
 
 def extract_audio_from_video(video_path, output_path):
     clip = VideoFileClip(video_path)
@@ -33,27 +47,31 @@ def format_offset(offset_seconds, fps=25):
     return f"{sign}{hours:02d}:{minutes:02d}:{seconds:02d}:{frames:02d}"
 
 def run_sync():
-    update("✅ [SYNC] Starte Synchronisation...")
+    update("✅ [SYNC] Starting sync...")
 
     material_folder = os.path.join(os.getcwd(), 'material')
     export_folder = os.path.join(os.getcwd(), 'export')
     temp_folder = os.path.join(os.getcwd(), 'temp')
+
+    # Cleanup temp folder before starting
+    cleanup_temp()
+
     os.makedirs(temp_folder, exist_ok=True)
     os.makedirs(export_folder, exist_ok=True)
 
     video_files = [f for f in os.listdir(material_folder) if f.lower().endswith(('.mp4', '.mov'))]
     audio_files = [f for f in os.listdir(material_folder) if f.lower().endswith(('.wav', '.mp3'))]
 
-    update(f"Gefundene Videos: {video_files}")
-    update(f"Gefundene Audios: {audio_files}")
+    update(f"Found videos: {video_files}")
+    update(f"Found audio files: {audio_files}")
 
     if not video_files or not audio_files:
-        update("❌ Videos oder Audios fehlen.")
+        update("❌ Videos or audio files missing.")
         return
 
     reference_file = [f for f in audio_files if 'mix' in f.lower()]
     if not reference_file:
-        update("❌ Keine Referenz-Audiodatei mit 'mix' im Namen gefunden.")
+        update("❌ No reference audio file with 'mix' in name found.")
         return
 
     reference_path = os.path.join(material_folder, reference_file[0])
@@ -65,16 +83,16 @@ def run_sync():
         video_path = os.path.join(material_folder, video)
         temp_audio_path = os.path.join(temp_folder, f"{os.path.splitext(video)[0]}_audio.wav")
 
-        update(f"🎬 Extrahiere Audio aus {video}...")
+        update(f"🎬 Extracting audio from {video}...")
         extract_audio_from_video(video_path, temp_audio_path)
 
         target_data, target_sr = load_audio_as_array(temp_audio_path)
 
         if target_sr != ref_sr:
-            update(f"⚠ Abtastraten unterschiedlich ({target_sr} vs {ref_sr}), skippe {video}.")
+            update(f"⚠ Sample rates differ ({target_sr} vs {ref_sr}), skipping {video}.")
             continue
 
-        update(f"🔍 Berechne Offset für {video}... (bitte warten)")
+        update(f"🔍 Calculating offset for {video}...")
         offset_samples = calculate_offset(reference_data, target_data)
         offset_seconds = offset_samples / ref_sr
 
@@ -87,4 +105,7 @@ def run_sync():
         for video, offset in results:
             f.write(f"{video}: {offset}\n")
 
-    update(f"📄 Offsets gespeichert in {output_file}")
+    # Cleanup temp files after sync
+    cleanup_temp()
+
+    update(f"📄 Offsets saved to {output_file}")

@@ -8,7 +8,7 @@ from export import run_export
 from status import set_callback
 
 info_label = None
-is_playing = False  # Status für Play/Stop Toggle
+is_playing = False  # State for Play/Stop toggle
 
 def update_info(message):
     print(message)
@@ -34,12 +34,12 @@ def on_play_stop():
     global is_playing
     if is_playing:
         stop_playback()
-        update_info("⏹ Wiedergabe gestoppt.")
-        play_button.config(text="▶ PLAY")
+        update_info("⏹ Playback stopped.")
+        play_button.config(text="Play")
         is_playing = False
     else:
         play_current_peak()
-        play_button.config(text="⏹ STOP")
+        play_button.config(text="Stop")
         is_playing = True
 
 def start_gui():
@@ -59,11 +59,11 @@ def start_gui():
         logo_label.image = logo_photo
         logo_label.place(x=20, y=20)
     else:
-        print("⚠ Logo nicht gefunden")
+        print("⚠ Logo not found")
 
     info_frame = tk.Frame(root, bg="#1B2A4E", width=600, height=150)
     info_frame.place(x=200, y=20)
-    info_label = tk.Label(info_frame, text="WILLKOMMEN BEI PEAKCUT V3", font=("Arial", 14), fg="white", bg="#1B2A4E")
+    info_label = tk.Label(info_frame, text="WELCOME TO PEAKCUT V3", font=("Arial", 14), fg="white", bg="#1B2A4E")
     info_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
     set_callback(update_info)
@@ -71,24 +71,24 @@ def start_gui():
     button_frame = tk.Frame(root, bg="#0A1D3D")
     button_frame.place(x=200, y=200)
 
-    tk.Button(button_frame, text="ZURÜCK", command=on_back).grid(row=0, column=0, padx=5, pady=5)
-    tk.Button(button_frame, text="WEITER", command=on_forward).grid(row=0, column=1, padx=5, pady=5)
-    tk.Button(button_frame, text="WIEDERHOLEN", command=on_repeat).grid(row=0, column=2, padx=5, pady=5)
-    tk.Button(button_frame, text="SWITCH", command=on_switch_mode).grid(row=0, column=3, padx=5, pady=5)
-    play_button = tk.Button(button_frame, text="▶ PLAY", command=on_play_stop)
+    tk.Button(button_frame, text="Back", command=on_back).grid(row=0, column=0, padx=5, pady=5)
+    tk.Button(button_frame, text="Next", command=on_forward).grid(row=0, column=1, padx=5, pady=5)
+    tk.Button(button_frame, text="Repeat", command=on_repeat).grid(row=0, column=2, padx=5, pady=5)
+    tk.Button(button_frame, text="Switch", command=on_switch_mode).grid(row=0, column=3, padx=5, pady=5)
+    play_button = tk.Button(button_frame, text="Play", command=on_play_stop)
     play_button.grid(row=0, column=4, padx=5, pady=5)
-    tk.Button(button_frame, text="IGNORIEREN", command=on_ignore).grid(row=0, column=5, padx=5, pady=5)
+    tk.Button(button_frame, text="Ignore", command=on_ignore).grid(row=0, column=5, padx=5, pady=5)
 
     right_frame = tk.Frame(root, bg="#0A1D3D")
     right_frame.place(x=850, y=30)
 
-    tk.Button(right_frame, text="SYNC VIDEO & AUDIO", command=run_sync).pack(padx=5, pady=5)
+    tk.Button(right_frame, text="Sync", command=run_sync).pack(padx=5, pady=5)
 
     def custom_peak_analysis():
         run_peak_analysis()
-        update_info("✅ Analyse abgeschlossen. ▶ Drücke PLAY")
+        update_info("✅ Analysis complete. Press Play")
 
-    tk.Button(right_frame, text="PEAKANALYSE", command=custom_peak_analysis).pack(padx=5, pady=5)
-    tk.Button(right_frame, text="EXPORT AUDIO", command=run_export).pack(padx=5, pady=5)
+    tk.Button(right_frame, text="Analyze Peaks", command=custom_peak_analysis).pack(padx=5, pady=5)
+    tk.Button(right_frame, text="Export", command=run_export).pack(padx=5, pady=5)
 
     root.mainloop()

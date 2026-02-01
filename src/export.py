@@ -1,4 +1,5 @@
 import os
+import subprocess
 from pydub import AudioSegment
 from status import update
 from peaks import (
@@ -22,15 +23,48 @@ def extract_guest_name():
             parts = base.split(" - ")
             if len(parts) > 1:
                 return parts[1].split("(")[0].strip()
-    return "Unbekannt"
+    return "Unknown"
+
+def generate_tts_number(n):
+    """Generate number via macOS TTS (say command)."""
+    temp_folder = os.path.join(os.getcwd(), "temp")
+    os.makedirs(temp_folder, exist_ok=True)
+    aiff_path = os.path.join(temp_folder, f"tts_{n}.aiff")
+
+    try:
+        # macOS say: -v Anna (German voice), -o output file
+        result = subprocess.run(
+            ["say", "-v", "Anna", "-o", aiff_path, str(n)],
+            capture_output=True,
+            timeout=5
+        )
+        if result.returncode == 0 and os.path.exists(aiff_path):
+            audio = AudioSegment.from_file(aiff_path)
+            os.remove(aiff_path)  # Cleanup
+            update(f"🔊 Number {n} generated via TTS")
+            return audio
+    except Exception as e:
+        update(f"⚠️ TTS failed for {n}: {e}")
+
+    return None
+
 
 def load_spoken_number(n):
+    """Load spoken number: TTS → MP3 fallback → silence."""
+    # 1. Try TTS
+    tts_audio = generate_tts_number(n)
+    if tts_audio:
+        return tts_audio
+
+    # 2. Fallback: existing MP3/WAV files
     for ext in [".mp3", ".wav"]:
         path = os.path.join("assets", "zahlen", f"{n}{ext}")
         if os.path.exists(path):
-            update(f"🔊 Zahl {n} geladen ({ext})")
+            update(f"🔊 Number {n} loaded ({ext}) [Fallback]")
             return AudioSegment.from_file(path)
-    update(f"⚠️ Keine Sprachdatei für Zahl {n} gefunden.")
+
+    # 3. Last fallback: silence with warning
+    update(f"❌ Number {n}: Neither TTS nor MP3 available!")
     return AudioSegment.silent(duration=300)
 
 def format_peak_time(ms, fps=25):
@@ -43,7 +77,7 @@ def format_peak_time(ms, fps=25):
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}:{frames:02d}"
 
 def run_export():
-    update("✅ [EXPORT] Audioexport gestartet...")
+    update("✅ [EXPORT] Starting audio export...")
 
     export_folder = os.path.join(os.getcwd(), "export")
     os.makedirs(export_folder, exist_ok=True)
@@ -53,7 +87,7 @@ def run_export():
     mode = get_mode()
 
     if not peaks:
-        update("❌ Keine Peaks gefunden.")
+        update("❌ No peaks found.")
         return
 
     segments = []
@@ -89,7 +123,7 @@ def run_export():
             counter += 1
 
     if not segments:
-        update("⚠️ Alle Peaks wurden ignoriert.")
+        update("⚠️ All peaks were ignored.")
         return
 
     result = segments[0]
@@ -110,4 +144,4 @@ def run_export():
             f.write(f"clip_start = {format_peak_time(start)}\n")
             f.write(f"clip_end = {format_peak_time(end)}\n\n")
 
-    update(f"✅ Export abgeschlossen: {mp3_path}")
+    update(f"✅ Export complete: {mp3_path}")
