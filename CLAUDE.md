@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-PeakCut V3 is a Python desktop application for audio peak detection and extraction. It identifies keyboard peaks in mixed audio/video recordings and creates edited exports with timecode markers. The UI and documentation are in German.
+PeakCut V3 is a Python desktop application for audio peak detection and extraction. It identifies keyboard peaks in mixed audio/video recordings and creates edited exports with timecode markers. Used in production for "Hotel Matze" podcast.
+
+**Branch structure:**
+- `main` - v1.0-stable, production-safe
+- `develop` - active development
 
 ## Commands
 
@@ -26,8 +30,9 @@ There is no test suite configured.
 - `gui.py` - Tkinter UI with button handlers, manages playback state
 - `peaks.py` - Peak detection algorithm, audio playback, navigation between peaks
 - `sync.py` - Video-to-audio synchronization using cross-correlation (scipy)
-- `export.py` - Generates MP3 with spoken numbers + audio segments, creates timecode .txt
+- `export.py` - Generates MP3 with spoken numbers (via macOS TTS) + audio segments, creates timecode .txt
 - `status.py` - Observer pattern for status updates (GUI + terminal)
+- `utils.py` - Currently empty (cleanup candidate)
 
 **State Management:** Global variables in `peaks.py` (`_peaks`, `_current_peak`, `_keyboard_audio`, `_mic_audios`, `_mode`, `_ignored_peaks`) with getter functions for cross-module access.
 
@@ -51,3 +56,14 @@ In `peaks.py`:
 - `PREVIEW_DURATION_MS = 1000` (keyboard mode preview)
 - `CONTEXT_DURATION_MS = 15000` (mic mode context window)
 - Peak detection: `threshold_factor=0.4`, `min_gap_ms=15000`
+
+## TTS (Text-to-Speech)
+
+Numbers are generated via macOS `say -v Anna` (German voice). Fallback to `assets/zahlen/*.mp3` if TTS fails.
+
+## Known Issues (TODO)
+
+1. **Duplicate print() calls** - `status.py:10` and `gui.py:14` both print, causing double terminal output
+2. **Duplicated code** - `format_peak_time()` exists in both `peaks.py` and `export.py`
+3. **Empty utils.py** - Can be deleted or used for shared code
+4. **Relative paths** - App relies on CWD being the App directory
