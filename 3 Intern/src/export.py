@@ -10,6 +10,7 @@ from peaks import (
     get_mic_audios,
     get_ignored_peaks
 )
+from sync import get_video_offsets
 
 # Parameter
 PREVIEW_DURATION_MS = 1000
@@ -128,6 +129,20 @@ def run_export():
     result.export(mp3_path, format="mp3")
 
     with open(txt_path, "w") as f:
+        # Video offsets (if any)
+        video_offsets = get_video_offsets()
+        if video_offsets:
+            f.write("=" * 40 + "\n")
+            f.write("VIDEO OFFSETS\n")
+            f.write("=" * 40 + "\n")
+            for video, offset in video_offsets:
+                f.write(f"{video}: {offset}\n")
+            f.write("\n")
+
+        # Peak timestamps
+        f.write("=" * 40 + "\n")
+        f.write("KEYBOARD PEAKS\n")
+        f.write("=" * 40 + "\n\n")
         for num, peak, start, end in final_timestamps:
             f.write(f"[PEAK {num}]\n")
             f.write(f"peak_time = {format_peak_time(peak)}\n")

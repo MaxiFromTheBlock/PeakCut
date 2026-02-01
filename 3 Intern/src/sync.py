@@ -7,6 +7,9 @@ from scipy.signal import correlate
 from moviepy.editor import VideoFileClip
 from utils import MATERIAL_DIR, EXPORT_DIR, TEMP_DIR
 
+# Store offsets for export
+_video_offsets = []
+
 
 def cleanup_temp():
     """Delete all files in temp folder."""
@@ -46,8 +49,15 @@ def format_offset(offset_seconds, fps=25):
 
     return f"{sign}{hours:02d}:{minutes:02d}:{seconds:02d}:{frames:02d}"
 
+def get_video_offsets():
+    """Return video offsets for export."""
+    return _video_offsets
+
+
 def run_sync():
-    update("✅ [SYNC] Starting sync...")
+    """Sync videos with audio. Skips silently if no videos present."""
+    global _video_offsets
+    _video_offsets = []  # Reset
 
     # Cleanup temp folder before starting
     cleanup_temp()
@@ -58,11 +68,15 @@ def run_sync():
     video_files = [f for f in os.listdir(MATERIAL_DIR) if f.lower().endswith(('.mp4', '.mov'))]
     audio_files = [f for f in os.listdir(MATERIAL_DIR) if f.lower().endswith(('.wav', '.mp3'))]
 
-    update(f"Found videos: {video_files}")
-    update(f"Found audio files: {audio_files}")
+    # Skip silently if no videos (sync is optional)
+    if not video_files:
+        return
 
-    if not video_files or not audio_files:
-        update("❌ Videos or audio files missing.")
+    update("🎬 [SYNC] Starting video sync...")
+    update(f"Found {len(video_files)} video(s)")
+
+    if not audio_files:
+        update("⚠️ No audio files for sync reference.")
         return
 
     reference_file = [f for f in audio_files if 'mix' in f.lower()]
@@ -93,15 +107,10 @@ def run_sync():
         offset_seconds = offset_samples / ref_sr
 
         formatted_offset = format_offset(offset_seconds)
-        results.append((video, formatted_offset))
+        _video_offsets.append((video, formatted_offset))
         update(f"✅ {video} Offset: {formatted_offset}")
-
-    output_file = os.path.join(EXPORT_DIR, 'video_offsets.txt')
-    with open(output_file, 'w') as f:
-        for video, offset in results:
-            f.write(f"{video}: {offset}\n")
 
     # Cleanup temp files after sync
     cleanup_temp()
 
-    update(f"📄 Offsets saved to {output_file}")
+    update(f"✅ Sync complete. {len(_video_offsets)} offset(s) ready for export.")
