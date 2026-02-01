@@ -2,3 +2,12 @@ versions/ChatGPT Export und Workflow Video/
 venv*/
 *.mov
 .DS_Store
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Working directories (contain user data)
+material/
+export/
+temp/
