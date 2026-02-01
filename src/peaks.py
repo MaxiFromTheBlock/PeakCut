@@ -34,14 +34,6 @@ def detect_peaks(audio_path, threshold_factor=0.4, min_gap_ms=15000):
 
     return filtered_times
 
-def format_peak_time(ms, fps=25):
-    total_seconds = ms / 1000
-    total_frames = int(total_seconds * fps)
-    hours = total_frames // (3600 * fps)
-    minutes = (total_frames % (3600 * fps)) // (60 * fps)
-    seconds = (total_frames % (60 * fps)) // fps
-    frames = total_frames % fps
-    return f"{hours:02d}:{minutes:02d}:{seconds:02d}:{frames:02d}"
 
 def run_peak_analysis():
     global _peaks, _current_peak, _keyboard_audio, _mic_audios, _mode

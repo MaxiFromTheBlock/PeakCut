@@ -2,6 +2,7 @@ import os
 import subprocess
 from pydub import AudioSegment
 from status import update
+from utils import format_peak_time
 from peaks import (
     get_peaks,
     get_mode,
@@ -67,14 +68,6 @@ def load_spoken_number(n):
     update(f"❌ Number {n}: Neither TTS nor MP3 available!")
     return AudioSegment.silent(duration=300)
 
-def format_peak_time(ms, fps=25):
-    total_seconds = ms / 1000
-    total_frames = int(total_seconds * fps)
-    hours = total_frames // (3600 * fps)
-    minutes = (total_frames % (3600 * fps)) // (60 * fps)
-    seconds = (total_frames % (60 * fps)) // fps
-    frames = total_frames % fps
-    return f"{hours:02d}:{minutes:02d}:{seconds:02d}:{frames:02d}"
 
 def run_export():
     update("✅ [EXPORT] Starting audio export...")

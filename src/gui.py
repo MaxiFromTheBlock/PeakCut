@@ -11,7 +11,6 @@ info_label = None
 is_playing = False  # State for Play/Stop toggle
 
 def update_info(message):
-    print(message)
     if info_label:
         info_label.config(text=message)
 

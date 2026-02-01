@@ -63,7 +63,4 @@ Numbers are generated via macOS `say -v Anna` (German voice). Fallback to `asset
 
 ## Known Issues (TODO)
 
-1. **Duplicate print() calls** - `status.py:10` and `gui.py:14` both print, causing double terminal output
-2. **Duplicated code** - `format_peak_time()` exists in both `peaks.py` and `export.py`
-3. **Empty utils.py** - Can be deleted or used for shared code
-4. **Relative paths** - App relies on CWD being the App directory
+1. **Relative paths** - App relies on CWD being the App directory
