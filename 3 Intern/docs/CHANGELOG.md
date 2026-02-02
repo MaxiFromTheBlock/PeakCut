@@ -2,6 +2,22 @@
 
 All notable changes to PeakCut are documented here.
 
+## [v1.2.0] - 2025-02-02
+
+### Added
+- Config system: All parameters now configurable via `config.json`
+  - threshold_factor, min_gap_ms, preview_duration_ms, context_duration_ms, fps, tts_voice
+- Documentation folder `docs/` with ARCHITECTURE, README, SETUP, CHANGELOG, TODO, COMMANDS
+
+### Fixed
+- **Critical:** Export now always uses mic audio tracks, regardless of UI playback mode
+  - Previously, export incorrectly used keyboard audio when UI was in keyboard mode
+  - Keyboard mode is now preview-only; export always contains interview audio
+
+### Changed
+- Removed hardcoded parameters from peaks.py, export.py, utils.py
+- Export no longer depends on UI mode state
+
 ## [v1.1.0] - 2025-02-01
 
 ### Added

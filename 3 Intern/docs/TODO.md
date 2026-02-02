@@ -8,7 +8,7 @@
 
 ## Planned Features
 
-- [ ] Config file for parameters (threshold, gap, preview duration)
+- [x] Config file for parameters (threshold, gap, preview duration) - **Done in v1.2.0**
 - [ ] Save/Load session state
 - [ ] Undo for "Ignore" action
 - [ ] Keyboard shortcuts (Space=Play, Arrow keys=Navigate)

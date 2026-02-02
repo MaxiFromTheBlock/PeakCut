@@ -1,5 +1,5 @@
 ===========================================
-PEAKCUT V3
+PEAKCUT V3 (v1.2.0)
 ===========================================
 Automatische Clip-Extraktion für Podcast-Produktion
 
@@ -44,6 +44,7 @@ ORDNERSTRUKTUR
 1 Material/  ← Deine Audio/Video-Dateien hier reinlegen
 2 Export/    ← Hier findest du die fertigen Exports
 3 Intern/    ← Programm-Dateien (nicht anfassen)
+   └── config.json  ← Einstellungen (Threshold, FPS, TTS-Stimme etc.)
 
 
 
@@ -63,5 +64,16 @@ WORKFLOW
 5. "Ignore" für falsche Peaks
 
 6. "Export" klicken → MP3 + TXT landen in "2 Export"
+   (Export enthält immer die Mic-Spuren, nicht das Keyboard-Audio)
 
 7. Optional: "Screenshots" für Thumbnails
+
+
+EINSTELLUNGEN
+-------------
+Die Datei "3 Intern/config.json" enthält alle Parameter:
+- threshold_factor: Empfindlichkeit der Peak-Erkennung (0.4 = 40%)
+- min_gap_ms: Mindestabstand zwischen Peaks in ms (15000 = 15s)
+- context_duration_ms: Kontext um jeden Peak im Export (15000 = ±15s)
+- fps: Framerate für Timecodes (25)
+- tts_voice: macOS Stimme für Nummern ("Anna" = Deutsch)
