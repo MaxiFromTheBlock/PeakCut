@@ -6,8 +6,6 @@ from utils import format_peak_time, MATERIAL_DIR, EXPORT_DIR, TEMP_DIR, ASSETS_D
 import config
 from peaks import (
     get_peaks,
-    get_mode,
-    get_keyboard_audio,
     get_mic_audios,
     get_ignored_peaks
 )
@@ -74,45 +72,34 @@ def run_export():
 
     peaks = get_peaks()
     ignored = get_ignored_peaks()
-    mode = get_mode()
+    mic_audios = get_mic_audios()
 
     if not peaks:
         update("❌ No peaks found.")
         return
 
+    if not mic_audios:
+        update("❌ No mic audio files found.")
+        return
+
     segments = []
     final_timestamps = []
-    preview_duration = config.get("preview_duration_ms")
     context_duration = config.get("context_duration_ms")
 
-    if mode == "keyboard":
-        audio = get_keyboard_audio()
-        counter = 1
-        for i, t in enumerate(peaks):
-            if i in ignored:
-                continue
-            number_audio = load_spoken_number(counter)
-            segment = audio[t:t + preview_duration]
-            segments.append(number_audio + AudioSegment.silent(duration=100) + segment)
-            segments.append(AudioSegment.silent(duration=PAUSE_DURATION_MS))
-            final_timestamps.append((counter, t, t, t + preview_duration))
-            counter += 1
-    else:
-        mic_audios = get_mic_audios()
-        counter = 1
-        for i, t in enumerate(peaks):
-            if i in ignored:
-                continue
-            number_audio = load_spoken_number(counter)
-            start = max(0, t - context_duration)
-            end = t + context_duration
-            segment = mic_audios[0][start:end]
-            for m in mic_audios[1:]:
-                segment = segment.overlay(m[start:end])
-            segments.append(number_audio + AudioSegment.silent(duration=100) + segment)
-            segments.append(AudioSegment.silent(duration=PAUSE_DURATION_MS))
-            final_timestamps.append((counter, t, start, end))
-            counter += 1
+    counter = 1
+    for i, t in enumerate(peaks):
+        if i in ignored:
+            continue
+        number_audio = load_spoken_number(counter)
+        start = max(0, t - context_duration)
+        end = t + context_duration
+        segment = mic_audios[0][start:end]
+        for m in mic_audios[1:]:
+            segment = segment.overlay(m[start:end])
+        segments.append(number_audio + AudioSegment.silent(duration=100) + segment)
+        segments.append(AudioSegment.silent(duration=PAUSE_DURATION_MS))
+        final_timestamps.append((counter, t, start, end))
+        counter += 1
 
     if not segments:
         update("⚠️ All peaks were ignored.")
