@@ -1,11 +1,43 @@
 # Architecture
 
-## File Overview
+## File Structure
+
+```
+3 Intern/src/
+├── main.py              # Tkinter Entry Point (Legacy)
+├── main_pyqt.py         # PyQt6 Entry Point (New)
+│
+├── gui/                 # PyQt6 GUI Components
+│   ├── __init__.py
+│   ├── main_window.py   # Main application window
+│   ├── apple_style.py   # macOS-inspired stylesheet
+│   └── video_preview.py # Video preview widget (not yet integrated)
+│
+├── lib/                 # External Libraries
+│   ├── __init__.py
+│   └── lut_processor.py # LUT processing for color grading
+│
+├── peaks.py             # Peak detection, audio playback, navigation
+├── sync.py              # Video-to-audio sync via cross-correlation
+├── export.py            # MP3 + TXT export (always uses mic audio)
+├── screenshots.py       # Frame extraction with optional LUT
+├── status.py            # Observer pattern for UI updates
+├── utils.py             # Shared paths and helpers
+├── config.py            # JSON configuration management
+└── gui.py               # Tkinter UI (Legacy)
+```
+
+## Entry Points
+
+| File | Framework | Status |
+|------|-----------|--------|
+| `main_pyqt.py` | PyQt6 | **Active development** |
+| `main.py` | Tkinter | Legacy (backup) |
+
+## Core Modules
 
 | File | Purpose |
 |------|---------|
-| `main.py` | Entry point, launches GUI |
-| `gui.py` | Tkinter UI, button handlers, status display |
 | `peaks.py` | Peak detection, audio playback, navigation state |
 | `sync.py` | Video-to-audio sync via cross-correlation |
 | `export.py` | MP3 export with TTS numbers, timecode TXT (always uses mic audio) |
@@ -16,6 +48,19 @@
 
 ## Dependencies (Imports)
 
+### PyQt6 Version (main_pyqt.py)
+```
+main_pyqt.py
+  └── gui/main_window.py
+        ├── gui/apple_style.py (stylesheet, colors)
+        ├── utils.py (MATERIAL_DIR, EXPORT_DIR)
+        ├── sync.py (run_sync)
+        ├── peaks.py (run_peak_analysis, playback functions, getters)
+        ├── export.py (run_export)
+        └── status.py (set_callback)
+```
+
+### Tkinter Version (main.py) - Legacy
 ```
 main.py
   └── gui.py
@@ -25,7 +70,10 @@ main.py
         ├── export.py (run_export)
         ├── screenshots.py (extract_screenshots)
         └── status.py (set_callback)
+```
 
+### Core Modules
+```
 config.py
   └── (no internal dependencies, uses json and os)
 

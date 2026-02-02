@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QFrame, QStatusBar, QFileDialog,
     QApplication, QTextEdit
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 
 from .apple_style import get_stylesheet, COLORS
 
@@ -36,6 +36,13 @@ class MainWindow(QMainWindow):
         # Track current peak locally
         self._current_peak = 0
         self._num_peaks = 0
+        self._is_playing = False
+
+        # Progress animation
+        self._progress_timer = QTimer()
+        self._progress_timer.timeout.connect(self._animate_progress)
+        self._progress_dots = 0
+        self._progress_text = ""
 
         self._setup_ui()
         self._setup_statusbar()
@@ -216,15 +223,15 @@ class MainWindow(QMainWindow):
 
     def _on_analyze(self):
         """Run sync and peak analysis."""
-        self.statusbar.showMessage("Sync läuft...")
         self.analyze_btn.setEnabled(False)
+        self._log("Synchronisiere...")
         QApplication.processEvents()
 
         try:
             # Run sync (for videos)
             run_sync()
 
-            self.statusbar.showMessage("Peak-Analyse läuft...")
+            self._log("Analysiere Peaks...")
             QApplication.processEvents()
 
             # Run peak analysis
@@ -240,14 +247,12 @@ class MainWindow(QMainWindow):
                 self._enable_playback_controls(True)
                 self._update_peak_label()
                 self.mode_label.setText(f"Mode: {get_mode().upper()}")
-                self.statusbar.showMessage(f"Analyse fertig: {num_peaks} Peaks gefunden")
+                self._log(f"{num_peaks} Peaks gefunden\n\nDrücke Play oder Leertaste")
             else:
-                self.statusbar.showMessage("Keine Peaks gefunden")
                 self._log("Keine Peaks gefunden")
 
         except Exception as e:
-            self.statusbar.showMessage(f"Fehler: {str(e)}")
-            self._log(f"Fehler bei Analyse: {str(e)}")
+            self._log(f"Fehler: {str(e)}")
 
         self.analyze_btn.setEnabled(True)
 
@@ -326,3 +331,67 @@ class MainWindow(QMainWindow):
     def _on_status_update(self, message):
         """Callback for status.py updates."""
         self._log(message)
+
+    def _start_progress(self, text):
+        """Start animated progress indicator."""
+        self._progress_text = text
+        self._progress_dots = 0
+        self._animate_progress()
+        self._progress_timer.start(400)
+
+    def _stop_progress(self):
+        """Stop progress indicator."""
+        self._progress_timer.stop()
+
+    def _animate_progress(self):
+        """Animate the progress dots."""
+        dots = "." * (self._progress_dots % 4)
+        self.status_label.setText(f"{self._progress_text}{dots}")
+        self._progress_dots += 1
+
+    def keyPressEvent(self, event):
+        """Handle keyboard shortcuts."""
+        key = event.key()
+
+        # Space → Play/Stop toggle
+        if key == Qt.Key.Key_Space:
+            if self._num_peaks > 0:
+                if self._is_playing:
+                    self._on_stop()
+                    self._is_playing = False
+                else:
+                    self._on_play()
+                    self._is_playing = True
+            return
+
+        # Right arrow → Next
+        if key == Qt.Key.Key_Right:
+            if self._num_peaks > 0:
+                self._on_next()
+            return
+
+        # Left arrow → Back
+        if key == Qt.Key.Key_Left:
+            if self._num_peaks > 0:
+                self._on_back()
+            return
+
+        # S → Switch mode
+        if key == Qt.Key.Key_S:
+            if self._num_peaks > 0:
+                self._on_switch()
+            return
+
+        # I or Delete → Ignore
+        if key in (Qt.Key.Key_I, Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            if self._num_peaks > 0:
+                self._on_ignore()
+            return
+
+        # E → Export
+        if key == Qt.Key.Key_E:
+            if self.export_btn.isEnabled():
+                self._on_export()
+            return
+
+        super().keyPressEvent(event)

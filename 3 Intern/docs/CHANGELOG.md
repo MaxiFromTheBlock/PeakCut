@@ -2,6 +2,37 @@
 
 All notable changes to PeakCut are documented here.
 
+## [v1.3.0-dev] - 2025-02-03 (PyQt Migration)
+
+### Added
+- **PyQt6 GUI** - Complete rewrite from Tkinter to PyQt6
+  - Modern Apple-style UI with SF Pro Display font
+  - Centered status display in dark preview area
+  - All playback controls: Play/Stop/Back/Next/Switch/Ignore
+- **Keyboard Shortcuts**
+  - Space: Play/Stop toggle
+  - Arrow keys: Navigate peaks
+  - S: Switch mode (Keyboard/Mic)
+  - I/Delete/Backspace: Ignore peak
+  - E: Export
+- **New file structure**
+  - `gui/` folder for PyQt components
+  - `lib/` folder for external libraries
+  - `main_pyqt.py` as new entry point (parallel to main.py)
+- Imported from Screenshot Tool:
+  - `apple_style.py` - macOS-inspired stylesheet
+  - `lut_processor.py` - LUT processing utilities
+  - `video_preview.py` - Video preview widget (not yet integrated)
+
+### Changed
+- Status updates now show in centered label (replaces scrolling log)
+- Export automatically stops playback before running
+- Cleaner separation of GUI and core logic
+
+### Technical
+- Both entry points work: `main.py` (Tkinter) and `main_pyqt.py` (PyQt6)
+- Legacy Tkinter version preserved as backup
+
 ## [v1.2.0] - 2025-02-02
 
 ### Added
