@@ -1,13 +1,27 @@
 # main_window.py - PeakCut Main Window (PyQt6)
 
+import os
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QFrame, QStatusBar, QFileDialog
+    QPushButton, QLabel, QFrame, QStatusBar, QFileDialog,
+    QApplication, QTextEdit
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
 
 from .apple_style import get_stylesheet, COLORS
+
+# Import PeakCut core modules
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils import MATERIAL_DIR, EXPORT_DIR
+from sync import run_sync
+from peaks import (
+    run_peak_analysis, get_peaks, get_mode,
+    play_current_peak, go_back, go_forward,
+    stop_playback, switch_mode, ignore_current_peak
+)
+from export import run_export
+from status import set_callback
 
 
 class MainWindow(QMainWindow):
@@ -19,8 +33,15 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1000, 600)
         self.resize(1200, 700)
 
+        # Track current peak locally
+        self._current_peak = 0
+        self._num_peaks = 0
+
         self._setup_ui()
         self._setup_statusbar()
+
+        # Connect status updates to GUI
+        set_callback(self._on_status_update)
 
     def _setup_ui(self):
         """Setup the main UI layout."""
@@ -34,8 +55,12 @@ class MainWindow(QMainWindow):
         # Header with title
         header = QLabel("PeakCut")
         header.setProperty("class", "title")
-        header.setFont(QFont("-apple-system", 24, QFont.Weight.Bold))
-        header.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 24px; font-weight: bold;")
+        header.setStyleSheet(f"""
+            color: {COLORS['text_primary']};
+            font-family: 'SF Pro Display', sans-serif;
+            font-size: 28px;
+            font-weight: 700;
+        """)
         main_layout.addWidget(header)
 
         # Button row
@@ -81,30 +106,66 @@ class MainWindow(QMainWindow):
         preview_layout = QVBoxLayout(self.preview_frame)
         preview_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.preview_label = QLabel("Kein Video geladen")
-        self.preview_label.setStyleSheet("color: #888888; font-size: 16px;")
-        self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        preview_layout.addWidget(self.preview_label)
+        self.status_label = QLabel("Willkommen bei PeakCut\n\nKlicke 'Video laden' um zu starten")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setWordWrap(True)
+        self.status_label.setStyleSheet("""
+            QLabel {
+                color: #ffffff;
+                font-family: 'SF Pro Display', 'SF Pro Text', -apple-system, sans-serif;
+                font-size: 18px;
+                font-weight: 500;
+                padding: 20px;
+            }
+        """)
+        preview_layout.addWidget(self.status_label)
 
         main_layout.addWidget(self.preview_frame, stretch=1)
 
-        # Playback controls (placeholder)
+        # Playback controls
         controls_layout = QHBoxLayout()
         controls_layout.setSpacing(8)
 
         self.back_btn = QPushButton("Back")
         self.back_btn.setEnabled(False)
+        self.back_btn.clicked.connect(self._on_back)
         controls_layout.addWidget(self.back_btn)
 
         self.play_btn = QPushButton("Play")
         self.play_btn.setEnabled(False)
+        self.play_btn.setProperty("class", "primary")
+        self.play_btn.clicked.connect(self._on_play)
         controls_layout.addWidget(self.play_btn)
+
+        self.stop_btn = QPushButton("Stop")
+        self.stop_btn.setEnabled(False)
+        self.stop_btn.clicked.connect(self._on_stop)
+        controls_layout.addWidget(self.stop_btn)
 
         self.next_btn = QPushButton("Next")
         self.next_btn.setEnabled(False)
+        self.next_btn.clicked.connect(self._on_next)
         controls_layout.addWidget(self.next_btn)
 
+        controls_layout.addSpacing(20)
+
+        self.switch_btn = QPushButton("Switch")
+        self.switch_btn.setEnabled(False)
+        self.switch_btn.clicked.connect(self._on_switch)
+        controls_layout.addWidget(self.switch_btn)
+
+        self.ignore_btn = QPushButton("Ignore")
+        self.ignore_btn.setEnabled(False)
+        self.ignore_btn.clicked.connect(self._on_ignore)
+        controls_layout.addWidget(self.ignore_btn)
+
         controls_layout.addStretch()
+
+        self.mode_label = QLabel("Mode: -")
+        self.mode_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        controls_layout.addWidget(self.mode_label)
+
+        controls_layout.addSpacing(10)
 
         self.peak_label = QLabel("Peak: - / -")
         self.peak_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
@@ -116,34 +177,152 @@ class MainWindow(QMainWindow):
         """Setup status bar."""
         self.statusbar = QStatusBar()
         self.setStatusBar(self.statusbar)
-        self.statusbar.showMessage("Bereit")
+        # Keep status bar empty/minimal
+        self.statusbar.showMessage("")
 
     def _on_load_video(self):
-        """Handle load video button."""
-        filepath, _ = QFileDialog.getOpenFileName(
-            self,
-            "Video laden",
-            "",
-            "Video Files (*.mp4 *.mov *.avi);;All Files (*)"
-        )
-        if filepath:
-            self.statusbar.showMessage(f"Geladen: {filepath}")
-            self.preview_label.setText(f"Video: {filepath.split('/')[-1]}")
+        """Check MATERIAL_DIR for files and show status."""
+        if not os.path.exists(MATERIAL_DIR):
+            self.statusbar.showMessage(f"Fehler: {MATERIAL_DIR} nicht gefunden")
+            return
+
+        files = os.listdir(MATERIAL_DIR)
+        if not files:
+            self.statusbar.showMessage("Material-Ordner ist leer")
+            self._log("Keine Dateien in 1 Material/")
+            return
+
+        # Categorize files
+        keyboard_files = [f for f in files if any(kw in f.lower() for kw in ["keyboard", "keys", "klavier"])]
+        video_files = [f for f in files if f.lower().endswith(('.mp4', '.mov'))]
+        audio_files = [f for f in files if f.lower().endswith(('.wav', '.mp3'))]
+
+        # Build status message
+        status_parts = []
+        if keyboard_files:
+            status_parts.append(f"Keyboard: {keyboard_files[0]}")
+        if video_files:
+            status_parts.append(f"{len(video_files)} Video(s)")
+        if audio_files:
+            status_parts.append(f"{len(audio_files)} Audio(s)")
+
+        if keyboard_files:
+            self.statusbar.showMessage(" | ".join(status_parts))
+            self._log("Dateien gefunden\n\n" + "\n".join(status_parts) + "\n\nKlicke 'Analyze'")
             self.analyze_btn.setEnabled(True)
+        else:
+            self.statusbar.showMessage("Keine Keyboard-Datei gefunden")
+            self._log("Keine Keyboard-Datei gefunden\n\n(Name muss 'keyboard', 'keys'\noder 'klavier' enthalten)")
 
     def _on_analyze(self):
-        """Handle analyze button."""
-        self.statusbar.showMessage("Analyzing...")
-        # TODO: Implement peak analysis
-        self.export_btn.setEnabled(True)
-        self.back_btn.setEnabled(True)
-        self.play_btn.setEnabled(True)
-        self.next_btn.setEnabled(True)
-        self.peak_label.setText("Peak: 1 / 5")
-        self.statusbar.showMessage("Analysis complete: 5 peaks found")
+        """Run sync and peak analysis."""
+        self.statusbar.showMessage("Sync läuft...")
+        self.analyze_btn.setEnabled(False)
+        QApplication.processEvents()
+
+        try:
+            # Run sync (for videos)
+            run_sync()
+
+            self.statusbar.showMessage("Peak-Analyse läuft...")
+            QApplication.processEvents()
+
+            # Run peak analysis
+            run_peak_analysis()
+
+            # Get results
+            peaks = get_peaks()
+            num_peaks = len(peaks)
+
+            if num_peaks > 0:
+                self._num_peaks = num_peaks
+                self._current_peak = 0
+                self._enable_playback_controls(True)
+                self._update_peak_label()
+                self.mode_label.setText(f"Mode: {get_mode().upper()}")
+                self.statusbar.showMessage(f"Analyse fertig: {num_peaks} Peaks gefunden")
+            else:
+                self.statusbar.showMessage("Keine Peaks gefunden")
+                self._log("Keine Peaks gefunden")
+
+        except Exception as e:
+            self.statusbar.showMessage(f"Fehler: {str(e)}")
+            self._log(f"Fehler bei Analyse: {str(e)}")
+
+        self.analyze_btn.setEnabled(True)
 
     def _on_export(self):
-        """Handle export button."""
-        self.statusbar.showMessage("Exporting...")
-        # TODO: Implement export
-        self.statusbar.showMessage("Export complete")
+        """Run export."""
+        stop_playback()
+        self.statusbar.showMessage("Export läuft...")
+        self.export_btn.setEnabled(False)
+        QApplication.processEvents()
+
+        try:
+            run_export()
+            self.statusbar.showMessage(f"Export fertig! Dateien in: {EXPORT_DIR}")
+        except Exception as e:
+            self.statusbar.showMessage(f"Export-Fehler: {str(e)}")
+            self._log(f"Export-Fehler: {str(e)}")
+
+        self.export_btn.setEnabled(True)
+
+    def _enable_playback_controls(self, enabled):
+        """Enable or disable playback controls."""
+        self.export_btn.setEnabled(enabled)
+        self.back_btn.setEnabled(enabled)
+        self.play_btn.setEnabled(enabled)
+        self.stop_btn.setEnabled(enabled)
+        self.next_btn.setEnabled(enabled)
+        self.switch_btn.setEnabled(enabled)
+        self.ignore_btn.setEnabled(enabled)
+
+    def _update_peak_label(self):
+        """Update the peak counter label."""
+        self.peak_label.setText(f"Peak: {self._current_peak + 1} / {self._num_peaks}")
+
+    def _on_play(self):
+        """Play current peak."""
+        play_current_peak()
+        self.statusbar.showMessage(f"Playing peak {self._current_peak + 1}")
+
+    def _on_stop(self):
+        """Stop playback."""
+        stop_playback()
+        self.statusbar.showMessage("Stopped")
+
+    def _on_back(self):
+        """Go to previous peak."""
+        if self._current_peak > 0:
+            self._current_peak -= 1
+            go_back()
+            self._update_peak_label()
+            self.statusbar.showMessage(f"Peak {self._current_peak + 1}")
+
+    def _on_next(self):
+        """Go to next peak."""
+        if self._current_peak < self._num_peaks - 1:
+            self._current_peak += 1
+            go_forward()
+            self._update_peak_label()
+            self.statusbar.showMessage(f"Peak {self._current_peak + 1}")
+
+    def _on_switch(self):
+        """Switch between keyboard and mic mode."""
+        switch_mode()
+        self.mode_label.setText(f"Mode: {get_mode().upper()}")
+        self.statusbar.showMessage(f"Mode: {get_mode().upper()}")
+
+    def _on_ignore(self):
+        """Ignore current peak."""
+        ignore_current_peak()
+        self.statusbar.showMessage(f"Peak {self._current_peak + 1} ignored")
+
+    def _log(self, message):
+        """Show message in status label (replaces previous)."""
+        self.status_label.setText(message)
+        QApplication.processEvents()
+
+    def _on_status_update(self, message):
+        """Callback for status.py updates."""
+        self._log(message)
