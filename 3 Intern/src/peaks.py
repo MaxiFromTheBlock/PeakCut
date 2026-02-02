@@ -4,6 +4,7 @@ from pydub import AudioSegment
 import simpleaudio as sa
 from status import update
 from utils import MATERIAL_DIR, EXPORT_DIR
+import config
 
 # Global navigation state
 _peaks = []
@@ -13,11 +14,10 @@ _mic_audios = []
 _mode = "keyboard"  # or "mic"
 _ignored_peaks = set()
 
-# Parameters
-PREVIEW_DURATION_MS = 1000   # Keyboard mode
-CONTEXT_DURATION_MS = 15000  # Mic mode
 
-def detect_peaks(audio_path, threshold_factor=0.4, min_gap_ms=15000):
+def detect_peaks(audio_path):
+    threshold_factor = config.get("threshold_factor")
+    min_gap_ms = config.get("min_gap_ms")
     audio = AudioSegment.from_wav(audio_path)
     samples = np.array(audio.get_array_of_samples())
     threshold = np.max(samples) * threshold_factor
@@ -84,12 +84,14 @@ def play_current_peak(index=None):
         return
 
     time_ms = _peaks[_current_peak]
+    preview_duration = config.get("preview_duration_ms")
+    context_duration = config.get("context_duration_ms")
 
     if _mode == "keyboard":
-        segment = _keyboard_audio[time_ms:time_ms + PREVIEW_DURATION_MS]
+        segment = _keyboard_audio[time_ms:time_ms + preview_duration]
     else:
-        start = max(0, time_ms - CONTEXT_DURATION_MS)
-        end = time_ms + CONTEXT_DURATION_MS
+        start = max(0, time_ms - context_duration)
+        end = time_ms + context_duration
         segment = _mic_audios[0][start:end]
         for audio in _mic_audios[1:]:
             segment = segment.overlay(audio[start:end])

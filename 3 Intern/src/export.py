@@ -3,6 +3,7 @@ import subprocess
 from pydub import AudioSegment
 from status import update
 from utils import format_peak_time, MATERIAL_DIR, EXPORT_DIR, TEMP_DIR, ASSETS_DIR
+import config
 from peaks import (
     get_peaks,
     get_mode,
@@ -12,10 +13,8 @@ from peaks import (
 )
 from sync import get_video_offsets
 
-# Parameter
-PREVIEW_DURATION_MS = 1000
-CONTEXT_DURATION_MS = 15000
 PAUSE_DURATION_MS = 500
+
 
 def extract_guest_name():
     for f in os.listdir(MATERIAL_DIR):
@@ -30,11 +29,11 @@ def generate_tts_number(n):
     """Generate number via macOS TTS (say command)."""
     os.makedirs(TEMP_DIR, exist_ok=True)
     aiff_path = os.path.join(TEMP_DIR, f"tts_{n}.aiff")
+    voice = config.get("tts_voice")
 
     try:
-        # macOS say: -v Anna (German voice), -o output file
         result = subprocess.run(
-            ["say", "-v", "Anna", "-o", aiff_path, str(n)],
+            ["say", "-v", voice, "-o", aiff_path, str(n)],
             capture_output=True,
             timeout=5
         )
@@ -83,6 +82,8 @@ def run_export():
 
     segments = []
     final_timestamps = []
+    preview_duration = config.get("preview_duration_ms")
+    context_duration = config.get("context_duration_ms")
 
     if mode == "keyboard":
         audio = get_keyboard_audio()
@@ -91,10 +92,10 @@ def run_export():
             if i in ignored:
                 continue
             number_audio = load_spoken_number(counter)
-            segment = audio[t:t + PREVIEW_DURATION_MS]
+            segment = audio[t:t + preview_duration]
             segments.append(number_audio + AudioSegment.silent(duration=100) + segment)
             segments.append(AudioSegment.silent(duration=PAUSE_DURATION_MS))
-            final_timestamps.append((counter, t, t, t + PREVIEW_DURATION_MS))
+            final_timestamps.append((counter, t, t, t + preview_duration))
             counter += 1
     else:
         mic_audios = get_mic_audios()
@@ -103,8 +104,8 @@ def run_export():
             if i in ignored:
                 continue
             number_audio = load_spoken_number(counter)
-            start = max(0, t - CONTEXT_DURATION_MS)
-            end = t + CONTEXT_DURATION_MS
+            start = max(0, t - context_duration)
+            end = t + context_duration
             segment = mic_audios[0][start:end]
             for m in mic_audios[1:]:
                 segment = segment.overlay(m[start:end])

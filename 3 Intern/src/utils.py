@@ -1,6 +1,7 @@
 # utils.py - shared helpers
 
 import os
+import config
 
 # Directory structure:
 # App/
@@ -23,8 +24,10 @@ TEMP_DIR = os.path.join(INTERN_DIR, "temp")
 ASSETS_DIR = os.path.join(INTERN_DIR, "assets")
 
 
-def format_peak_time(ms, fps=25):
+def format_peak_time(ms, fps=None):
     """Convert milliseconds to timecode HH:MM:SS:FF"""
+    if fps is None:
+        fps = config.get("fps")
     total_seconds = ms / 1000
     total_frames = int(total_seconds * fps)
     hours = total_frames // (3600 * fps)
