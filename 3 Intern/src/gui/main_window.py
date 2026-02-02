@@ -4,9 +4,9 @@ import os
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFrame, QStatusBar, QFileDialog,
-    QApplication, QTextEdit
+    QApplication, QTextEdit, QComboBox
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QSettings
 
 from .apple_style import get_stylesheet, COLORS
 
@@ -37,6 +37,15 @@ class MainWindow(QMainWindow):
         self._current_peak = 0
         self._num_peaks = 0
         self._is_playing = False
+
+        # File selection state
+        self._selected_files = []
+        self._keyboard_file = None
+        self._mic_files = []
+        self._video_files = []
+
+        # Settings for remembering last folder
+        self._settings = QSettings("PeakCut", "PeakCut")
 
         # Progress animation
         self._progress_timer = QTimer()
@@ -74,11 +83,11 @@ class MainWindow(QMainWindow):
         button_layout = QHBoxLayout()
         button_layout.setSpacing(12)
 
-        # Load Video button
-        self.load_btn = QPushButton("Video laden")
+        # Load Files button
+        self.load_btn = QPushButton("Dateien wählen")
         self.load_btn.setProperty("class", "primary")
-        self.load_btn.setMinimumWidth(120)
-        self.load_btn.clicked.connect(self._on_load_video)
+        self.load_btn.setMinimumWidth(140)
+        self.load_btn.clicked.connect(self._on_load_files)
         button_layout.addWidget(self.load_btn)
 
         # Analyze button
@@ -97,6 +106,25 @@ class MainWindow(QMainWindow):
 
         button_layout.addStretch()
         main_layout.addLayout(button_layout)
+
+        # Keyboard selection row (initially hidden)
+        self.keyboard_row = QWidget()
+        keyboard_layout = QHBoxLayout(self.keyboard_row)
+        keyboard_layout.setContentsMargins(0, 0, 0, 0)
+        keyboard_layout.setSpacing(8)
+
+        self.keyboard_label = QLabel("Keyboard-Spur:")
+        self.keyboard_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        keyboard_layout.addWidget(self.keyboard_label)
+
+        self.keyboard_combo = QComboBox()
+        self.keyboard_combo.setMinimumWidth(300)
+        self.keyboard_combo.currentIndexChanged.connect(self._on_keyboard_selected)
+        keyboard_layout.addWidget(self.keyboard_combo)
+
+        keyboard_layout.addStretch()
+        self.keyboard_row.hide()
+        main_layout.addWidget(self.keyboard_row)
 
         # Video preview area (placeholder)
         self.preview_frame = QFrame()
@@ -187,39 +215,134 @@ class MainWindow(QMainWindow):
         # Keep status bar empty/minimal
         self.statusbar.showMessage("")
 
-    def _on_load_video(self):
-        """Check MATERIAL_DIR for files and show status."""
-        if not os.path.exists(MATERIAL_DIR):
-            self.statusbar.showMessage(f"Fehler: {MATERIAL_DIR} nicht gefunden")
-            return
+    def _on_load_files(self):
+        """Open file dialog for multi-file selection."""
+        # Get last used folder from settings
+        last_folder = self._settings.value("last_folder", MATERIAL_DIR)
+        if not os.path.exists(last_folder):
+            last_folder = MATERIAL_DIR
 
-        files = os.listdir(MATERIAL_DIR)
+        # Open file dialog
+        files, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Dateien auswählen",
+            last_folder,
+            "Media Files (*.wav *.mp3 *.mp4 *.mov);;Audio (*.wav *.mp3);;Video (*.mp4 *.mov);;All Files (*)"
+        )
+
         if not files:
-            self.statusbar.showMessage("Material-Ordner ist leer")
-            self._log("Keine Dateien in 1 Material/")
-            return
+            return  # User cancelled
 
-        # Categorize files
-        keyboard_files = [f for f in files if any(kw in f.lower() for kw in ["keyboard", "keys", "klavier"])]
-        video_files = [f for f in files if f.lower().endswith(('.mp4', '.mov'))]
-        audio_files = [f for f in files if f.lower().endswith(('.wav', '.mp3'))]
+        # Save folder for next time
+        if files:
+            folder = os.path.dirname(files[0])
+            self._settings.setValue("last_folder", folder)
 
+        self._selected_files = files
+        self._categorize_files()
+
+    def _categorize_files(self):
+        """Categorize selected files by type."""
+        self._keyboard_file = None
+        self._mic_files = []
+        self._video_files = []
+
+        audio_files = []
+
+        for filepath in self._selected_files:
+            filename = os.path.basename(filepath).lower()
+
+            if filename.endswith(('.mp4', '.mov')):
+                self._video_files.append(filepath)
+            elif filename.endswith(('.wav', '.mp3')):
+                audio_files.append(filepath)
+                # Auto-detect keyboard track
+                if any(kw in filename for kw in ["keyboard", "keys", "klavier"]):
+                    self._keyboard_file = filepath
+
+        # Separate mic files (all audio that's not keyboard)
+        for f in audio_files:
+            if f != self._keyboard_file:
+                self._mic_files.append(f)
+
+        self._update_file_display()
+
+    def _update_file_display(self):
+        """Update UI based on categorized files."""
         # Build status message
         status_parts = []
-        if keyboard_files:
-            status_parts.append(f"Keyboard: {keyboard_files[0]}")
-        if video_files:
-            status_parts.append(f"{len(video_files)} Video(s)")
-        if audio_files:
-            status_parts.append(f"{len(audio_files)} Audio(s)")
 
-        if keyboard_files:
-            self.statusbar.showMessage(" | ".join(status_parts))
-            self._log("Dateien gefunden\n\n" + "\n".join(status_parts) + "\n\nKlicke 'Analyze'")
-            self.analyze_btn.setEnabled(True)
+        if self._keyboard_file:
+            status_parts.append(f"Keyboard: {os.path.basename(self._keyboard_file)}")
+        if self._mic_files:
+            status_parts.append(f"{len(self._mic_files)} Mic(s)")
+        if self._video_files:
+            status_parts.append(f"{len(self._video_files)} Video(s)")
+
+        # Check if we need manual keyboard selection
+        audio_files = [f for f in self._selected_files if f.lower().endswith(('.wav', '.mp3'))]
+
+        if not self._keyboard_file and audio_files:
+            # Show dropdown for manual selection
+            self.keyboard_combo.clear()
+            self.keyboard_combo.addItem("-- Bitte wählen --", None)
+            for f in audio_files:
+                self.keyboard_combo.addItem(os.path.basename(f), f)
+            self.keyboard_row.show()
+            self._log("Keyboard-Spur nicht erkannt\n\nBitte wähle die Keyboard-Spur\naus dem Dropdown-Menü")
+            self.statusbar.showMessage("Keyboard-Spur auswählen")
+            self.analyze_btn.setEnabled(False)
         else:
-            self.statusbar.showMessage("Keine Keyboard-Datei gefunden")
-            self._log("Keine Keyboard-Datei gefunden\n\n(Name muss 'keyboard', 'keys'\noder 'klavier' enthalten)")
+            self.keyboard_row.hide()
+
+            if self._keyboard_file:
+                self.statusbar.showMessage(" | ".join(status_parts))
+                self._log("Dateien geladen\n\n" + "\n".join(status_parts) + "\n\nKlicke 'Analyze'")
+                self.analyze_btn.setEnabled(True)
+                self._copy_files_to_material()
+            elif not audio_files:
+                self.statusbar.showMessage("Keine Audio-Dateien ausgewählt")
+                self._log("Keine Audio-Dateien gefunden\n\nBitte wähle mindestens\neine .wav oder .mp3 Datei")
+                self.analyze_btn.setEnabled(False)
+
+    def _on_keyboard_selected(self, index):
+        """Handle manual keyboard track selection."""
+        filepath = self.keyboard_combo.currentData()
+        if filepath:
+            self._keyboard_file = filepath
+            # Update mic files (remove keyboard from list)
+            self._mic_files = [f for f in self._selected_files
+                             if f.lower().endswith(('.wav', '.mp3')) and f != filepath]
+            self.keyboard_row.hide()
+            self._update_file_display()
+
+    def _copy_files_to_material(self):
+        """Copy selected files to MATERIAL_DIR for processing (if not already there)."""
+        import shutil
+
+        # Ensure material dir exists
+        if not os.path.exists(MATERIAL_DIR):
+            os.makedirs(MATERIAL_DIR)
+
+        # Check if ALL files are already in MATERIAL_DIR
+        all_in_material = all(
+            os.path.dirname(os.path.abspath(f)) == os.path.abspath(MATERIAL_DIR)
+            for f in self._selected_files
+        )
+
+        if all_in_material:
+            # Files already in Material folder, don't touch anything
+            return
+
+        # Files from outside - copy them (don't delete existing files)
+        for filepath in self._selected_files:
+            src_abs = os.path.abspath(filepath)
+            dest = os.path.join(MATERIAL_DIR, os.path.basename(filepath))
+            dest_abs = os.path.abspath(dest)
+
+            # Only copy if source is different from destination
+            if src_abs != dest_abs:
+                shutil.copy2(filepath, dest)
 
     def _on_analyze(self):
         """Run sync and peak analysis."""

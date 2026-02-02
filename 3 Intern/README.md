@@ -1,4 +1,4 @@
-# PeakCut V3
+# PeakCut
 
 **Automated clip extraction tool for podcast post-production.**
 

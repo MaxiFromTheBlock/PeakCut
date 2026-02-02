@@ -72,7 +72,7 @@ Vollständige Aufgabenliste für die Weiterentwicklung von PeakCut.
 
 ---
 
-## Mittelfristig (V2/V3)
+## Mittelfristig (v2.0 / v3.0)
 
 ### Profile System
 - [ ] User-Profile anlegen können

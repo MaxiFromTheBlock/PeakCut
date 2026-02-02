@@ -1,5 +1,5 @@
 ===========================================
-PEAKCUT V3 (v1.2.0)
+PEAKCUT (v1.3.0)
 ===========================================
 Automatische Clip-Extraktion für Podcast-Produktion
 

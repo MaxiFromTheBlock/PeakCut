@@ -91,7 +91,7 @@ def start_gui():
     global status_text, play_button
 
     root = tk.Tk()
-    root.title("PeakCut V3")
+    root.title("PeakCut (Legacy)")
     root.geometry("1050x250")
     root.configure(bg="#0A1D3D")
 
@@ -121,7 +121,7 @@ def start_gui():
     status_text.place(x=200, y=20)
 
     set_callback(update_status)
-    update_status("WELCOME TO PEAKCUT V3")
+    update_status("WELCOME TO PEAKCUT")
     update_status("─" * 50)
     update_status("1. Put files in '1 Material' folder")
     update_status("2. Click 'Analyze' to detect peaks")

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-PeakCut V3 is a Python/Tkinter desktop app for podcast post-production. It detects keyboard peaks (foot pedal markers) in audio recordings and exports numbered audio clips with timecodes. Used in production for "Hotel Matze" podcast.
+PeakCut is a Python/PyQt6 desktop app for podcast post-production. It detects keyboard peaks (foot pedal markers) in audio recordings and exports numbered audio clips with timecodes. Used in production for "Hotel Matze" podcast.
 
 ## Folder Structure
 
