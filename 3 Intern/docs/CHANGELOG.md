@@ -9,20 +9,27 @@ All notable changes to PeakCut are documented here.
   - Modern Apple-style UI with SF Pro Display font
   - Centered status display in dark preview area
   - All playback controls: Play/Stop/Back/Next/Switch/Ignore
+- **Flexible File Import**
+  - "Dateien wählen" button with multi-file selection (QFileDialog)
+  - Auto-detection of keyboard track (keyboard/keys/klavier in filename)
+  - Manual dropdown selection when not auto-detected
+  - Remembers last used folder (QSettings)
+- **Video Preview with Peak Timeline**
+  - Video display with QMediaPlayer/QVideoWidget (4K support)
+  - Camera switcher dropdown for multiple videos
+  - Custom PeakTimeline widget with visual peak markers
+  - Current peak highlighted in orange, others in gray
+  - Click on marker → video seeks + audio plays
+  - Back/Next navigation syncs video position
 - **Keyboard Shortcuts**
   - Space: Play/Stop toggle
   - Arrow keys: Navigate peaks
   - S: Switch mode (Keyboard/Mic)
   - I/Delete/Backspace: Ignore peak
   - E: Export
-- **New file structure**
-  - `gui/` folder for PyQt components
-  - `lib/` folder for external libraries
-  - `main_pyqt.py` as new entry point (parallel to main.py)
-- Imported from Screenshot Tool:
-  - `apple_style.py` - macOS-inspired stylesheet
-  - `lut_processor.py` - LUT processing utilities
-  - `video_preview.py` - Video preview widget (not yet integrated)
+- **New files**
+  - `gui/video_preview_peak.py` - Video preview for PeakCut
+  - `gui/peak_timeline.py` - Custom timeline with peak markers
 
 ### Changed
 - Status updates now show in centered label (replaces scrolling log)

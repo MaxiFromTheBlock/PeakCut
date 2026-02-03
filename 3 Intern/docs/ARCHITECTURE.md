@@ -11,7 +11,9 @@
 │   ├── __init__.py
 │   ├── main_window.py   # Main application window
 │   ├── apple_style.py   # macOS-inspired stylesheet
-│   └── video_preview.py # Video preview widget (not yet integrated)
+│   ├── video_preview_peak.py  # Video preview with QMediaPlayer
+│   ├── peak_timeline.py # Custom timeline with peak markers
+│   └── video_preview.py # (from Screenshot Tool, unused)
 │
 ├── lib/                 # External Libraries
 │   ├── __init__.py
@@ -53,6 +55,8 @@
 main_pyqt.py
   └── gui/main_window.py
         ├── gui/apple_style.py (stylesheet, colors)
+        ├── gui/video_preview_peak.py
+        │     └── gui/peak_timeline.py (custom timeline widget)
         ├── utils.py (MATERIAL_DIR, EXPORT_DIR)
         ├── sync.py (run_sync)
         ├── peaks.py (run_peak_analysis, playback functions, getters)
