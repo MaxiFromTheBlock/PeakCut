@@ -4,11 +4,12 @@ import os
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFrame, QStatusBar, QFileDialog,
-    QApplication, QTextEdit, QComboBox
+    QApplication, QTextEdit, QComboBox, QStackedWidget
 )
 from PyQt6.QtCore import Qt, QTimer, QSettings
 
 from .apple_style import get_stylesheet, COLORS
+from .video_preview_peak import PeakVideoPreview
 
 # Import PeakCut core modules
 import sys
@@ -18,7 +19,8 @@ from sync import run_sync
 from peaks import (
     run_peak_analysis, get_peaks, get_mode,
     play_current_peak, go_back, go_forward,
-    stop_playback, switch_mode, ignore_current_peak
+    stop_playback, switch_mode, ignore_current_peak,
+    get_current_peak_index, set_current_peak
 )
 from export import run_export
 from status import set_callback
@@ -126,22 +128,24 @@ class MainWindow(QMainWindow):
         self.keyboard_row.hide()
         main_layout.addWidget(self.keyboard_row)
 
-        # Video preview area (placeholder)
-        self.preview_frame = QFrame()
-        self.preview_frame.setProperty("class", "card")
-        self.preview_frame.setMinimumHeight(400)
-        self.preview_frame.setStyleSheet(f"""
+        # Stacked widget for status/video preview
+        self.preview_stack = QStackedWidget()
+        self.preview_stack.setMinimumHeight(400)
+
+        # Page 0: Status display (welcome/progress messages)
+        self.status_frame = QFrame()
+        self.status_frame.setProperty("class", "card")
+        self.status_frame.setStyleSheet(f"""
             QFrame[class="card"] {{
                 background-color: #1a1a1a;
                 border: 1px solid {COLORS['border_light']};
                 border-radius: 10px;
             }}
         """)
+        status_layout = QVBoxLayout(self.status_frame)
+        status_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        preview_layout = QVBoxLayout(self.preview_frame)
-        preview_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        self.status_label = QLabel("Willkommen bei PeakCut\n\nKlicke 'Video laden' um zu starten")
+        self.status_label = QLabel("Willkommen bei PeakCut\n\nKlicke 'Dateien wählen' um zu starten")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_label.setWordWrap(True)
         self.status_label.setStyleSheet("""
@@ -153,9 +157,18 @@ class MainWindow(QMainWindow):
                 padding: 20px;
             }
         """)
-        preview_layout.addWidget(self.status_label)
+        status_layout.addWidget(self.status_label)
+        self.preview_stack.addWidget(self.status_frame)
 
-        main_layout.addWidget(self.preview_frame, stretch=1)
+        # Page 1: Video preview with peak timeline
+        self.video_preview = PeakVideoPreview()
+        self.video_preview.peak_clicked.connect(self._on_peak_clicked)
+        self.preview_stack.addWidget(self.video_preview)
+
+        # Start with status page
+        self.preview_stack.setCurrentIndex(0)
+
+        main_layout.addWidget(self.preview_stack, stretch=1)
 
         # Playback controls
         controls_layout = QHBoxLayout()
@@ -370,7 +383,13 @@ class MainWindow(QMainWindow):
                 self._enable_playback_controls(True)
                 self._update_peak_label()
                 self.mode_label.setText(f"Mode: {get_mode().upper()}")
-                self._log(f"{num_peaks} Peaks gefunden\n\nDrücke Play oder Leertaste")
+
+                # Show video preview if videos available
+                if self._video_files:
+                    self._setup_video_preview(peaks)
+                    self.preview_stack.setCurrentIndex(1)
+                else:
+                    self._log(f"{num_peaks} Peaks gefunden\n\nDrücke Play oder Leertaste")
             else:
                 self._log("Keine Peaks gefunden")
 
@@ -378,6 +397,23 @@ class MainWindow(QMainWindow):
             self._log(f"Fehler: {str(e)}")
 
         self.analyze_btn.setEnabled(True)
+
+    def _setup_video_preview(self, peaks):
+        """Setup video preview with peaks."""
+        # Load videos into preview
+        self.video_preview.set_videos(self._video_files)
+
+        # peaks from peaks.py are already in milliseconds
+        self.video_preview.set_peaks(peaks, self._current_peak)
+
+    def _on_peak_clicked(self, peak_index):
+        """Handle click on peak marker in timeline."""
+        if 0 <= peak_index < self._num_peaks:
+            self._current_peak = peak_index
+            set_current_peak(peak_index)  # Sync with peaks.py
+            self._update_peak_label()
+            play_current_peak()
+            self.statusbar.showMessage(f"Peak {peak_index + 1}")
 
     def _on_export(self):
         """Run export."""
@@ -425,6 +461,7 @@ class MainWindow(QMainWindow):
             self._current_peak -= 1
             go_back()
             self._update_peak_label()
+            self._update_video_preview_peak()
             self.statusbar.showMessage(f"Peak {self._current_peak + 1}")
 
     def _on_next(self):
@@ -433,7 +470,17 @@ class MainWindow(QMainWindow):
             self._current_peak += 1
             go_forward()
             self._update_peak_label()
+            self._update_video_preview_peak()
             self.statusbar.showMessage(f"Peak {self._current_peak + 1}")
+
+    def _update_video_preview_peak(self):
+        """Update video preview to show current peak."""
+        if self._video_files and self.preview_stack.currentIndex() == 1:
+            self.video_preview.set_current_peak(self._current_peak)
+            # Also seek video to peak position
+            peaks = get_peaks()
+            if peaks and self._current_peak < len(peaks):
+                self.video_preview.set_position(peaks[self._current_peak])
 
     def _on_switch(self):
         """Switch between keyboard and mic mode."""

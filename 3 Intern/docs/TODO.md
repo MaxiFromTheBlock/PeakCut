@@ -19,10 +19,17 @@ Vollständige Aufgabenliste für die Weiterentwicklung von PeakCut.
 - [x] Config System (config.py mit JSON)
 - [x] Export Bug Fix (verwendet immer mic_audios)
 
-### Phase 3-5: Offen
-- [ ] Phase 3: Video Preview mit Peak-Markern auf Timeline
+### Phase 3: Video Preview (Erledigt)
+- [x] Video-Anzeige mit QMediaPlayer/QVideoWidget
+- [x] Kamera-Switcher (Dropdown für mehrere Videos)
+- [x] Custom PeakTimeline Widget mit Peak-Markern
+- [x] Aktueller Peak farblich hervorgehoben (orange)
+- [x] Klick auf Peak-Marker → Video springt + Audio spielt
+- [x] Back/Next synchronisiert Video-Position
+
+### Phase 4-5: Offen
 - [ ] Phase 4: LUT Integration (lut_processor.py nutzen, LUT-Auswahl im GUI)
-- [ ] Phase 5: EDL Export für Premiere Pro
+- [ ] Phase 5: EDL Export für Premiere Pro (CMX 3600 Format)
 - [ ] Threading für Analyse (UI friert ein, Rainbow Wheel)
 - [ ] Progress Indicator mit echter Animation (bewegende Punkte)
 
@@ -30,12 +37,12 @@ Vollständige Aufgabenliste für die Weiterentwicklung von PeakCut.
 
 ## UX Verbesserungen
 
-- [ ] "Video laden" Button umbenennen → "Dateien wählen" oder "Open Source Files"
-- [ ] Finder-Browser implementieren statt Material-Ordner-Zwang
-- [ ] User soll beliebigen Ordner wählen können
-- [ ] Automatische Dateierkennung statt Dateinamen-Konvention (keyboard/keys/klavier)
-- [ ] Alternative: Manuelle Zuweisung im GUI (Dropdown: "Diese Datei ist Keyboard-Spur")
-- [ ] Zuletzt verwendete Ordner merken (QSettings)
+- [x] "Video laden" Button umbenennen → "Dateien wählen"
+- [x] Finder-Browser implementieren (QFileDialog.getOpenFileNames)
+- [x] User kann beliebigen Ordner wählen
+- [x] Automatische Dateierkennung (keyboard/keys/klavier im Namen)
+- [x] Manuelle Zuweisung im GUI (Dropdown wenn nicht auto-erkannt)
+- [x] Zuletzt verwendete Ordner merken (QSettings)
 - [ ] Zuletzt verwendete LUTs merken
 
 ---
@@ -65,14 +72,29 @@ Vollständige Aufgabenliste für die Weiterentwicklung von PeakCut.
 
 ## Von Screenshot Tool übernehmen
 
-- [ ] video_preview.py adaptieren für Peak-Timeline
+- [x] video_preview.py adaptieren für Peak-Timeline (video_preview_peak.py, peak_timeline.py)
 - [ ] progress_dialog.py für lange Operationen
 - [ ] Worker Threads (QThread) für Background Processing ohne UI-Freeze
-- [ ] QSettings Pattern für persistente Einstellungen
+- [x] QSettings Pattern für persistente Einstellungen
 
 ---
 
-## Mittelfristig (v2.0 / v3.0)
+## Mittelfristig (V2 Vision)
+
+### Clip Editor
+Peak finden → Clip DEFINIEREN → Clip exportieren
+
+- [ ] Video Preview zeigt Bereich um Peak
+- [ ] In-Point und Out-Point visuell auf Timeline anzeigen
+- [ ] User kann Clip-Grenzen anpassen (In/Out verschieben per Drag)
+- [ ] Play-Button um angepassten Clip zu checken
+- [ ] Export mit USER-DEFINIERTEN Grenzen:
+  - [ ] MP3/WAV mit individueller Länge
+  - [ ] EDL mit exakten Timecodes (CMX 3600)
+  - [ ] Optional: Video-Clip direkt exportieren (FFmpeg)
+- [ ] Screenshot aus Clip für Thumbnail
+
+*Verbindet: Video Preview + Peak Timeline + EDL + Screenshot zu einem Workflow*
 
 ### Profile System
 - [ ] User-Profile anlegen können
@@ -129,16 +151,18 @@ Diese Docs aktuell halten:
 ```
 3 Intern/src/
 ├── main.py              # Tkinter Entry Point (Legacy)
-├── main_pyqt.py         # PyQt Entry Point (Neu)
+├── main_pyqt.py         # PyQt Entry Point (Aktuell)
 ├── gui/                 # PyQt GUI Module
 │   ├── __init__.py
-│   ├── main_window.py
-│   ├── apple_style.py
-│   └── video_preview.py # (noch nicht integriert)
+│   ├── main_window.py   # Hauptfenster mit allen Controls
+│   ├── apple_style.py   # Apple-Style Stylesheet
+│   ├── video_preview.py # Original von Screenshot Tool (unused)
+│   ├── video_preview_peak.py  # Video Preview für PeakCut
+│   └── peak_timeline.py # Custom Timeline mit Peak-Markern
 ├── lib/                 # Externe Libraries
 │   ├── __init__.py
 │   └── lut_processor.py
-├── peaks.py             # Peak Detection
+├── peaks.py             # Peak Detection + Navigation
 ├── sync.py              # Video Sync
 ├── export.py            # MP3 + TXT Export
 ├── utils.py             # Pfade, Hilfsfunktionen
@@ -149,4 +173,4 @@ Diese Docs aktuell halten:
 
 ---
 
-*Zuletzt aktualisiert: 2025-02-02*
+*Zuletzt aktualisiert: 2025-02-03*

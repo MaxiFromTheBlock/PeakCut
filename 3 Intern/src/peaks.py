@@ -160,3 +160,11 @@ def get_ignored_peaks():
 
 def get_mode():
     return _mode
+
+def get_current_peak_index():
+    return _current_peak
+
+def set_current_peak(index):
+    global _current_peak
+    if 0 <= index < len(_peaks):
+        _current_peak = index
