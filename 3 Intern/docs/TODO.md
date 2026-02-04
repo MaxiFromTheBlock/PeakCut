@@ -29,7 +29,7 @@ Vollständige Aufgabenliste für die Weiterentwicklung von PeakCut.
 
 ### Phase 4-5: Offen
 - [ ] Phase 4: LUT Integration (lut_processor.py nutzen, LUT-Auswahl im GUI)
-- [ ] Phase 5: EDL Export für Premiere Pro (CMX 3600 Format)
+- [x] Phase 5: EDL Export für Premiere Pro (CMX 3600 Format)
 - [ ] Threading für Analyse (UI friert ein, Rainbow Wheel)
 - [ ] Progress Indicator mit echter Animation (bewegende Punkte)
 
@@ -80,6 +80,14 @@ Vollständige Aufgabenliste für die Weiterentwicklung von PeakCut.
 ---
 
 ## Mittelfristig (V2 Vision)
+
+### Smart Scan / Ingest
+- [ ] "Ordner wählen" Option (ganzen Ordner statt einzelne Dateien)
+- [ ] Rekursiv alle Audio/Video Dateien finden
+- [ ] Leere Audio-Spuren erkennen (RMS unter Threshold)
+- [ ] Schwarze Video-Feeds erkennen (Frame-Analyse)
+- [ ] Übersicht: "X von Y Dateien haben Inhalt"
+- [ ] Automatische Kategorisierung mit User-Bestätigung
 
 ### Clip Editor
 Peak finden → Clip DEFINIEREN → Clip exportieren

@@ -14,6 +14,17 @@ from sync import get_video_offsets
 PAUSE_DURATION_MS = 500
 
 
+def ms_to_timecode(ms, fps):
+    """Convert milliseconds to SMPTE timecode HH:MM:SS:FF"""
+    total_frames = int(ms / 1000 * fps)
+    frames = total_frames % fps
+    total_seconds = total_frames // fps
+    seconds = total_seconds % 60
+    minutes = (total_seconds // 60) % 60
+    hours = total_seconds // 3600
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}:{frames:02d}"
+
+
 def extract_guest_name():
     for f in os.listdir(MATERIAL_DIR):
         if "mix" in f.lower():
@@ -138,3 +149,42 @@ def run_export():
             f.write(f"clip_end = {format_peak_time(end)}\n\n")
 
     update(f"✅ Export complete: {mp3_path}")
+
+
+def run_edl_export():
+    """Export peaks as EDL file (CMX 3600 format)."""
+    update("✅ [EDL] Starting EDL export...")
+
+    os.makedirs(EXPORT_DIR, exist_ok=True)
+
+    peaks = get_peaks()
+    ignored = get_ignored_peaks()
+    fps = config.get("fps")
+
+    if not peaks:
+        update("❌ No peaks found.")
+        return
+
+    gastname = extract_guest_name()
+    edl_path = os.path.join(EXPORT_DIR, f"Keyboardstellen - {gastname}.edl")
+
+    with open(edl_path, "w") as f:
+        f.write(f"TITLE: PeakCut Export - {gastname}\n")
+        f.write("FCM: NON-DROP FRAME\n\n")
+
+        event_num = 1
+        for i, peak_ms in enumerate(peaks):
+            if i in ignored:
+                continue
+
+            tc_in = ms_to_timecode(peak_ms, fps)
+            # OUT is 1 frame after IN (marker position)
+            tc_out = ms_to_timecode(peak_ms + (1000 / fps), fps)
+
+            f.write(f"{event_num:03d}  AX       V     C        ")
+            f.write(f"{tc_in} {tc_out} {tc_in} {tc_out}\n")
+            f.write(f"* FROM CLIP NAME: Peak {event_num}\n\n")
+
+            event_num += 1
+
+    update(f"✅ EDL export complete: {edl_path}")

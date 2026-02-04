@@ -22,7 +22,7 @@ from peaks import (
     stop_playback, switch_mode, ignore_current_peak,
     get_current_peak_index, set_current_peak
 )
-from export import run_export
+from export import run_export, run_edl_export
 from status import set_callback
 
 
@@ -105,6 +105,13 @@ class MainWindow(QMainWindow):
         self.export_btn.clicked.connect(self._on_export)
         self.export_btn.setEnabled(False)
         button_layout.addWidget(self.export_btn)
+
+        # EDL button
+        self.edl_btn = QPushButton("EDL")
+        self.edl_btn.setMinimumWidth(80)
+        self.edl_btn.clicked.connect(self._on_edl)
+        self.edl_btn.setEnabled(False)
+        button_layout.addWidget(self.edl_btn)
 
         button_layout.addStretch()
         main_layout.addLayout(button_layout)
@@ -431,9 +438,26 @@ class MainWindow(QMainWindow):
 
         self.export_btn.setEnabled(True)
 
+    def _on_edl(self):
+        """Run EDL export."""
+        stop_playback()
+        self.statusbar.showMessage("EDL Export läuft...")
+        self.edl_btn.setEnabled(False)
+        QApplication.processEvents()
+
+        try:
+            run_edl_export()
+            self.statusbar.showMessage(f"EDL fertig! Datei in: {EXPORT_DIR}")
+        except Exception as e:
+            self.statusbar.showMessage(f"EDL-Fehler: {str(e)}")
+            self._log(f"EDL-Fehler: {str(e)}")
+
+        self.edl_btn.setEnabled(True)
+
     def _enable_playback_controls(self, enabled):
         """Enable or disable playback controls."""
         self.export_btn.setEnabled(enabled)
+        self.edl_btn.setEnabled(enabled)
         self.back_btn.setEnabled(enabled)
         self.play_btn.setEnabled(enabled)
         self.stop_btn.setEnabled(enabled)
@@ -562,6 +586,12 @@ class MainWindow(QMainWindow):
         if key == Qt.Key.Key_E:
             if self.export_btn.isEnabled():
                 self._on_export()
+            return
+
+        # D → EDL Export
+        if key == Qt.Key.Key_D:
+            if self.edl_btn.isEnabled():
+                self._on_edl()
             return
 
         super().keyPressEvent(event)
