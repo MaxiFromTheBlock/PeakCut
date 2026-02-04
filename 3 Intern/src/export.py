@@ -148,24 +148,22 @@ def run_export():
             f.write(f"clip_start = {format_peak_time(start)}\n")
             f.write(f"clip_end = {format_peak_time(end)}\n\n")
 
-    update(f"✅ Export complete: {mp3_path}")
+    # Also create EDL
+    run_edl_export(gastname)
+
+    update(f"✅ Export complete: MP3 + TXT + EDL")
 
 
-def run_edl_export():
-    """Export peaks as EDL file (CMX 3600 format)."""
-    update("✅ [EDL] Starting EDL export...")
-
-    os.makedirs(EXPORT_DIR, exist_ok=True)
-
+def run_edl_export(gastname):
+    """Export peaks as EDL file (CMX 3600 format) with real clips."""
     peaks = get_peaks()
     ignored = get_ignored_peaks()
     fps = config.get("fps")
+    context_duration = config.get("context_duration_ms")
 
     if not peaks:
-        update("❌ No peaks found.")
         return
 
-    gastname = extract_guest_name()
     edl_path = os.path.join(EXPORT_DIR, f"Keyboardstellen - {gastname}.edl")
 
     with open(edl_path, "w") as f:
@@ -173,18 +171,29 @@ def run_edl_export():
         f.write("FCM: NON-DROP FRAME\n\n")
 
         event_num = 1
+        record_position_ms = 0
+
         for i, peak_ms in enumerate(peaks):
             if i in ignored:
                 continue
 
-            tc_in = ms_to_timecode(peak_ms, fps)
-            # OUT is 1 frame after IN (marker position)
-            tc_out = ms_to_timecode(peak_ms + (1000 / fps), fps)
+            # Source timecodes (in original media)
+            source_in_ms = max(0, peak_ms - context_duration)
+            source_out_ms = peak_ms + context_duration
+            clip_duration_ms = source_out_ms - source_in_ms
+
+            # Record timecodes (position in sequence)
+            record_in_ms = record_position_ms
+            record_out_ms = record_position_ms + clip_duration_ms
+
+            source_in = ms_to_timecode(source_in_ms, fps)
+            source_out = ms_to_timecode(source_out_ms, fps)
+            record_in = ms_to_timecode(record_in_ms, fps)
+            record_out = ms_to_timecode(record_out_ms, fps)
 
             f.write(f"{event_num:03d}  AX       V     C        ")
-            f.write(f"{tc_in} {tc_out} {tc_in} {tc_out}\n")
+            f.write(f"{source_in} {source_out} {record_in} {record_out}\n")
             f.write(f"* FROM CLIP NAME: Peak {event_num}\n\n")
 
+            record_position_ms = record_out_ms
             event_num += 1
-
-    update(f"✅ EDL export complete: {edl_path}")

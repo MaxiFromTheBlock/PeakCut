@@ -158,8 +158,7 @@ main_pyqt.py
 | `←` | Previous Peak |
 | `S` | Switch Mode (Keyboard/Mic) |
 | `I` / `Delete` | Ignore Peak |
-| `E` | Export (MP3+TXT) |
-| `D` | EDL Export |
+| `E` | Export (MP3 + TXT + EDL) |
 
 ---
 
@@ -207,8 +206,13 @@ EOF
 
 ## TODO
 
-### Aktuell offen
-- [ ] Threading für Analyse (UI friert ein)
+### Aktuell offen (Priorität)
+- [ ] **Threading für UI** - Analyse blockiert UI, Rainbow Wheel erscheint
+- [ ] **Multiprocessing für Video-Sync** - Sync ist langsam bei großen Dateien
+- [ ] EDL in Premiere testen - Format validieren
+- [ ] Performance-Probleme untersuchen (App läuft "unruhig")
+
+### Später
 - [ ] Progress Indicator mit Animation
 - [ ] LUT Integration im GUI
 
@@ -228,9 +232,14 @@ EOF
 
 ### v1.3.0-dev (2025-02-04)
 - **EDL Export** - CMX 3600 Format für Premiere/Final Cut/DaVinci
+  - Echte 30s Clips (±15s context_duration um jeden Peak)
+  - Source IN/OUT = Position im Original-Material
+  - Record IN/OUT = Position in der generierten Sequence
+  - Wird automatisch bei Export erstellt (kein separater Button)
 - **PyQt6 GUI** - Komplettes Rewrite von Tkinter
 - **Video Preview** - QMediaPlayer mit Peak-Timeline
 - **Flexible File Import** - Multi-Select, Auto-Detection
+- **Docs Cleanup** - 10 MD-Dateien → 2 (CLAUDE.md + README.txt)
 
 ### v1.2.0 (2025-02-02)
 - Config System (`config.json`)
@@ -252,6 +261,32 @@ EOF
 - **Global State** - Kein Class-basiertes Design
 - **Screenshots LUT** - Unterscheidet sich von Premiere (nearest-neighbor)
 - **No Tests** - Zero Test Coverage
+
+---
+
+---
+
+## Session Notes (2025-02-04)
+
+### Was wurde gemacht
+1. ✅ EDL Export implementiert mit echten 30s Clips
+2. ✅ EDL Button entfernt - Export erstellt jetzt MP3 + TXT + EDL zusammen
+3. ✅ Dokumentation konsolidiert (10 → 2 Dateien)
+4. ✅ Git aufgeräumt: feature/pyqt-migration → develop gemerged, gepusht
+
+### Was noch offen ist
+1. **EDL in Premiere testen** - Import prüfen, Workflow validieren
+2. **Threading für UI** - Nächstes Feature (UI friert bei Analyse ein)
+3. **Multiprocessing für Video-Sync** - Danach (Performance bei großen Dateien)
+
+### Bekannte Probleme
+- App lief "unruhig" beim letzten Test - Performance untersuchen
+- EDL noch nicht in Premiere getestet
+
+### Git Status
+- Branch: `develop`
+- Letzter Commit: Docs cleanup
+- Uncommitted: EDL Änderungen (noch committen!)
 
 ---
 
