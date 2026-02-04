@@ -2,9 +2,14 @@
 
 All notable changes to PeakCut are documented here.
 
-## [v1.3.0-dev] - 2025-02-03 (PyQt Migration)
+## [v1.3.0-dev] - 2025-02-04 (PyQt Migration)
 
 ### Added
+- **EDL Export** - CMX 3600 format for Premiere Pro, Final Cut, DaVinci
+  - New "EDL" button next to Export
+  - Keyboard shortcut: D
+  - Respects ignored peaks
+  - Uses fps from config.json for timecode calculation
 - **PyQt6 GUI** - Complete rewrite from Tkinter to PyQt6
   - Modern Apple-style UI with SF Pro Display font
   - Centered status display in dark preview area

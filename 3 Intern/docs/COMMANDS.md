@@ -6,6 +6,11 @@ Quick reference for all terminal commands.
 
 ```bash
 cd /Users/max/Desktop/PeakCut/App
+
+# PyQt6 Version (aktiv)
+"./3 Intern/venv311/bin/python" "./3 Intern/src/main_pyqt.py"
+
+# Tkinter Version (Legacy)
 "./3 Intern/venv311/bin/python" "./3 Intern/src/main.py"
 ```
 

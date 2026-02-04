@@ -58,6 +58,10 @@ Erstelle das Virtual Environment:
 ## Schritt 4: App starten
 
 ```bash
+# PyQt6 Version (empfohlen)
+"./3 Intern/venv311/bin/python" "./3 Intern/src/main_pyqt.py"
+
+# Tkinter Version (Legacy)
 "./3 Intern/venv311/bin/python" "./3 Intern/src/main.py"
 ```
 

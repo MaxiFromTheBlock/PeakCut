@@ -52,7 +52,8 @@ PeakCut existiert in zwei Versionen:
 | `←` | Vorheriger Peak |
 | `S` | Switch Mode |
 | `I` / `Delete` | Ignore Peak |
-| `E` | Export |
+| `E` | Export (MP3+TXT) |
+| `D` | EDL Export |
 
 ### Zusatzfunktionen
 

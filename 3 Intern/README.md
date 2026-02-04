@@ -43,7 +43,7 @@ Put your files in `1 Material/`:
 ### 2. Run PeakCut
 ```bash
 source "3 Intern/venv311/bin/activate"
-python "3 Intern/src/main.py"
+python "3 Intern/src/main_pyqt.py"
 ```
 
 ### 3. Workflow
@@ -90,9 +90,9 @@ develop - active development
 
 ## Tech Stack
 
-- **GUI:** Tkinter
+- **GUI:** PyQt6 (Legacy: Tkinter)
 - **Audio:** pydub, soundfile, simpleaudio
-- **Video:** moviepy
+- **Video:** moviepy, QMediaPlayer
 - **Analysis:** numpy, scipy
 - **TTS:** macOS `say` command
 
