@@ -1,111 +1,258 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Das zentrale Entwickler-Dokument für PeakCut. Enthält alles was Claude Code (und Entwickler) wissen müssen.
+
+---
 
 ## Project Overview
 
-PeakCut is a Python/PyQt6 desktop app for podcast post-production. It detects keyboard peaks (foot pedal markers) in audio recordings and exports numbered audio clips with timecodes. Used in production for "Hotel Matze" podcast.
+PeakCut ist eine Python/PyQt6 Desktop-App für Podcast-Nachbearbeitung. Sie erkennt Keyboard-Peaks (Fußpedal-Marker) in Audioaufnahmen und exportiert nummerierte Clips mit Timecodes.
+
+**Produktiv im Einsatz für:** [Hotel Matze](https://mitvergnuegen.com/hotelmatze/) Podcast
+
+---
 
 ## Folder Structure
 
 ```
 App/
-├── 1 Material/     ← User input (audio/video files)
-├── 2 Export/       ← Output (MP3 + TXT + EDL)
-├── 3 Intern/       ← Source code & dependencies
+├── 1 Material/          ← User Input (Audio/Video)
+├── 2 Export/            ← Output (MP3 + TXT + EDL)
+├── 3 Intern/            ← Source Code
 │   ├── src/
-│   │   ├── gui/           ← PyQt6 GUI components
-│   │   └── lib/           ← External libraries (LUT processor)
-│   ├── docs/              ← Documentation
+│   │   ├── gui/         ← PyQt6 GUI Components
+│   │   └── lib/         ← External Libraries
 │   ├── assets/
-│   ├── venv311/
-│   └── requirements.txt
-└── README.txt      ← User instructions
+│   │   ├── pictures/    ← Icons, Logos
+│   │   └── zahlen/      ← TTS Fallback MP3s
+│   ├── config.json      ← User Settings
+│   ├── requirements.txt
+│   ├── venv311/         ← Virtual Environment
+│   └── CLAUDE.md        ← Diese Datei
+└── README.txt           ← User Quick Start
 ```
+
+---
 
 ## Commands
 
 ```bash
-# Run PeakCut (PyQt6 - aktiv)
+cd /Users/max/Desktop/PeakCut/App
+
+# App starten (PyQt6)
 "./3 Intern/venv311/bin/python" "./3 Intern/src/main_pyqt.py"
 
-# Run PeakCut (Tkinter - Legacy)
+# App starten (Tkinter Legacy)
 "./3 Intern/venv311/bin/python" "./3 Intern/src/main.py"
 
-# Install dependencies
-python3.11 -m venv "3 Intern/venv311"
-source "3 Intern/venv311/bin/activate"
-pip install -r "3 Intern/requirements.txt"
+# Dependencies installieren
+"./3 Intern/venv311/bin/pip" install -r "./3 Intern/requirements.txt"
+
+# Virtual Environment neu erstellen
+rm -rf "./3 Intern/venv311"
+~/.pyenv/versions/3.11.*/bin/python3 -m venv "./3 Intern/venv311"
+"./3 Intern/venv311/bin/pip" install -r "./3 Intern/requirements.txt"
 ```
+
+---
 
 ## Architecture
 
-**Entry Points:**
-- `main_pyqt.py` → PyQt6 GUI (aktiv)
-- `main.py` → Tkinter GUI (Legacy)
+### Entry Points
 
-**GUI Modules (src/gui/):**
-- `main_window.py` - Hauptfenster mit allen Controls
-- `apple_style.py` - macOS-inspired stylesheet
-- `video_preview_peak.py` - Video Preview mit QMediaPlayer
-- `peak_timeline.py` - Custom Timeline mit Peak-Markern
+| File | Framework | Status |
+|------|-----------|--------|
+| `main_pyqt.py` | PyQt6 | **Aktiv** |
+| `main.py` | Tkinter | Legacy |
 
-**Core Modules:**
-- `peaks.py` - Peak detection, audio playback, navigation
-- `sync.py` - Video-to-audio sync via cross-correlation
-- `export.py` - MP3/TXT/EDL export with TTS numbers
-- `config.py` - JSON configuration management
-- `screenshots.py` - Extract frames from videos with LUT
-- `status.py` - Observer pattern for UI updates
-- `utils.py` - Shared paths and helpers
+### Source Files
 
-**State:** Global variables in `peaks.py` with getter functions for cross-module access.
+```
+src/
+├── main_pyqt.py         # PyQt6 Entry Point
+├── main.py              # Tkinter Entry Point (Legacy)
+├── gui/
+│   ├── main_window.py   # Hauptfenster
+│   ├── apple_style.py   # macOS Stylesheet
+│   ├── video_preview_peak.py  # Video mit QMediaPlayer
+│   └── peak_timeline.py # Timeline mit Peak-Markern
+├── lib/
+│   └── lut_processor.py # LUT für Color Grading
+├── peaks.py             # Peak Detection, Playback, Navigation
+├── sync.py              # Video-Audio Sync (Cross-Correlation)
+├── export.py            # MP3 + TXT + EDL Export
+├── config.py            # JSON Config Management
+├── screenshots.py       # Frame Extraction mit LUT
+├── status.py            # Observer Pattern für UI
+├── utils.py             # Pfade, Hilfsfunktionen
+└── gui.py               # Tkinter UI (Legacy)
+```
 
-## Key Features
+### Module Dependencies
 
-1. **TTS Numbers** - macOS `say -v Anna` generates spoken numbers (no 49-limit)
-2. **Auto Sync** - Detects video offsets via audio correlation
-3. **Combined Export** - MP3 + TXT + EDL with all timecodes
-4. **Video Preview** - QMediaPlayer with peak timeline markers
-5. **Screenshots** - Random frames per video with Kodak LUT (experimental)
+```
+main_pyqt.py
+  └── gui/main_window.py
+        ├── gui/apple_style.py
+        ├── gui/video_preview_peak.py
+        │     └── gui/peak_timeline.py
+        ├── peaks.py
+        ├── sync.py
+        ├── export.py
+        ├── status.py
+        └── utils.py
+```
+
+### Global State
+
+| Module | Variables |
+|--------|-----------|
+| `peaks.py` | `_peaks`, `_current_peak`, `_keyboard_audio`, `_mic_audios`, `_mode`, `_ignored_peaks` |
+| `sync.py` | `_video_offsets` |
+| `config.py` | `_config` |
+| `status.py` | `_callback` |
+
+---
+
+## Data Flow
+
+1. **User klickt "Analyze"**
+2. **Sync** (`sync.py`): Extrahiert Audio aus Videos, berechnet Offsets via Cross-Correlation
+3. **Peak Analysis** (`peaks.py`): Findet Peaks über Threshold, filtert mit min_gap
+4. **Navigation**: User navigiert durch Peaks (Play/Next/Back)
+5. **Export**: MP3 mit TTS-Nummern + TXT mit Timecodes + EDL für NLE
+
+---
+
+## Configuration
+
+`config.json`:
+```json
+{
+  "threshold_factor": 0.4,
+  "min_gap_ms": 15000,
+  "preview_duration_ms": 1000,
+  "context_duration_ms": 15000,
+  "fps": 25,
+  "tts_voice": "Anna"
+}
+```
+
+| Key | Default | Beschreibung |
+|-----|---------|--------------|
+| `threshold_factor` | 0.4 | Peak-Erkennung Schwellwert |
+| `min_gap_ms` | 15000 | Minimaler Abstand zwischen Peaks |
+| `preview_duration_ms` | 1000 | Keyboard-Mode Preview Länge |
+| `context_duration_ms` | 15000 | Mic-Mode Kontext (±15s) |
+| `fps` | 25 | Framerate für Timecode-Berechnung |
+| `tts_voice` | "Anna" | macOS TTS Stimme |
+
+---
+
+## Keyboard Shortcuts
+
+| Taste | Aktion |
+|-------|--------|
+| `Space` | Play/Stop |
+| `→` | Next Peak |
+| `←` | Previous Peak |
+| `S` | Switch Mode (Keyboard/Mic) |
+| `I` / `Delete` | Ignore Peak |
+| `E` | Export (MP3+TXT) |
+| `D` | EDL Export |
+
+---
 
 ## File Naming Conventions
 
-- Keyboard audio: filename contains "keyboard", "keys", or "klavier"
-- Reference audio: filename contains "mix"
-- Videos: `.mp4` or `.mov` files
+- **Keyboard Audio**: Dateiname enthält "keyboard", "keys", oder "klavier"
+- **Reference Audio**: Dateiname enthält "mix"
+- **Videos**: `.mp4` oder `.mov`
+
+---
 
 ## Git Workflow
 
-**WICHTIG: Vor jeder Session prüfen:**
+### Vor jeder Session
 ```bash
 git branch      # Welcher Branch?
 git status      # Alles committed?
 ```
 
-**Branch-Struktur:**
-- `main` - Stable releases, production-safe
-- `develop` - Aktive Entwicklung (hier arbeiten)
+### Branch-Struktur
+```
+main     ← Stable Releases
+develop  ← Aktive Entwicklung (hier arbeiten)
+```
 
-**Regeln:**
-- Kleine Features: direkt auf `develop`
-- Große Features (>1 Tag): neuer `feature/name` Branch
-- Nach jeder Änderung: committen
-- Details: siehe `docs/WORKFLOW.md`
+### Regeln
+- **Kleine Features**: Direkt auf `develop`
+- **Große Features** (>1 Tag): Neuer `feature/name` Branch
+- **Nach jeder Änderung**: Committen!
+- **Commit-Message**: Kurz, prägnant, mit Co-Author
 
-## Keyboard Shortcuts (PyQt6)
+```bash
+git commit -m "$(cat <<'EOF'
+Add feature X
 
-| Taste | Aktion |
-|-------|--------|
-| Space | Play/Stop |
-| → | Next Peak |
-| ← | Previous Peak |
-| S | Switch Mode |
-| I/Delete | Ignore Peak |
-| E | Export (MP3+TXT) |
-| D | EDL Export |
+- Detail 1
+- Detail 2
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
+## TODO
+
+### Aktuell offen
+- [ ] Threading für Analyse (UI friert ein)
+- [ ] Progress Indicator mit Animation
+- [ ] LUT Integration im GUI
+
+### Mittelfristig (V2)
+- [ ] Smart Scan: Ordner wählen, leere Spuren erkennen
+- [ ] Clip Editor: In/Out Points anpassen
+- [ ] Profile System
+
+### Langfristig (V4)
+- [ ] Electron App + Python Engine + Cloud Backend
+- [ ] Machine Learning für automatische Clip-Vorhersage
+- [ ] Hardware: Physischer Marker-Button
+
+---
+
+## Changelog
+
+### v1.3.0-dev (2025-02-04)
+- **EDL Export** - CMX 3600 Format für Premiere/Final Cut/DaVinci
+- **PyQt6 GUI** - Komplettes Rewrite von Tkinter
+- **Video Preview** - QMediaPlayer mit Peak-Timeline
+- **Flexible File Import** - Multi-Select, Auto-Detection
+
+### v1.2.0 (2025-02-02)
+- Config System (`config.json`)
+- Export Bug Fix (verwendet immer Mic Audio)
+
+### v1.1.0 (2025-02-01)
+- Screenshots Feature mit Kodak LUT
+- Folder Structure Reorganisation
+
+### v1.0-stable (2025-01-31)
+- TTS für unbegrenzte Peak-Nummern
+- Portable Pfade
+
+---
 
 ## Known Limitations
 
-- Screenshots LUT differs from Adobe Premiere (needs refinement)
-- macOS only (uses `say` command for TTS)
+- **macOS only** - Nutzt `say` Command für TTS
+- **Global State** - Kein Class-basiertes Design
+- **Screenshots LUT** - Unterscheidet sich von Premiere (nearest-neighbor)
+- **No Tests** - Zero Test Coverage
+
+---
+
+*Zuletzt aktualisiert: 2025-02-04*
