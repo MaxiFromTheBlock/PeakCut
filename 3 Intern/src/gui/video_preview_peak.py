@@ -2,13 +2,14 @@
 
 import os
 import subprocess
+import numpy as np
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QComboBox, QSizePolicy, QFrame
+    QComboBox, QSizePolicy, QFrame, QLineEdit
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QTimer
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
-from PyQt6.QtMultimediaWidgets import QVideoWidget
+from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QTimer, QSize
+from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink
 
 from .apple_style import COLORS
 from .peak_timeline import PeakTimeline
@@ -31,6 +32,15 @@ class PeakVideoPreview(QWidget):
         self._peaks = []  # List of peak positions in ms
         self._current_peak_index = -1
         self._is_seeking = False
+
+        # LUT state
+        self._lut_processor = None
+        self._lut_loaded_filename = None  # Track which LUT file is loaded
+        self._last_frame = None  # Store last frame for LUT refresh
+
+        # Camera name state
+        self._camera_names = {}  # video_path → name
+        self._screenshot_counters = {}  # name → counter
 
         self._setup_ui()
         self._setup_player()
@@ -99,18 +109,39 @@ class PeakVideoPreview(QWidget):
         self.video_combo.currentIndexChanged.connect(self._on_video_selected)
         switcher_layout.addWidget(self.video_combo)
 
+        self.camera_name_edit = QLineEdit()
+        self.camera_name_edit.setPlaceholderText("Name...")
+        self.camera_name_edit.setMaximumWidth(150)
+        self.camera_name_edit.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: #2a2a2a;
+                border: 1px solid #3a3a3a;
+                border-radius: 6px;
+                color: #ffffff;
+                padding: 6px 12px;
+                font-size: 13px;
+            }}
+            QLineEdit:focus {{
+                border-color: #007AFF;
+            }}
+        """)
+        self.camera_name_edit.textChanged.connect(self._on_camera_name_changed)
+        self.camera_name_edit.returnPressed.connect(self.camera_name_edit.clearFocus)
+        switcher_layout.addWidget(self.camera_name_edit)
+
         switcher_layout.addStretch()
         card_layout.addLayout(switcher_layout)
 
-        # Video display
-        self.video_widget = QVideoWidget()
-        self.video_widget.setMinimumHeight(300)
-        self.video_widget.setSizePolicy(
+        # Video display (QLabel for LUT-graded frames via QVideoSink)
+        self.video_label = QLabel()
+        self.video_label.setMinimumHeight(300)
+        self.video_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.video_label.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding
         )
-        self.video_widget.setStyleSheet("background-color: #000000; border-radius: 6px;")
-        card_layout.addWidget(self.video_widget, stretch=1)
+        self.video_label.setStyleSheet("background-color: #000000; border-radius: 6px;")
+        card_layout.addWidget(self.video_label, stretch=1)
 
         # Timeline row
         timeline_layout = QHBoxLayout()
@@ -137,16 +168,101 @@ class PeakVideoPreview(QWidget):
         layout.addWidget(self.video_card, stretch=1)
 
     def _setup_player(self):
-        """Setup QMediaPlayer."""
+        """Setup QMediaPlayer with QVideoSink for frame interception."""
         self.player = QMediaPlayer()
         self.audio_output = QAudioOutput()
         self.player.setAudioOutput(self.audio_output)
-        self.player.setVideoOutput(self.video_widget)
+
+        # Use QVideoSink to intercept frames for LUT processing
+        self.video_sink = QVideoSink()
+        self.video_sink.videoFrameChanged.connect(self._on_video_frame)
+        self.player.setVideoOutput(self.video_sink)
 
         # Connect signals
         self.player.durationChanged.connect(self._on_duration_changed)
         self.player.positionChanged.connect(self._on_position_changed)
         self.player.errorOccurred.connect(self._on_error)
+
+    def _ensure_lut(self):
+        """Lazy-load or reload LUT if config changed."""
+        import config
+        from utils import LUTS_DIR
+        from lib.lut_processor import LUTProcessor
+
+        lut_filename = config.get("lut_path") or ""
+
+        if lut_filename == self._lut_loaded_filename:
+            return  # Already up to date
+
+        self._lut_loaded_filename = lut_filename
+
+        if not lut_filename:
+            self._lut_processor = None
+            return
+
+        lut_full_path = os.path.join(LUTS_DIR, lut_filename)
+        if os.path.exists(lut_full_path):
+            proc = LUTProcessor()
+            if proc.load_cube(lut_full_path):
+                self._lut_processor = proc
+            else:
+                self._lut_processor = None
+        else:
+            self._lut_processor = None
+
+    def _on_video_frame(self, frame):
+        """Receive frame from sink, store it, process it."""
+        if not frame.isValid():
+            return
+        self._last_frame = frame
+        self._process_frame(frame)
+
+    def _process_frame(self, frame):
+        """Apply LUT to frame and display in label."""
+        image = frame.toImage()
+        if image.isNull():
+            return
+
+        # Check LUT
+        self._ensure_lut()
+
+        if self._lut_processor and self._lut_processor.is_loaded():
+            # Scale to physical (Retina) pixel size for sharp LUT rendering
+            dpr = self.video_label.devicePixelRatioF()
+            logical = self.video_label.size()
+            target = QSize(int(logical.width() * dpr), int(logical.height() * dpr))
+            image = image.scaled(
+                target,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+
+            # Convert QImage → numpy RGB (respecting bytesPerLine stride)
+            image = image.convertToFormat(QImage.Format.Format_RGB888)
+            w, h = image.width(), image.height()
+            bpl = image.bytesPerLine()
+            ptr = image.bits()
+            ptr.setsize(h * bpl)
+            raw = np.frombuffer(ptr, dtype=np.uint8).reshape(h, bpl)
+            arr = raw[:, :w * 3].reshape(h, w, 3).copy()
+
+            # Apply LUT
+            graded = self._lut_processor.apply_to_image(arr)
+
+            # numpy → QImage → QPixmap with Retina DPR
+            qimg = QImage(graded.data, w, h, w * 3, QImage.Format.Format_RGB888).copy()
+            pixmap = QPixmap.fromImage(qimg)
+            pixmap.setDevicePixelRatio(dpr)
+            self.video_label.setPixmap(pixmap)
+        else:
+            # No LUT: display full-resolution frame, let Qt scale on GPU
+            self.video_label.setPixmap(QPixmap.fromImage(image))
+
+    def refresh_lut(self):
+        """Re-apply LUT to current frame (call after LUT selection change)."""
+        self._lut_loaded_filename = None  # Force reload
+        if self._last_frame and self._last_frame.isValid():
+            self._process_frame(self._last_frame)
 
     def set_videos(self, video_files: list):
         """Set the list of video files."""
@@ -195,10 +311,27 @@ class PeakVideoPreview(QWidget):
         self.player.pause()
         self.player.setPosition(0)
 
+    def _on_camera_name_changed(self, text):
+        """Store camera name for the current video."""
+        if self._current_video:
+            self._camera_names[self._current_video] = text.strip()
+
+    def get_current_camera_name(self) -> str:
+        """Get the camera name for the currently selected video."""
+        if self._current_video:
+            return self._camera_names.get(self._current_video, "")
+        return ""
+
     def _on_video_selected(self, index: int):
         """Handle video selection from combo box."""
         if index >= 0 and index < len(self._video_files):
-            self._load_video(self._video_files[index])
+            # Restore camera name for this video
+            path = self._video_files[index]
+            name = self._camera_names.get(path, "")
+            self.camera_name_edit.blockSignals(True)
+            self.camera_name_edit.setText(name)
+            self.camera_name_edit.blockSignals(False)
+            self._load_video(path)
 
     def _on_duration_changed(self, duration: int):
         """Handle duration change."""
@@ -263,8 +396,11 @@ class PeakVideoPreview(QWidget):
         """Set position in ms."""
         self.player.setPosition(position_ms)
 
-    def capture_screenshot(self) -> str:
-        """Capture current frame, apply LUT, save as PNG.
+    def capture_screenshot(self, camera_name: str = "") -> str:
+        """Capture current frame at full resolution, apply LUT, save as PNG.
+
+        Args:
+            camera_name: Optional name for counter-based naming (e.g. "Matze 1.png").
 
         Returns:
             Path to saved screenshot, or empty string on failure.
@@ -282,7 +418,7 @@ class PeakVideoPreview(QWidget):
         position_ms = self.player.position()
         position_s = position_ms / 1000.0
 
-        # Extract frame via ffmpeg
+        # Extract frame via ffmpeg (full resolution)
         try:
             result = subprocess.run(
                 [
@@ -310,23 +446,32 @@ class PeakVideoPreview(QWidget):
                 if lut.load_cube(lut_full_path):
                     image = lut.apply_to_pil_image(image)
 
-        # Save to Export/Screenshots/
-        screenshots_dir = os.path.join(EXPORT_DIR, "Screenshots")
+        # Save to Export/Gastname - Screenshots/
+        from export import extract_guest_name
+        gastname = extract_guest_name()
+        screenshots_dir = os.path.join(EXPORT_DIR, f"{gastname} - Screenshots")
         os.makedirs(screenshots_dir, exist_ok=True)
 
-        # Build filename: VideoName_HH-MM-SS-FF.png
-        video_name = os.path.splitext(os.path.basename(self._current_video))[0]
-        fps = config.get("fps") or 25
-        total_frames = int(position_s * fps)
-        h = total_frames // (3600 * fps)
-        m = (total_frames % (3600 * fps)) // (60 * fps)
-        s = (total_frames % (60 * fps)) // fps
-        f = total_frames % fps
-        timecode = f"{h:02d}-{m:02d}-{s:02d}-{f:02d}"
+        # Build filename
+        if camera_name:
+            # Counter-based: "Name 1.png", "Name 2.png", ...
+            counter = self._screenshot_counters.get(camera_name, 0) + 1
+            self._screenshot_counters[camera_name] = counter
+            filename = f"{camera_name} {counter}.jpg"
+        else:
+            # Fallback: VideoName_HH-MM-SS-FF.jpg
+            video_name = os.path.splitext(os.path.basename(self._current_video))[0]
+            fps = config.get("fps") or 25
+            total_frames = int(position_s * fps)
+            h = total_frames // (3600 * fps)
+            m = (total_frames % (3600 * fps)) // (60 * fps)
+            s = (total_frames % (60 * fps)) // fps
+            f = total_frames % fps
+            timecode = f"{h:02d}-{m:02d}-{s:02d}-{f:02d}"
+            filename = f"{video_name}_{timecode}.jpg"
 
-        filename = f"{video_name}_{timecode}.png"
         filepath = os.path.join(screenshots_dir, filename)
-        image.save(filepath)
+        image.save(filepath, "JPEG", quality=95)
 
         return filepath
 

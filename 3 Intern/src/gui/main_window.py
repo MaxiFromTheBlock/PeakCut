@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QFrame, QStatusBar, QFileDialog,
     QApplication, QTextEdit, QComboBox, QStackedWidget
 )
-from PyQt6.QtCore import Qt, QTimer, QSettings
+from PyQt6.QtCore import Qt, QTimer, QSettings, QThread, pyqtSignal
 
 from .apple_style import get_stylesheet, COLORS
 from .video_preview_peak import PeakVideoPreview
@@ -25,6 +25,29 @@ from peaks import (
 )
 from export import run_export
 from status import set_callback
+
+
+class AnalysisWorker(QThread):
+    """Background worker for sync + peak analysis."""
+    finished = pyqtSignal(list)       # peaks list
+    status_update = pyqtSignal(str)   # progress messages
+    error = pyqtSignal(str)           # error message
+
+    def run(self):
+        try:
+            # Redirect status updates to signal (thread-safe queued connection)
+            set_callback(self.status_update.emit)
+
+            self.status_update.emit("Synchronisiere...")
+            run_sync()
+
+            self.status_update.emit("Analysiere Peaks...")
+            run_peak_analysis()
+
+            peaks = get_peaks()
+            self.finished.emit(peaks)
+        except Exception as e:
+            self.error.emit(str(e))
 
 
 class MainWindow(QMainWindow):
@@ -54,7 +77,6 @@ class MainWindow(QMainWindow):
         self._progress_timer = QTimer()
         self._progress_timer.timeout.connect(self._animate_progress)
         self._progress_dots = 0
-        self._progress_text = ""
 
         self._setup_ui()
         self._setup_statusbar()
@@ -99,13 +121,6 @@ class MainWindow(QMainWindow):
         self.analyze_btn.clicked.connect(self._on_analyze)
         self.analyze_btn.setEnabled(False)
         button_layout.addWidget(self.analyze_btn)
-
-        # Export button
-        self.export_btn = QPushButton("Export")
-        self.export_btn.setMinimumWidth(100)
-        self.export_btn.clicked.connect(self._on_export)
-        self.export_btn.setEnabled(False)
-        button_layout.addWidget(self.export_btn)
 
         button_layout.addStretch()
         main_layout.addLayout(button_layout)
@@ -171,56 +186,75 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(self.preview_stack, stretch=1)
 
-        # Playback controls
-        controls_layout = QHBoxLayout()
-        controls_layout.setSpacing(8)
+        # Peak controls (hidden until analysis complete)
+        self.peak_controls = QWidget()
+        peak_layout = QHBoxLayout(self.peak_controls)
+        peak_layout.setContentsMargins(0, 0, 0, 0)
+        peak_layout.setSpacing(8)
 
         self.back_btn = QPushButton("Back")
-        self.back_btn.setEnabled(False)
         self.back_btn.clicked.connect(self._on_back)
-        controls_layout.addWidget(self.back_btn)
+        peak_layout.addWidget(self.back_btn)
 
         self.play_btn = QPushButton("Play")
-        self.play_btn.setEnabled(False)
         self.play_btn.setProperty("class", "primary")
         self.play_btn.clicked.connect(self._on_play)
-        controls_layout.addWidget(self.play_btn)
+        peak_layout.addWidget(self.play_btn)
 
         self.stop_btn = QPushButton("Stop")
-        self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self._on_stop)
-        controls_layout.addWidget(self.stop_btn)
+        peak_layout.addWidget(self.stop_btn)
 
         self.next_btn = QPushButton("Next")
-        self.next_btn.setEnabled(False)
         self.next_btn.clicked.connect(self._on_next)
-        controls_layout.addWidget(self.next_btn)
+        peak_layout.addWidget(self.next_btn)
 
-        controls_layout.addSpacing(20)
+        peak_layout.addSpacing(20)
 
         self.switch_btn = QPushButton("Switch")
-        self.switch_btn.setEnabled(False)
         self.switch_btn.clicked.connect(self._on_switch)
-        controls_layout.addWidget(self.switch_btn)
+        peak_layout.addWidget(self.switch_btn)
 
         self.ignore_btn = QPushButton("Ignore")
-        self.ignore_btn.setEnabled(False)
         self.ignore_btn.clicked.connect(self._on_ignore)
-        controls_layout.addWidget(self.ignore_btn)
+        peak_layout.addWidget(self.ignore_btn)
 
-        controls_layout.addSpacing(20)
+        peak_layout.addSpacing(20)
+
+        self.export_btn = QPushButton("Export")
+        self.export_btn.clicked.connect(self._on_export)
+        peak_layout.addWidget(self.export_btn)
+
+        peak_layout.addStretch()
+
+        self.mode_label = QLabel("Mode: -")
+        self.mode_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        peak_layout.addWidget(self.mode_label)
+
+        peak_layout.addSpacing(10)
+
+        self.peak_label = QLabel("Peak: - / -")
+        self.peak_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        peak_layout.addWidget(self.peak_label)
+
+        self.peak_controls.hide()
+        main_layout.addWidget(self.peak_controls)
+
+        # Tools row (Screenshot + LUT, visible when video loaded)
+        tools_layout = QHBoxLayout()
+        tools_layout.setSpacing(8)
 
         self.screenshot_btn = QPushButton("Screenshot")
         self.screenshot_btn.setEnabled(False)
         self.screenshot_btn.clicked.connect(self._on_capture_screenshot)
-        controls_layout.addWidget(self.screenshot_btn)
+        tools_layout.addWidget(self.screenshot_btn)
 
-        controls_layout.addStretch()
+        tools_layout.addStretch()
 
         # LUT dropdown
         lut_label = QLabel("LUT:")
         lut_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        controls_layout.addWidget(lut_label)
+        tools_layout.addWidget(lut_label)
 
         self.lut_combo = QComboBox()
         self.lut_combo.setMinimumWidth(160)
@@ -250,21 +284,9 @@ class MainWindow(QMainWindow):
         """)
         self._populate_lut_combo()
         self.lut_combo.currentIndexChanged.connect(self._on_lut_selected)
-        controls_layout.addWidget(self.lut_combo)
+        tools_layout.addWidget(self.lut_combo)
 
-        controls_layout.addSpacing(20)
-
-        self.mode_label = QLabel("Mode: -")
-        self.mode_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        controls_layout.addWidget(self.mode_label)
-
-        controls_layout.addSpacing(10)
-
-        self.peak_label = QLabel("Peak: - / -")
-        self.peak_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        controls_layout.addWidget(self.peak_label)
-
-        main_layout.addLayout(controls_layout)
+        main_layout.addLayout(tools_layout)
 
     def _setup_statusbar(self):
         """Setup status bar."""
@@ -358,6 +380,12 @@ class MainWindow(QMainWindow):
                 self._log("Dateien geladen\n\n" + "\n".join(status_parts) + "\n\nKlicke 'Analyze'")
                 self.analyze_btn.setEnabled(True)
                 self._copy_files_to_material()
+
+                # Show video preview immediately (before analysis)
+                if self._video_files:
+                    self.video_preview.set_videos(self._video_files)
+                    self.preview_stack.setCurrentIndex(1)
+                    self.screenshot_btn.setEnabled(True)
             elif not audio_files:
                 self.statusbar.showMessage("Keine Audio-Dateien ausgewählt")
                 self._log("Keine Audio-Dateien gefunden\n\nBitte wähle mindestens\neine .wav oder .mp3 Datei")
@@ -403,45 +431,67 @@ class MainWindow(QMainWindow):
                 shutil.copy2(filepath, dest)
 
     def _on_analyze(self):
-        """Run sync and peak analysis."""
+        """Run sync and peak analysis in background thread."""
         self.analyze_btn.setEnabled(False)
-        self._log("Synchronisiere...")
-        QApplication.processEvents()
+        self.load_btn.setEnabled(False)
+        self.statusbar.showMessage("Analyse läuft...")
 
-        try:
-            # Run sync (for videos)
-            run_sync()
+        # Start button text animation
+        self._progress_dots = 0
+        self._progress_timer.start(400)
 
-            self._log("Analysiere Peaks...")
-            QApplication.processEvents()
+        self._worker = AnalysisWorker()
+        self._worker.status_update.connect(self._on_analysis_status)
+        self._worker.finished.connect(self._on_analysis_complete)
+        self._worker.error.connect(self._on_analysis_error)
+        self._worker.start()
 
-            # Run peak analysis
-            run_peak_analysis()
+    def _on_analysis_status(self, message):
+        """Handle status updates from analysis worker."""
+        self.statusbar.showMessage(message)
 
-            # Get results
-            peaks = get_peaks()
-            num_peaks = len(peaks)
+    def _on_analysis_complete(self, peaks):
+        """Handle completed analysis - set peaks and enable controls."""
+        self._progress_timer.stop()
+        self.analyze_btn.setText("Analyze")
 
-            if num_peaks > 0:
-                self._num_peaks = num_peaks
-                self._current_peak = 0
-                self._enable_playback_controls(True)
-                self._update_peak_label()
-                self.mode_label.setText(f"Mode: {get_mode().upper()}")
+        # Restore status callback to GUI
+        set_callback(self._on_status_update)
 
-                # Show video preview if videos available
-                if self._video_files:
-                    self._setup_video_preview(peaks)
-                    self.preview_stack.setCurrentIndex(1)
-                else:
-                    self._log(f"{num_peaks} Peaks gefunden\n\nDrücke Play oder Leertaste")
+        num_peaks = len(peaks)
+
+        if num_peaks > 0:
+            self._num_peaks = num_peaks
+            self._current_peak = 0
+            self._enable_playback_controls(True)
+            self._update_peak_label()
+            self.mode_label.setText(f"Mode: {get_mode().upper()}")
+
+            # Set peaks on timeline
+            if self._video_files:
+                self.video_preview.set_peaks(peaks, self._current_peak)
+                self.preview_stack.setCurrentIndex(1)
+                self.statusbar.showMessage(f"{num_peaks} Peaks gefunden")
             else:
-                self._log("Keine Peaks gefunden")
-
-        except Exception as e:
-            self._log(f"Fehler: {str(e)}")
+                self._log(f"{num_peaks} Peaks gefunden\n\nDrücke Play oder Leertaste")
+        else:
+            self._log("Keine Peaks gefunden")
+            self.statusbar.showMessage("Keine Peaks gefunden")
 
         self.analyze_btn.setEnabled(True)
+        self.load_btn.setEnabled(True)
+        self._worker = None
+
+    def _on_analysis_error(self, error_msg):
+        """Handle analysis errors."""
+        self._progress_timer.stop()
+        self.analyze_btn.setText("Analyze")
+        set_callback(self._on_status_update)
+        self._log(f"Fehler: {error_msg}")
+        self.statusbar.showMessage(f"Fehler: {error_msg}")
+        self.analyze_btn.setEnabled(True)
+        self.load_btn.setEnabled(True)
+        self._worker = None
 
     def _setup_video_preview(self, peaks):
         """Setup video preview with peaks."""
@@ -477,15 +527,8 @@ class MainWindow(QMainWindow):
         self.export_btn.setEnabled(True)
 
     def _enable_playback_controls(self, enabled):
-        """Enable or disable playback controls."""
-        self.export_btn.setEnabled(enabled)
-        self.back_btn.setEnabled(enabled)
-        self.play_btn.setEnabled(enabled)
-        self.stop_btn.setEnabled(enabled)
-        self.next_btn.setEnabled(enabled)
-        self.switch_btn.setEnabled(enabled)
-        self.ignore_btn.setEnabled(enabled)
-        self.screenshot_btn.setEnabled(enabled and bool(self._video_files))
+        """Show or hide peak playback controls."""
+        self.peak_controls.setVisible(enabled)
 
     def _update_peak_label(self):
         """Update the peak counter label."""
@@ -608,6 +651,7 @@ class MainWindow(QMainWindow):
                     shutil.copy2(filepath, dest)
                 config.set("lut_path", filename)
                 self._populate_lut_combo()
+                self.video_preview.refresh_lut()
                 name = os.path.splitext(filename)[0]
                 self.statusbar.showMessage(f"LUT importiert: {name}")
             else:
@@ -615,6 +659,7 @@ class MainWindow(QMainWindow):
                 self._populate_lut_combo()
         else:
             config.set("lut_path", data)
+            self.video_preview.refresh_lut()
             if data:
                 name = os.path.splitext(data)[0]
                 self.statusbar.showMessage(f"LUT: {name}")
@@ -626,7 +671,8 @@ class MainWindow(QMainWindow):
         self.statusbar.showMessage("Screenshot wird erstellt...")
         QApplication.processEvents()
 
-        filepath = self.video_preview.capture_screenshot()
+        camera_name = self.video_preview.get_current_camera_name()
+        filepath = self.video_preview.capture_screenshot(camera_name)
         if filepath:
             self.statusbar.showMessage(f"Screenshot gespeichert: {os.path.basename(filepath)}")
         else:
@@ -641,21 +687,10 @@ class MainWindow(QMainWindow):
         """Callback for status.py updates."""
         self._log(message)
 
-    def _start_progress(self, text):
-        """Start animated progress indicator."""
-        self._progress_text = text
-        self._progress_dots = 0
-        self._animate_progress()
-        self._progress_timer.start(400)
-
-    def _stop_progress(self):
-        """Stop progress indicator."""
-        self._progress_timer.stop()
-
     def _animate_progress(self):
-        """Animate the progress dots."""
-        dots = "." * (self._progress_dots % 4)
-        self.status_label.setText(f"{self._progress_text}{dots}")
+        """Animate the analyze button text with dots."""
+        dots = "." * (self._progress_dots % 3 + 1)
+        self.analyze_btn.setText(f"Analysiere{dots}")
         self._progress_dots += 1
 
     def keyPressEvent(self, event):
