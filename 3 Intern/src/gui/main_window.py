@@ -439,7 +439,8 @@ class MainWindow(QMainWindow):
             self.mode_label.setText(f"Mode: {self.session.mode.upper()}")
 
             if self._video_files:
-                self.video_preview.set_peaks(peaks, self.session.current_peak)
+                self.video_preview.set_peaks(
+                    [p.position_ms for p in peaks], self.session.current_peak)
                 self.preview_stack.setCurrentIndex(1)
                 self.statusbar.showMessage(f"{num_peaks} Peaks gefunden")
             else:
@@ -530,7 +531,8 @@ class MainWindow(QMainWindow):
         if self.session and self._video_files and self.preview_stack.currentIndex() == 1:
             self.video_preview.set_current_peak(self.session.current_peak)
             if self.session.peaks and self.session.current_peak < len(self.session.peaks):
-                self.video_preview.set_position(self.session.peaks[self.session.current_peak])
+                self.video_preview.set_position(
+                    self.session.peaks[self.session.current_peak].position_ms)
 
     def _on_switch(self):
         """Switch between keyboard and mic mode."""

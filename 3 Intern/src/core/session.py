@@ -3,6 +3,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from pydub import AudioSegment
 
 from .project import PeakCutProject
+from .peak import Peak
 from .audio import detect_peaks, play_audio, stop_playback
 from .sync import sync_videos
 
@@ -15,6 +16,7 @@ class PeakCutSession(QObject):
     peak_changed = pyqtSignal(int)
     mode_changed = pyqtSignal(str)
     peak_ignored = pyqtSignal(int)
+    clip_adjusted = pyqtSignal(int)
     status_update = pyqtSignal(str)
 
     def __init__(self, project: PeakCutProject, config: dict):
@@ -23,9 +25,8 @@ class PeakCutSession(QObject):
         self.config = config
 
         # Peak state
-        self.peaks: list[int] = []
+        self.peaks: list[Peak] = []
         self.current_peak: int = 0
-        self.ignored_peaks: set[int] = set()
         self.mode: str = "keyboard"
 
         # Audio data
@@ -67,11 +68,14 @@ class PeakCutSession(QObject):
 
         self.status_update.emit("Analysiere Peaks...")
 
-        self.peaks = detect_peaks(
+        raw = detect_peaks(
             self.project.keyboard_track,
             self.config.get("threshold_factor", 0.4),
             self.config.get("min_gap_ms", 15000)
         )
+
+        ctx = self.config.get("context_duration_ms", 15000)
+        self.peaks = [Peak(i, t, ctx) for i, t in enumerate(raw)]
 
         # Load audio segments
         self.keyboard_audio = AudioSegment.from_wav(self.project.keyboard_track)
@@ -80,7 +84,7 @@ class PeakCutSession(QObject):
         self.mode = "keyboard"
 
         self.status_update.emit(f"{len(self.peaks)} peaks detected.")
-        self.peaks_found.emit(self.peaks)
+        self.peaks_found.emit([p.position_ms for p in self.peaks])
 
     def next_peak(self) -> int:
         """Advance to next peak and play it."""
@@ -109,15 +113,15 @@ class PeakCutSession(QObject):
         if self.current_peak >= len(self.peaks):
             return
 
-        time_ms = self.peaks[self.current_peak]
+        peak = self.peaks[self.current_peak]
+        time_ms = peak.position_ms
         preview_duration = self.config.get("preview_duration_ms", 1000)
-        context_duration = self.config.get("context_duration_ms", 15000)
 
         if self.mode == "keyboard":
             segment = self.keyboard_audio[time_ms:time_ms + preview_duration]
         else:
-            start = max(0, time_ms - context_duration)
-            end = time_ms + context_duration
+            start = peak.in_point_ms
+            end = peak.out_point_ms
             segment = self.mic_audios[0][start:end]
             for audio in self.mic_audios[1:]:
                 segment = segment.overlay(audio[start:end])
@@ -132,7 +136,7 @@ class PeakCutSession(QObject):
 
     def ignore_peak(self):
         """Mark current peak as ignored."""
-        self.ignored_peaks.add(self.current_peak)
+        self.peaks[self.current_peak].ignored = True
         self.peak_ignored.emit(self.current_peak)
 
     def set_current_peak(self, index):
@@ -141,12 +145,29 @@ class PeakCutSession(QObject):
             self.current_peak = index
             self.peak_changed.emit(self.current_peak)
 
-    def get_active_peaks(self) -> list[tuple[int, int]]:
-        """Return all non-ignored peaks as [(peak_number, time_ms)]."""
+    def get_active_peaks(self) -> list[tuple[int, 'Peak']]:
+        """Return all non-ignored peaks as [(peak_number, Peak)]."""
         active = []
         num = 1
-        for i, t in enumerate(self.peaks):
-            if i not in self.ignored_peaks:
-                active.append((num, t))
+        for peak in self.peaks:
+            if not peak.ignored:
+                active.append((num, peak))
                 num += 1
         return active
+
+    def adjust_clip(self, index, in_ms=None, out_ms=None):
+        """Adjust In/Out points for a peak."""
+        if 0 <= index < len(self.peaks):
+            peak = self.peaks[index]
+            if in_ms is not None:
+                peak.set_in_point(in_ms)
+            if out_ms is not None:
+                peak.set_out_point(out_ms)
+            self.clip_adjusted.emit(index)
+
+    def reset_clip(self, index):
+        """Reset In/Out points for a peak to default context."""
+        if 0 <= index < len(self.peaks):
+            ctx = self.config.get("context_duration_ms", 15000)
+            self.peaks[index].reset_offsets(ctx)
+            self.clip_adjusted.emit(index)
