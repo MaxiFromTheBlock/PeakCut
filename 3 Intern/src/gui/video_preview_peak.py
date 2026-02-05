@@ -89,6 +89,8 @@ class PeakVideoPreview(QWidget):
     position_changed = pyqtSignal(int)  # position in ms
     video_changed = pyqtSignal(str)  # video filepath
     peak_clicked = pyqtSignal(int)  # peak index
+    clip_in_changed = pyqtSignal(int)  # forwarded from timeline
+    clip_out_changed = pyqtSignal(int)  # forwarded from timeline
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -104,6 +106,10 @@ class PeakVideoPreview(QWidget):
         self._lut_processor = None
         self._lut_loaded_filename = None  # Track which LUT file is loaded
         self._last_frame = None  # Store last frame for LUT refresh
+
+        # Clip playback state
+        self._clip_playback_active = False
+        self._clip_out_ms = 0
 
         # Camera name state
         self._camera_names = {}  # video_path → name
@@ -228,6 +234,8 @@ class PeakVideoPreview(QWidget):
         self.timeline = PeakTimeline()
         self.timeline.position_changed.connect(self._on_timeline_position_changed)
         self.timeline.peak_clicked.connect(self._on_timeline_peak_clicked)
+        self.timeline.clip_in_changed.connect(self._on_clip_in_changed)
+        self.timeline.clip_out_changed.connect(self._on_clip_out_changed)
         timeline_layout.addWidget(self.timeline, stretch=1)
 
         self.duration_label = QLabel("00:00")
@@ -381,6 +389,35 @@ class PeakVideoPreview(QWidget):
             position_ms = self._peaks[index]
             self.player.setPosition(position_ms)
 
+    def set_clip_region(self, in_ms: int, out_ms: int):
+        """Set clip In/Out region on the timeline."""
+        self._clip_out_ms = out_ms
+        self.timeline.set_clip_region(in_ms, out_ms)
+
+    def play_clip(self):
+        """Play from In-point to Out-point."""
+        if self._clip_out_ms > 0:
+            in_ms = self.timeline._clip_in_ms
+            self._clip_out_ms = self.timeline._clip_out_ms
+            self._clip_playback_active = True
+            self.player.setPosition(in_ms)
+            self.player.play()
+
+    def stop_clip_playback(self):
+        """Stop clip-bounded playback."""
+        self._clip_playback_active = False
+
+    def _on_clip_in_changed(self, ms: int):
+        """Handle In marker drag — seek and forward signal."""
+        self.player.setPosition(ms)
+        self.clip_in_changed.emit(ms)
+
+    def _on_clip_out_changed(self, ms: int):
+        """Handle Out marker drag — seek and forward signal."""
+        self._clip_out_ms = ms
+        self.player.setPosition(ms)
+        self.clip_out_changed.emit(ms)
+
     def _load_video(self, filepath: str):
         """Load a video file."""
         self._current_video = filepath
@@ -431,6 +468,12 @@ class PeakVideoPreview(QWidget):
             self.timeline.set_position(position)
             self.time_label.setText(self._format_time(position))
             self.position_changed.emit(position)
+
+            # Stop at out-point during clip playback
+            if self._clip_playback_active and position >= self._clip_out_ms:
+                self._clip_playback_active = False
+                self.player.pause()
+                self.player.setPosition(self._clip_out_ms)
 
     def _on_timeline_position_changed(self, position: int):
         """Handle timeline seek from user interaction."""

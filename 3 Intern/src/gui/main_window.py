@@ -163,6 +163,8 @@ class MainWindow(QMainWindow):
         # Page 1: Video preview with peak timeline
         self.video_preview = PeakVideoPreview()
         self.video_preview.peak_clicked.connect(self._on_peak_clicked)
+        self.video_preview.clip_in_changed.connect(self._on_clip_in_changed)
+        self.video_preview.clip_out_changed.connect(self._on_clip_out_changed)
         self.preview_stack.addWidget(self.video_preview)
 
         # Start with status page
@@ -441,6 +443,9 @@ class MainWindow(QMainWindow):
             if self._video_files:
                 self.video_preview.set_peaks(
                     [p.position_ms for p in peaks], self.session.current_peak)
+                peak = peaks[self.session.current_peak]
+                self.video_preview.set_clip_region(
+                    peak.in_point_ms, peak.out_point_ms)
                 self.preview_stack.setCurrentIndex(1)
                 self.statusbar.showMessage(f"{num_peaks} Peaks gefunden")
             else:
@@ -469,7 +474,20 @@ class MainWindow(QMainWindow):
             self.session.set_current_peak(peak_index)
             self._update_peak_label()
             self.session.play_current()
+            peak = self.session.peaks[peak_index]
+            self.video_preview.set_clip_region(
+                peak.in_point_ms, peak.out_point_ms)
             self.statusbar.showMessage(f"Peak {peak_index + 1}")
+
+    def _on_clip_in_changed(self, ms):
+        """Handle clip In-point change from timeline drag."""
+        if self.session:
+            self.session.adjust_clip(self.session.current_peak, in_ms=ms)
+
+    def _on_clip_out_changed(self, ms):
+        """Handle clip Out-point change from timeline drag."""
+        if self.session:
+            self.session.adjust_clip(self.session.current_peak, out_ms=ms)
 
     def _on_export(self):
         """Run export via pluggable exporters."""
@@ -531,8 +549,10 @@ class MainWindow(QMainWindow):
         if self.session and self._video_files and self.preview_stack.currentIndex() == 1:
             self.video_preview.set_current_peak(self.session.current_peak)
             if self.session.peaks and self.session.current_peak < len(self.session.peaks):
-                self.video_preview.set_position(
-                    self.session.peaks[self.session.current_peak].position_ms)
+                peak = self.session.peaks[self.session.current_peak]
+                self.video_preview.set_position(peak.position_ms)
+                self.video_preview.set_clip_region(
+                    peak.in_point_ms, peak.out_point_ms)
 
     def _on_switch(self):
         """Switch between keyboard and mic mode."""
