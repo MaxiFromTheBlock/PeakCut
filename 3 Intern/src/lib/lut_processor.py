@@ -16,6 +16,8 @@ class LUTProcessor:
         self.lut_path = None
         self.domain_min = np.array([0.0, 0.0, 0.0])
         self.domain_max = np.array([1.0, 1.0, 1.0])
+        self._lookup_table = None  # Pre-computed 256³ table for fast apply
+        self._flat_lookup = None   # Flattened view for 1D indexing
 
     def load_cube(self, filepath: str) -> bool:
         """
@@ -81,6 +83,7 @@ class LUTProcessor:
                 (lut_size, lut_size, lut_size, 3)
             )
             self.lut_path = filepath
+            self._build_lookup_table()
             return True
 
         except Exception as e:
@@ -173,6 +176,42 @@ class LUTProcessor:
 
         return result
 
+    def _build_lookup_table(self):
+        """Pre-compute 256³ RGB lookup table for instant LUT application.
+
+        Builds a (256, 256, 256, 3) uint8 array where table[R, G, B] = output RGB.
+        Takes ~200ms once, then apply_fast() is a simple array lookup.
+        """
+        if self.lut_data is None:
+            self._lookup_table = None
+            return
+
+        table = np.empty((256, 256, 256, 3), dtype=np.uint8)
+
+        for b_val in range(256):
+            # Test image: R varies along rows (axis 0), G along cols (axis 1)
+            img = np.empty((256, 256, 3), dtype=np.uint8)
+            img[:, :, 0] = np.arange(256)[:, np.newaxis]  # R
+            img[:, :, 1] = np.arange(256)[np.newaxis, :]  # G
+            img[:, :, 2] = b_val  # B constant
+            table[:, :, b_val] = self.apply_to_image(img)
+
+        self._lookup_table = table
+        self._flat_lookup = table.reshape(-1, 3)  # View for fast 1D indexing
+
+    def apply_fast(self, image: np.ndarray) -> np.ndarray:
+        """Apply LUT using pre-computed lookup table. Near-instant.
+
+        Falls back to trilinear interpolation if table not built.
+        """
+        if self._flat_lookup is None:
+            return self.apply_to_image(image)
+        h, w = image.shape[:2]
+        idx = (image[:, :, 0].astype(np.int32) * 65536
+               + image[:, :, 1].astype(np.int32) * 256
+               + image[:, :, 2])
+        return self._flat_lookup[idx.ravel()].reshape(h, w, 3)
+
     def apply_to_pil_image(self, image: Image.Image) -> Image.Image:
         """
         Apply the loaded LUT to a PIL Image.
@@ -190,9 +229,9 @@ class LUTProcessor:
         if image.mode != 'RGB':
             image = image.convert('RGB')
 
-        # Apply LUT
+        # Apply LUT (uses lookup table if available)
         img_array = np.array(image)
-        result_array = self.apply_to_image(img_array)
+        result_array = self.apply_fast(img_array)
 
         return Image.fromarray(result_array)
 
@@ -213,3 +252,5 @@ class LUTProcessor:
         self.lut_path = None
         self.domain_min = np.array([0.0, 0.0, 0.0])
         self.domain_max = np.array([1.0, 1.0, 1.0])
+        self._lookup_table = None
+        self._flat_lookup = None

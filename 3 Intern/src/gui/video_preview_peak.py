@@ -7,12 +7,79 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QComboBox, QSizePolicy, QFrame, QLineEdit
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QTimer, QSize
+from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QTimer, QSize, QThread, QMutex, QWaitCondition
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink
 
 from .apple_style import COLORS
 from .peak_timeline import PeakTimeline
+
+
+class LUTWorker(QThread):
+    """Worker thread for LUT frame processing off the main thread.
+
+    Only processes the latest submitted frame — intermediate frames are dropped.
+    This keeps the main thread free for UI responsiveness.
+    """
+    frame_ready = pyqtSignal(QImage, float)  # processed image, device pixel ratio
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._mutex = QMutex()
+        self._wait = QWaitCondition()
+        self._pending = None  # (QImage, QSize, float, LUTProcessor)
+        self._abort = False
+
+    def submit(self, image, target_size, dpr, lut_processor):
+        """Submit frame for processing. Drops any pending unprocessed frame."""
+        self._mutex.lock()
+        self._pending = (image, target_size, dpr, lut_processor)
+        self._mutex.unlock()
+        self._wait.wakeOne()
+
+    def run(self):
+        while True:
+            self._mutex.lock()
+            while self._pending is None and not self._abort:
+                self._wait.wait(self._mutex)
+            if self._abort:
+                self._mutex.unlock()
+                return
+            image, target_size, dpr, lut = self._pending
+            self._pending = None  # Consumed
+            self._mutex.unlock()
+
+            try:
+                result = self._process(image, target_size, dpr, lut)
+                if result is not None:
+                    self.frame_ready.emit(result, dpr)
+            except Exception:
+                pass
+
+    def _process(self, image, target_size, dpr, lut):
+        """Scale, convert to numpy, apply LUT, return QImage."""
+        image = image.scaled(
+            target_size,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        )
+        image = image.convertToFormat(QImage.Format.Format_RGB888)
+        w, h = image.width(), image.height()
+        bpl = image.bytesPerLine()
+        ptr = image.bits()
+        ptr.setsize(h * bpl)
+        raw = np.frombuffer(ptr, dtype=np.uint8).reshape(h, bpl)
+        arr = raw[:, :w * 3].reshape(h, w, 3).copy()
+
+        graded = lut.apply_fast(arr)
+        return QImage(graded.data, w, h, w * 3, QImage.Format.Format_RGB888).copy()
+
+    def stop(self):
+        self._mutex.lock()
+        self._abort = True
+        self._mutex.unlock()
+        self._wait.wakeOne()
+        self.wait()
 
 
 class PeakVideoPreview(QWidget):
@@ -41,6 +108,11 @@ class PeakVideoPreview(QWidget):
         # Camera name state
         self._camera_names = {}  # video_path → name
         self._screenshot_counters = {}  # name → counter
+
+        # LUT worker thread (processes frames off main thread)
+        self._lut_worker = LUTWorker(self)
+        self._lut_worker.frame_ready.connect(self._on_lut_frame_ready)
+        self._lut_worker.start()
 
         self._setup_ui()
         self._setup_player()
@@ -211,23 +283,42 @@ class PeakVideoPreview(QWidget):
             self._lut_processor = None
 
     def _on_video_frame(self, frame):
-        """Receive frame from sink, store it, process it."""
+        """Receive frame from sink, dispatch to worker or display directly."""
         if not frame.isValid():
             return
         self._last_frame = frame
-        self._process_frame(frame)
 
-    def _process_frame(self, frame):
-        """Apply LUT to frame and display in label."""
         image = frame.toImage()
         if image.isNull():
             return
 
-        # Check LUT
         self._ensure_lut()
 
         if self._lut_processor and self._lut_processor.is_loaded():
-            # Scale to physical (Retina) pixel size for sharp LUT rendering
+            # LUT active: send to worker thread (drops older pending frames)
+            dpr = self.video_label.devicePixelRatioF()
+            logical = self.video_label.size()
+            target = QSize(int(logical.width() * dpr), int(logical.height() * dpr))
+            self._lut_worker.submit(image, target, dpr, self._lut_processor)
+        else:
+            # No LUT: display directly (fast path, no processing needed)
+            self.video_label.setPixmap(QPixmap.fromImage(image))
+
+    def _on_lut_frame_ready(self, image, dpr):
+        """Display processed frame from worker thread."""
+        pixmap = QPixmap.fromImage(image)
+        pixmap.setDevicePixelRatio(dpr)
+        self.video_label.setPixmap(pixmap)
+
+    def _process_frame(self, frame):
+        """Apply LUT to a single frame synchronously (for refresh_lut)."""
+        image = frame.toImage()
+        if image.isNull():
+            return
+
+        self._ensure_lut()
+
+        if self._lut_processor and self._lut_processor.is_loaded():
             dpr = self.video_label.devicePixelRatioF()
             logical = self.video_label.size()
             target = QSize(int(logical.width() * dpr), int(logical.height() * dpr))
@@ -236,8 +327,6 @@ class PeakVideoPreview(QWidget):
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation
             )
-
-            # Convert QImage → numpy RGB (respecting bytesPerLine stride)
             image = image.convertToFormat(QImage.Format.Format_RGB888)
             w, h = image.width(), image.height()
             bpl = image.bytesPerLine()
@@ -246,16 +335,13 @@ class PeakVideoPreview(QWidget):
             raw = np.frombuffer(ptr, dtype=np.uint8).reshape(h, bpl)
             arr = raw[:, :w * 3].reshape(h, w, 3).copy()
 
-            # Apply LUT
-            graded = self._lut_processor.apply_to_image(arr)
+            graded = self._lut_processor.apply_fast(arr)
 
-            # numpy → QImage → QPixmap with Retina DPR
             qimg = QImage(graded.data, w, h, w * 3, QImage.Format.Format_RGB888).copy()
             pixmap = QPixmap.fromImage(qimg)
             pixmap.setDevicePixelRatio(dpr)
             self.video_label.setPixmap(pixmap)
         else:
-            # No LUT: display full-resolution frame, let Qt scale on GPU
             self.video_label.setPixmap(QPixmap.fromImage(image))
 
     def refresh_lut(self):
@@ -479,3 +565,7 @@ class PeakVideoPreview(QWidget):
     def get_duration(self) -> int:
         """Get video duration in ms."""
         return self._duration_ms
+
+    def cleanup(self):
+        """Stop worker thread. Call before destroying the widget."""
+        self._lut_worker.stop()
