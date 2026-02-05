@@ -226,6 +226,30 @@ class MainWindow(QMainWindow):
         self.peak_controls.hide()
         main_layout.addWidget(self.peak_controls)
 
+        # Clip info panel (hidden until analysis complete)
+        self.clip_info_widget = QWidget()
+        clip_info_layout = QHBoxLayout(self.clip_info_widget)
+        clip_info_layout.setContentsMargins(0, 0, 0, 0)
+        clip_info_layout.setSpacing(12)
+
+        self.clip_info_label = QLabel("")
+        self.clip_info_label.setStyleSheet(f"""
+            color: {COLORS['text_secondary']};
+            font-family: 'SF Mono', 'Menlo', monospace;
+            font-size: 12px;
+        """)
+        clip_info_layout.addWidget(self.clip_info_label)
+
+        self.clip_reset_btn = QPushButton("Reset")
+        self.clip_reset_btn.setMaximumWidth(60)
+        self.clip_reset_btn.clicked.connect(self._on_clip_reset)
+        clip_info_layout.addWidget(self.clip_reset_btn)
+
+        clip_info_layout.addStretch()
+
+        self.clip_info_widget.hide()
+        main_layout.addWidget(self.clip_info_widget)
+
         # Tools row (Screenshot + LUT, visible when video loaded)
         tools_layout = QHBoxLayout()
         tools_layout.setSpacing(8)
@@ -416,6 +440,7 @@ class MainWindow(QMainWindow):
 
         self.session = PeakCutSession(project, config.load())
         self.session.status_update.connect(self._on_analysis_status)
+        self.session.clip_adjusted.connect(self._on_clip_adjusted)
 
         # Start background worker
         self._worker = AnalysisWorker(self.session)
@@ -438,6 +463,8 @@ class MainWindow(QMainWindow):
         if num_peaks > 0:
             self._enable_playback_controls(True)
             self._update_peak_label()
+            self._update_clip_info()
+            self.clip_info_widget.show()
             self.mode_label.setText(f"Mode: {self.session.mode.upper()}")
 
             if self._video_files:
@@ -489,6 +516,43 @@ class MainWindow(QMainWindow):
         if self.session:
             self.session.adjust_clip(self.session.current_peak, out_ms=ms)
 
+    def _on_clip_adjusted(self, index):
+        """Handle clip adjustment from session."""
+        if self.session and index == self.session.current_peak:
+            self._update_clip_info()
+
+    def _on_clip_reset(self):
+        """Reset current clip to default In/Out."""
+        if self.session:
+            idx = self.session.current_peak
+            self.session.reset_clip(idx)
+            peak = self.session.peaks[idx]
+            self.video_preview.set_clip_region(
+                peak.in_point_ms, peak.out_point_ms)
+
+    def _update_clip_info(self):
+        """Update clip info label with current peak's In/Out/Duration."""
+        if not self.session or not self.session.peaks:
+            return
+        peak = self.session.peaks[self.session.current_peak]
+        in_tc = self._ms_to_mmss(peak.in_point_ms)
+        out_tc = self._ms_to_mmss(peak.out_point_ms)
+        dur = peak.clip_duration_ms / 1000
+        idx = self.session.current_peak + 1
+        total = len(self.session.peaks)
+        self.clip_info_label.setText(
+            f"Peak {idx}/{total}  |  In: {in_tc}  |  Out: {out_tc}  |  "
+            f"Dauer: {dur:.1f}s")
+
+    @staticmethod
+    def _ms_to_mmss(ms):
+        """Format milliseconds as HH:MM:SS."""
+        total_s = ms // 1000
+        h = total_s // 3600
+        m = (total_s % 3600) // 60
+        s = total_s % 60
+        return f"{h:02d}:{m:02d}:{s:02d}"
+
     def _on_export(self):
         """Run export via pluggable exporters."""
         stop_playback()
@@ -533,6 +597,7 @@ class MainWindow(QMainWindow):
         if self.session and self.session.current_peak > 0:
             self.session.prev_peak()
             self._update_peak_label()
+            self._update_clip_info()
             self._update_video_preview_peak()
             self.statusbar.showMessage(f"Peak {self.session.current_peak + 1}")
 
@@ -541,6 +606,7 @@ class MainWindow(QMainWindow):
         if self.session and self.session.current_peak < len(self.session.peaks) - 1:
             self.session.next_peak()
             self._update_peak_label()
+            self._update_clip_info()
             self._update_video_preview_peak()
             self.statusbar.showMessage(f"Peak {self.session.current_peak + 1}")
 
@@ -673,6 +739,7 @@ class MainWindow(QMainWindow):
     def keyPressEvent(self, event):
         """Handle keyboard shortcuts."""
         key = event.key()
+        text = event.text()
 
         if key == Qt.Key.Key_Right:
             if self.session and self.session.peaks:
@@ -683,5 +750,45 @@ class MainWindow(QMainWindow):
             if self.session and self.session.peaks:
                 self._on_back()
             return
+
+        # Clip editing shortcuts (use event.text() for keyboard-layout compatibility)
+        if self.session and self.session.peaks:
+            if text == "[":
+                # Set In-point to current video position
+                pos = self.video_preview.get_position()
+                idx = self.session.current_peak
+                self.session.adjust_clip(idx, in_ms=pos)
+                peak = self.session.peaks[idx]
+                self.video_preview.set_clip_region(
+                    peak.in_point_ms, peak.out_point_ms)
+                self._update_clip_info()
+                self.statusbar.showMessage(
+                    f"In-Point: {self._ms_to_mmss(peak.in_point_ms)}")
+                return
+
+            if text == "]":
+                # Set Out-point to current video position
+                pos = self.video_preview.get_position()
+                idx = self.session.current_peak
+                self.session.adjust_clip(idx, out_ms=pos)
+                peak = self.session.peaks[idx]
+                self.video_preview.set_clip_region(
+                    peak.in_point_ms, peak.out_point_ms)
+                self._update_clip_info()
+                self.statusbar.showMessage(
+                    f"Out-Point: {self._ms_to_mmss(peak.out_point_ms)}")
+                return
+
+            if text == "p":
+                # Play clip from In to Out
+                self.video_preview.play_clip()
+                self.statusbar.showMessage("Playing clip...")
+                return
+
+            if text == "r":
+                # Reset In/Out to default
+                self._on_clip_reset()
+                self.statusbar.showMessage("Clip reset")
+                return
 
         super().keyPressEvent(event)
