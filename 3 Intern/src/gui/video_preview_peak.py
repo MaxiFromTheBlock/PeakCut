@@ -448,7 +448,8 @@ class PeakVideoPreview(QWidget):
 
         # Save to Export/Gastname - Screenshots/
         from core.exporters import extract_guest_name
-        gastname = extract_guest_name()
+        from utils import MATERIAL_DIR
+        gastname = extract_guest_name(MATERIAL_DIR)
         screenshots_dir = os.path.join(EXPORT_DIR, f"{gastname} - Screenshots")
         os.makedirs(screenshots_dir, exist_ok=True)
 
