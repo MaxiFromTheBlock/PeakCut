@@ -447,7 +447,7 @@ class PeakVideoPreview(QWidget):
                     image = lut.apply_to_pil_image(image)
 
         # Save to Export/Gastname - Screenshots/
-        from export import extract_guest_name
+        from core.exporters import extract_guest_name
         gastname = extract_guest_name()
         screenshots_dir = os.path.join(EXPORT_DIR, f"{gastname} - Screenshots")
         os.makedirs(screenshots_dir, exist_ok=True)

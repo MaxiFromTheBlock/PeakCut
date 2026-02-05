@@ -20,6 +20,7 @@ App/
 ├── 2 Export/            ← Output (MP3 + TXT + XML + Screenshots)
 ├── 3 Intern/            ← Source Code
 │   ├── src/
+│   │   ├── core/        ← Core Logic (Klassen-basiert)
 │   │   ├── gui/         ← PyQt6 GUI Components
 │   │   └── lib/         ← External Libraries
 │   ├── assets/
@@ -40,11 +41,8 @@ App/
 ```bash
 cd /Users/max/Desktop/PeakCut/App
 
-# App starten (PyQt6)
+# App starten
 "./3 Intern/venv311/bin/python" "./3 Intern/src/main_pyqt.py"
-
-# App starten (Tkinter Legacy)
-"./3 Intern/venv311/bin/python" "./3 Intern/src/main.py"
 
 # Dependencies installieren
 "./3 Intern/venv311/bin/pip" install -r "./3 Intern/requirements.txt"
@@ -59,33 +57,46 @@ rm -rf "./3 Intern/venv311"
 
 ## Architecture
 
-### Entry Points
-
-| File | Framework | Status |
-|------|-----------|--------|
-| `main_pyqt.py` | PyQt6 | **Aktiv** |
-| `main.py` | Tkinter | Legacy |
-
 ### Source Files
 
 ```
 src/
-├── main_pyqt.py         # PyQt6 Entry Point
-├── main.py              # Tkinter Entry Point (Legacy)
+├── main_pyqt.py              # PyQt6 Entry Point
+├── core/                      # Core Logic (Class-basiert)
+│   ├── project.py             # PeakCutProject - Datei-Abstraktion
+│   ├── session.py             # PeakCutSession - State Management + Qt Signals
+│   ├── exporters.py           # MP3/XML/TXT Exporter (Pluggable Pipeline)
+│   ├── audio.py               # Peak Detection + Audio Playback
+│   └── sync.py                # Video-Audio Sync (Cross-Correlation)
 ├── gui/
-│   ├── main_window.py   # Hauptfenster
-│   ├── apple_style.py   # macOS Stylesheet
-│   ├── video_preview_peak.py  # Video mit QMediaPlayer
-│   └── peak_timeline.py # Timeline mit Peak-Markern
+│   ├── main_window.py         # Hauptfenster + AnalysisWorker
+│   ├── apple_style.py         # macOS Stylesheet
+│   ├── video_preview_peak.py  # Video mit QMediaPlayer + LUT
+│   └── peak_timeline.py       # Timeline mit Peak-Markern
 ├── lib/
-│   └── lut_processor.py # LUT für Color Grading
-├── peaks.py             # Peak Detection, Playback, Navigation
-├── sync.py              # Video-Audio Sync (Cross-Correlation)
-├── export.py            # MP3 + TXT + XML Export
-├── config.py            # JSON Config Management
-├── status.py            # Observer Pattern für UI
-├── utils.py             # Pfade, Hilfsfunktionen
-└── gui.py               # Tkinter UI (Legacy)
+│   └── lut_processor.py       # LUT für Color Grading
+├── config.py                  # JSON Config Management
+└── utils.py                   # Pfade, Hilfsfunktionen
+```
+
+### Core Classes
+
+```
+PeakCutProject (project.py)
+  - material_dir, export_dir
+  - keyboard_track, mic_tracks, videos
+  - scan(), set_files(), get_reference_track()
+
+PeakCutSession (session.py) : QObject
+  - Signals: peaks_found, peak_changed, mode_changed, peak_ignored, status_update
+  - State: peaks, current_peak, ignored_peaks, mode, keyboard_audio, mic_audios, video_offsets
+  - Methods: analyze(), next_peak(), prev_peak(), play_current(), switch_mode(), ignore_peak()
+
+Exporters (exporters.py)
+  - BaseExporter (ABC) → export(session) -> str
+  - MP3Exporter: Nummerierte Clips mit TTS
+  - XMLExporter: FCP XML für Premiere/FinalCut/DaVinci
+  - TXTExporter: Timecode-Textdatei
 ```
 
 ### Module Dependencies
@@ -95,33 +106,40 @@ main_pyqt.py
   └── gui/main_window.py
         ├── gui/apple_style.py
         ├── gui/video_preview_peak.py
-        │     └── gui/peak_timeline.py
-        ├── peaks.py
-        ├── sync.py
-        ├── export.py
-        ├── status.py
+        │     ├── gui/peak_timeline.py
+        │     └── core/exporters.py (extract_guest_name)
+        ├── core/project.py
+        ├── core/session.py
+        │     ├── core/audio.py
+        │     └── core/sync.py
+        ├── core/exporters.py
+        ├── config.py
         └── utils.py
 ```
 
-### Global State
+### State Management
 
-| Module | Variables |
-|--------|-----------|
-| `peaks.py` | `_peaks`, `_current_peak`, `_keyboard_audio`, `_mic_audios`, `_mode`, `_ignored_peaks` |
-| `sync.py` | `_video_offsets` |
-| `config.py` | `_config` |
-| `status.py` | `_callback` |
+Aller State lebt in `PeakCutSession`. Kein globaler State mehr.
+
+| Klasse | State |
+|--------|-------|
+| `PeakCutSession` | `peaks`, `current_peak`, `ignored_peaks`, `mode`, `keyboard_audio`, `mic_audios`, `video_offsets` |
+| `config.py` | `_config` (JSON-basiert, lazy-loaded) |
 
 ---
 
 ## Data Flow
 
-1. **User klickt "Analyze"**
-2. **Sync** (`sync.py`): Extrahiert Audio aus Videos, berechnet Offsets via Cross-Correlation
-3. **Peak Analysis** (`peaks.py`): Findet Peaks über Threshold, filtert mit min_gap
-4. **Navigation**: User navigiert durch Peaks (Play/Next/Back)
-5. **Export**: MP3 mit TTS-Nummern + TXT mit Timecodes + FCP XML für Premiere
-6. **Screenshot**: Frame aus Video + LUT Color Grading → PNG in Export/Screenshots/
+1. **User wählt Dateien** → `PeakCutProject.set_files(keyboard, mics, videos)`
+2. **User klickt "Analyze"** → `PeakCutSession.analyze()` im AnalysisWorker (QThread)
+   - Sync: `core.sync.sync_videos()` → video_offsets
+   - Peaks: `core.audio.detect_peaks()` → peaks list
+   - Audio: Lädt AudioSegments in Session
+3. **Navigation**: `session.next_peak()`, `session.prev_peak()`, `session.play_current()`
+4. **Export**: `MP3Exporter/XMLExporter/TXTExporter.export(session)`
+5. **Screenshot**: `video_preview_peak.capture_screenshot()` (ffmpeg + LUT)
+
+Status-Updates laufen über `session.status_update` Signal (Qt, thread-safe).
 
 ---
 
@@ -173,12 +191,6 @@ Alle anderen Aktionen (Play, Stop, Export, Screenshot, Switch, Ignore) sind nur 
 
 ## Git Workflow
 
-### Vor jeder Session
-```bash
-git branch      # Welcher Branch?
-git status      # Alles committed?
-```
-
 ### Branch-Struktur
 ```
 main     ← Stable Releases
@@ -190,18 +202,6 @@ develop  ← Aktive Entwicklung (hier arbeiten)
 - **Große Features** (>1 Tag): Neuer `feature/name` Branch
 - **Nach jeder Änderung**: Committen!
 - **Commit-Message**: Kurz, prägnant, mit Co-Author
-
-```bash
-git commit -m "$(cat <<'EOF'
-Add feature X
-
-- Detail 1
-- Detail 2
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
-EOF
-)"
-```
 
 ---
 
@@ -216,6 +216,8 @@ EOF
 - [ ] Smart Scan: Ordner wählen, leere Spuren erkennen
 - [ ] Clip Editor: In/Out Points anpassen
 - [ ] Profile System
+- [ ] Batch Processing (Session pro Projekt)
+- [ ] Undo/Redo (Session-basiert)
 
 ### Langfristig (V4)
 - [ ] Electron App + Python Engine + Cloud Backend
@@ -226,55 +228,43 @@ EOF
 
 ## Changelog
 
+### v2.0.0-dev (2026-02-05)
+- **Core Refactoring** - Kompletter Umbau von Global State zu Class-basiertem Design
+  - `PeakCutProject`: Datei-Abstraktion (keyboard_track, mic_tracks, videos)
+  - `PeakCutSession`: State Management mit Qt Signals (peaks, navigation, playback)
+  - `Exporters`: Pluggable Export Pipeline (MP3Exporter, XMLExporter, TXTExporter)
+  - `core/audio.py`: Standalone Peak Detection + Playback
+  - `core/sync.py`: Standalone Video-Audio Sync
+- **Alte Module gelöscht** - peaks.py, sync.py, export.py, status.py, gui.py, main.py
+- **Kein globaler State mehr** - Aller State in PeakCutSession
+- **Status via Qt Signals** - session.status_update statt status.py Callback
+- **AnalysisWorker vereinfacht** - Nimmt Session, ruft session.analyze()
+- **Bereit für** Clip Editor, Batch Processing, Undo/Redo, Tests
+
 ### v1.5.0-dev (2026-02-05)
 - **4K Video Preview** - Volle Auflösung ohne LUT, Retina-DPR-Skalierung mit LUT
-  - Ohne LUT: Kein Downscaling, Qt skaliert auf GPU → 4K scharf
-  - Mit LUT: Skalierung auf `widget.size() * devicePixelRatioF()` → Retina-scharf
 - **Threading für Analyse** - AnalysisWorker (QThread) statt blockierendem Main-Thread
-  - Kein Rainbow Wheel mehr, UI bleibt responsiv während Sync + Peak-Analyse
-  - Analyse-Button animiert: "Analysiere.", "Analysiere..", "Analysiere..."
-- **Peak-Controls versteckt** - Back/Play/Stop/Next/Switch/Ignore/Export erst nach Analyse sichtbar
-  - Keine grauen Buttons mehr vor der Analyse
-  - Screenshot + LUT bleiben immer sichtbar (eigene Tools-Zeile)
-  - Export-Button aus Header in Peak-Controls verschoben
-- **Kamera-Namen für Screenshots** - QLineEdit neben Kamera-Dropdown
-  - Name pro Video gespeichert, wird beim Kamera-Wechsel wiederhergestellt
-  - Mit Name: Counter-basiert ("Matze 1.jpg", "Matze 2.jpg")
-  - Ohne Name: Fallback auf Timecode-Format
-  - Enter oder Klick woanders bestätigt den Namen (clearFocus)
-- **Screenshots als JPG** - Quality 95, deutlich kleinere Dateien als PNG
-- **Single-Instance Lock** - Verhindert mehrfaches Starten (fcntl Lock)
+- **Peak-Controls versteckt** - Erst nach Analyse sichtbar
+- **Kamera-Namen für Screenshots** - Counter-basiert ("Matze 1.jpg", "Matze 2.jpg")
+- **Screenshots als JPG** - Quality 95
+- **Single-Instance Lock** - fcntl
 
 ### v1.4.0-dev (2026-02-05)
-- **Screenshot mit LUT** - Frame-Capture aus Video-Preview mit Color Grading
-  - ffmpeg für Frame-Extraktion, LUTProcessor für trilineare Interpolation
-  - Speichert nach Export/Gastname - Screenshots/ mit Timecode im Dateinamen
-- **LUT Library** - PeakCut kopiert importierte LUTs nach `3 Intern/luts/`
-  - Dropdown zeigt alle LUTs aus der Library
-  - Original-Datei kann nach Import gelöscht werden
-- **Screenshot Button** - Sichtbarer Button in der Controls-Leiste
-- **Keyboard Shortcuts entfernt** - Nur noch Pfeiltasten (←/→) für Peak-Navigation
-- **XML Sequence Name** - Heißt jetzt einfach "PeakCut" statt "PeakCut - Gastname"
-- **screenshots.py gelöscht** - Alte Logik mit nearest-neighbor LUT und MoviePy entfernt
+- **Screenshot mit LUT** - ffmpeg + LUTProcessor
+- **LUT Library** - Import-Dialog, Dropdown
+- **Keyboard Shortcuts entfernt** - Nur noch Pfeiltasten
 
 ### v1.3.0-dev (2025-02-04)
 - **FCP XML Export** - Für Premiere Pro/Final Cut/DaVinci
-  - Echte 30s Clips (±15s context_duration um jeden Peak)
-  - Source IN/OUT = Position im Original-Material
-  - Record IN/OUT = Position in der generierten Sequence
-  - Wird automatisch bei Export erstellt (kein separater Button)
 - **PyQt6 GUI** - Komplettes Rewrite von Tkinter
 - **Video Preview** - QMediaPlayer mit Peak-Timeline
 - **Flexible File Import** - Multi-Select, Auto-Detection
-- **Docs Cleanup** - 10 MD-Dateien → 2 (CLAUDE.md + README.txt)
 
 ### v1.2.0 (2025-02-02)
 - Config System (`config.json`)
-- Export Bug Fix (verwendet immer Mic Audio)
 
 ### v1.1.0 (2025-02-01)
 - Screenshots Feature mit Kodak LUT
-- Folder Structure Reorganisation
 
 ### v1.0-stable (2025-01-31)
 - TTS für unbegrenzte Peak-Nummern
@@ -285,67 +275,7 @@ EOF
 ## Known Limitations
 
 - **macOS only** - Nutzt `say` Command für TTS
-- **Global State** - Kein Class-basiertes Design
 - **No Tests** - Zero Test Coverage
-
----
-
----
-
-## Session Notes (2026-02-05, Session 2)
-
-### Was wurde gemacht (diese Session)
-1. ✅ **4K Video Preview** - Volle Auflösung ohne LUT, Retina-DPR mit LUT
-2. ✅ **Threading für Analyse** - QThread AnalysisWorker, kein UI-Blocking mehr
-3. ✅ **Analyse-Button Animation** - "Analysiere." / ".." / "..." Dots-Animation
-4. ✅ **Peak-Controls versteckt** - Erst nach Analyse sichtbar (keine grauen Buttons)
-5. ✅ **Export-Button verschoben** - Aus Header in Peak-Controls (logischer)
-6. ✅ **Screenshot + LUT eigene Zeile** - Immer sichtbar wenn Video geladen
-7. ✅ **Kamera-Namen für Screenshots** - QLineEdit, Counter-basiert ("Matze 1.jpg")
-8. ✅ **Screenshots als JPG** - Quality 95, kleinere Dateien
-9. ✅ **Name-Feld UX** - Enter/Klick woanders = clearFocus, blauer Rand bei Fokus
-10. ✅ **Single-Instance Lock** - fcntl in main_pyqt.py
-11. ✅ **Video Preview sofort** - Zeigt Video schon vor Analyse an
-
-### Was in Session 1 gemacht wurde
-1. ✅ Screenshot-Feature mit LUT (ffmpeg + LUTProcessor)
-2. ✅ LUT Library - eigener `luts/` Ordner, Import-Dialog
-3. ✅ LUT Dropdown zeigt alle LUTs aus Library
-4. ✅ Screenshot-Button in Controls-Leiste
-5. ✅ Keyboard Shortcuts entfernt (nur noch Pfeiltasten)
-6. ✅ XML Sequence Name → "PeakCut"
-7. ✅ screenshots.py gelöscht (alte Logik)
-
-### Architektur-Entscheidungen
-- **QVideoSink statt QVideoWidget** - Erlaubt Frame-Interception für LUT-Processing
-  - `_on_video_frame()` → `_process_frame()` → QLabel mit QPixmap
-  - `_last_frame` gespeichert für LUT-Refresh ohne erneutes Decoding
-- **AnalysisWorker (QThread)** - Sync + Peak-Analyse im Background
-  - `status_update` Signal für Statusbar-Updates (thread-safe queued connection)
-  - `finished` Signal mit peaks-Liste, `error` Signal für Fehler
-  - `set_callback()` wird im Worker auf Signal umgeleitet
-- **Peak-Controls als QWidget** - `.hide()` / `.setVisible(True)` statt `.setEnabled()`
-  - Sauberer: Keine grauen Buttons sichtbar
-  - Screenshot + LUT in separatem `tools_layout` (nicht versteckt)
-- **Camera-Names Dict** - `_camera_names[video_path] = name`, `_screenshot_counters[name] = int`
-  - Name wird beim Kamera-Wechsel via `blockSignals` wiederhergestellt
-
-### Was noch offen ist
-1. **Multiprocessing für Video-Sync** - Sync ist langsam bei großen Dateien
-2. **XML in Premiere testen** - Import prüfen
-3. **Performance** - App läuft teilweise "unruhig"
-
-### Dateien geändert (diese Session)
-| Datei | Änderungen |
-|-------|-----------|
-| `main_window.py` | AnalysisWorker, Progress-Animation, Peak-Controls hide/show, Export verschoben, Camera-Name durchreichen |
-| `video_preview_peak.py` | QVideoSink+QLabel statt QVideoWidget, 4K Rendering, LUT-Pipeline, Camera-Name QLineEdit, JPG Screenshots |
-| `main_pyqt.py` | Single-Instance Lock (fcntl) |
-| `CLAUDE.md` | Changelog v1.5.0, Session Notes aktualisiert |
-
-### Git Status
-- Branch: `develop`
-- 2 lokale Commits noch nicht gepusht (aus Session 1)
 
 ---
 
