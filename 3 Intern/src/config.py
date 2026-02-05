@@ -15,8 +15,7 @@ DEFAULTS = {
     "context_duration_ms": 15000,
     "fps": 25,
     "tts_voice": "Anna",
-    "lut_path": "",
-    "lut_recent": []
+    "lut_path": ""
 }
 
 _config = None

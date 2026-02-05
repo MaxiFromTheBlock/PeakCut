@@ -15,7 +15,7 @@ from .video_preview_peak import PeakVideoPreview
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
-from utils import MATERIAL_DIR, EXPORT_DIR
+from utils import MATERIAL_DIR, EXPORT_DIR, LUTS_DIR
 from sync import run_sync
 from peaks import (
     run_peak_analysis, get_peaks, get_mode,
@@ -540,29 +540,54 @@ class MainWindow(QMainWindow):
         self.statusbar.showMessage(f"Peak {self._current_peak + 1} ignored")
 
     def _populate_lut_combo(self):
-        """Fill LUT dropdown with recent LUTs + browse option."""
+        """Fill LUT dropdown from luts/ library directory."""
         self.lut_combo.blockSignals(True)
         self.lut_combo.clear()
 
         current_lut = config.get("lut_path") or ""
-        recent_luts = config.get("lut_recent") or []
+
+        # Migrate: if lut_path is a full path, copy to library
+        if current_lut and os.sep in current_lut:
+            self._migrate_lut_path(current_lut)
+            current_lut = config.get("lut_path") or ""
 
         self.lut_combo.addItem("Kein LUT", "")
 
+        # Scan luts/ directory for .cube files
+        os.makedirs(LUTS_DIR, exist_ok=True)
+        lut_files = sorted(
+            f for f in os.listdir(LUTS_DIR)
+            if f.lower().endswith('.cube')
+        )
+
         selected_index = 0
-        for i, path in enumerate(recent_luts):
-            name = os.path.splitext(os.path.basename(path))[0]
-            self.lut_combo.addItem(name, path)
-            if path == current_lut:
+        for i, filename in enumerate(lut_files):
+            name = os.path.splitext(filename)[0]
+            self.lut_combo.addItem(name, filename)
+            if filename == current_lut:
                 selected_index = i + 1  # +1 for "Kein LUT"
 
-        self.lut_combo.addItem("LUT wählen...", "__browse__")
+        self.lut_combo.addItem("LUT importieren...", "__browse__")
 
         self.lut_combo.setCurrentIndex(selected_index)
         self.lut_combo.blockSignals(False)
 
+    def _migrate_lut_path(self, full_path):
+        """Migrate old full-path lut_path to library filename."""
+        import shutil
+        if os.path.isfile(full_path):
+            os.makedirs(LUTS_DIR, exist_ok=True)
+            filename = os.path.basename(full_path)
+            dest = os.path.join(LUTS_DIR, filename)
+            if not os.path.exists(dest):
+                shutil.copy2(full_path, dest)
+            config.set("lut_path", filename)
+        else:
+            config.set("lut_path", "")
+
     def _on_lut_selected(self, index):
         """Handle LUT selection from dropdown."""
+        import shutil
         data = self.lut_combo.currentData()
         if data is None:
             return
@@ -570,29 +595,28 @@ class MainWindow(QMainWindow):
         if data == "__browse__":
             filepath, _ = QFileDialog.getOpenFileName(
                 self,
-                "LUT wählen",
+                "LUT importieren",
                 os.path.expanduser("~/Downloads"),
                 "LUT Files (*.cube);;All Files (*)"
             )
             if filepath:
-                # Add to recent list
-                recent = config.get("lut_recent") or []
-                if filepath in recent:
-                    recent.remove(filepath)
-                recent.insert(0, filepath)
-                recent = recent[:10]  # Keep max 10
-                config.set("lut_recent", recent)
-                config.set("lut_path", filepath)
+                # Copy to library
+                os.makedirs(LUTS_DIR, exist_ok=True)
+                filename = os.path.basename(filepath)
+                dest = os.path.join(LUTS_DIR, filename)
+                if not os.path.exists(dest):
+                    shutil.copy2(filepath, dest)
+                config.set("lut_path", filename)
                 self._populate_lut_combo()
-                name = os.path.splitext(os.path.basename(filepath))[0]
-                self.statusbar.showMessage(f"LUT: {name}")
+                name = os.path.splitext(filename)[0]
+                self.statusbar.showMessage(f"LUT importiert: {name}")
             else:
                 # User cancelled - revert to previous selection
                 self._populate_lut_combo()
         else:
             config.set("lut_path", data)
             if data:
-                name = os.path.splitext(os.path.basename(data))[0]
+                name = os.path.splitext(data)[0]
                 self.statusbar.showMessage(f"LUT: {name}")
             else:
                 self.statusbar.showMessage("LUT deaktiviert")

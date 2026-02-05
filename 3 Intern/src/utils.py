@@ -22,6 +22,7 @@ EXPORT_DIR = os.path.join(APP_DIR, "2 Export")
 # Internal directories
 TEMP_DIR = os.path.join(INTERN_DIR, "temp")
 ASSETS_DIR = os.path.join(INTERN_DIR, "assets")
+LUTS_DIR = os.path.join(INTERN_DIR, "luts")
 
 
 def format_peak_time(ms, fps=None):

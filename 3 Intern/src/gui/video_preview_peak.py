@@ -273,7 +273,7 @@ class PeakVideoPreview(QWidget):
             return ""
 
         import config
-        from utils import EXPORT_DIR
+        from utils import EXPORT_DIR, LUTS_DIR
         from lib.lut_processor import LUTProcessor
         from PIL import Image
         import io
@@ -301,12 +301,14 @@ class PeakVideoPreview(QWidget):
         # Load image from ffmpeg output
         image = Image.open(io.BytesIO(result.stdout)).convert("RGB")
 
-        # Apply LUT if configured
-        lut_path = config.get("lut_path")
-        if lut_path and os.path.exists(lut_path):
-            lut = LUTProcessor()
-            if lut.load_cube(lut_path):
-                image = lut.apply_to_pil_image(image)
+        # Apply LUT if configured (filename resolved from luts/ library)
+        lut_filename = config.get("lut_path")
+        if lut_filename:
+            lut_full_path = os.path.join(LUTS_DIR, lut_filename)
+            if os.path.exists(lut_full_path):
+                lut = LUTProcessor()
+                if lut.load_cube(lut_full_path):
+                    image = lut.apply_to_pil_image(image)
 
         # Save to Export/Screenshots/
         screenshots_dir = os.path.join(EXPORT_DIR, "Screenshots")

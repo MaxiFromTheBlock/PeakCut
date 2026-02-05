@@ -25,6 +25,7 @@ App/
 │   ├── assets/
 │   │   ├── pictures/    ← Icons, Logos
 │   │   └── zahlen/      ← TTS Fallback MP3s
+│   ├── luts/            ← LUT Library (.cube Dateien)
 │   ├── config.json      ← User Settings
 │   ├── requirements.txt
 │   ├── venv311/         ← Virtual Environment
@@ -135,8 +136,7 @@ main_pyqt.py
   "context_duration_ms": 15000,
   "fps": 25,
   "tts_voice": "Anna",
-  "lut_path": "",
-  "lut_recent": []
+  "lut_path": ""
 }
 ```
 
@@ -148,8 +148,7 @@ main_pyqt.py
 | `context_duration_ms` | 15000 | Mic-Mode Kontext (±15s) |
 | `fps` | 25 | Framerate für Timecode-Berechnung |
 | `tts_voice` | "Anna" | macOS TTS Stimme |
-| `lut_path` | "" | Aktiver LUT-Pfad (.cube Datei) |
-| `lut_recent` | [] | Zuletzt verwendete LUT-Pfade |
+| `lut_path` | "" | Dateiname des aktiven LUTs (aus `luts/` Library) |
 
 ---
 
@@ -235,7 +234,9 @@ EOF
 - **Screenshot mit LUT** - Frame-Capture aus Video-Preview mit Color Grading
   - ffmpeg für Frame-Extraktion, LUTProcessor für trilineare Interpolation
   - Speichert nach Export/Screenshots/ mit Timecode im Dateinamen
-- **LUT Dropdown** - LUT-Auswahl im GUI mit History der zuletzt verwendeten LUTs
+- **LUT Library** - PeakCut kopiert importierte LUTs nach `3 Intern/luts/`
+  - Dropdown zeigt alle LUTs aus der Library
+  - Original-Datei kann nach Import gelöscht werden
 - **Screenshot Button** - Sichtbarer Button in der Controls-Leiste
 - **Keyboard Shortcuts entfernt** - Nur noch Pfeiltasten (←/→) für Peak-Navigation
 - **XML Sequence Name** - Heißt jetzt einfach "PeakCut" statt "PeakCut - Gastname"
@@ -280,12 +281,13 @@ EOF
 
 ### Was wurde gemacht
 1. ✅ Screenshot-Feature mit LUT (ffmpeg + LUTProcessor)
-2. ✅ LUT-Dropdown mit Recent-History im GUI
-3. ✅ Screenshot-Button in Controls-Leiste
-4. ✅ Keyboard Shortcuts entfernt (nur noch Pfeiltasten)
-5. ✅ XML Sequence Name → "PeakCut"
-6. ✅ screenshots.py gelöscht (alte Logik)
-7. ✅ Doku aktualisiert
+2. ✅ LUT Library - eigener `luts/` Ordner, Import-Dialog kopiert Dateien
+3. ✅ LUT Dropdown zeigt alle LUTs aus Library
+4. ✅ Screenshot-Button in Controls-Leiste
+5. ✅ Keyboard Shortcuts entfernt (nur noch Pfeiltasten)
+6. ✅ XML Sequence Name → "PeakCut"
+7. ✅ screenshots.py gelöscht (alte Logik)
+8. ✅ Doku aktualisiert
 
 ### Was noch offen ist
 1. **Threading für UI** - Analyse blockiert UI, Rainbow Wheel
