@@ -78,8 +78,8 @@ class PeakCutSession(QObject):
         self.peaks = [Peak(i, t, ctx) for i, t in enumerate(raw)]
 
         # Load audio segments
-        self.keyboard_audio = AudioSegment.from_wav(self.project.keyboard_track)
-        self.mic_audios = [AudioSegment.from_wav(f) for f in self.project.mic_tracks]
+        self.keyboard_audio = AudioSegment.from_file(self.project.keyboard_track)
+        self.mic_audios = [AudioSegment.from_file(f) for f in self.project.mic_tracks]
         self.current_peak = 0
         self.mode = "keyboard"
 

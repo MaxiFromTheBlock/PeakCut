@@ -1,20 +1,17 @@
-# peak_timeline.py - Custom Timeline Widget with Peak Markers and Clip In/Out
+# peak_timeline.py - ScrubTimeline (full-duration) + ClipTimeline (zoomed clip editor)
 
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtCore import Qt, pyqtSignal, QRect
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QLinearGradient
-
-from .apple_style import COLORS
+from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont
 
 
-class PeakTimeline(QWidget):
-    """Custom timeline widget with peak markers and clip In/Out markers."""
+class ScrubTimeline(QWidget):
+    """Full-duration interactive timeline for scrubbing through the entire recording.
 
-    # Signals
-    position_changed = pyqtSignal(int)  # position in ms (from user interaction)
-    peak_clicked = pyqtSignal(int)  # peak index
-    clip_in_changed = pyqtSignal(int)  # in point in ms
-    clip_out_changed = pyqtSignal(int)  # out point in ms
+    Shows peak markers (faint), playhead, time labels. Click/drag to seek.
+    """
+
+    position_changed = pyqtSignal(int)  # seek position in ms
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -23,294 +20,493 @@ class PeakTimeline(QWidget):
         self._position_ms = 0
         self._peaks_ms = []
         self._current_peak_index = -1
-        self._is_dragging = False
-
-        # Clip region state
-        self._clip_in_ms = 0
-        self._clip_out_ms = 0
-        self._has_clip_region = False
-        self._dragging_in = False
-        self._dragging_out = False
+        self._dragging = False
 
         # Colors
-        self._bg_color = QColor("#3a3a3a")
-        self._progress_color = QColor("#007AFF")
-        self._handle_color = QColor("#ffffff")
-        self._peak_color = QColor("#888888")
-        self._current_peak_color = QColor("#FF9500")  # Orange for current peak
-        self._clip_region_color = QColor(0, 122, 255, 40)  # Semi-transparent blue
-        self._clip_in_color = QColor("#30D158")  # Green
-        self._clip_out_color = QColor("#FF453A")  # Red
+        self._track_color = QColor("#3a3a3a")
+        self._peak_color = QColor("#555555")
+        self._current_peak_color = QColor("#FF9500")
+        self._playhead_color = QColor("#ffffff")
+        self._tick_color = QColor("#666666")
+        self._tick_label_color = QColor("#bbbbbb")
 
-        # Dimensions
-        self._track_height = 6
-        self._handle_radius = 8
-        self._peak_width = 2
-        self._peak_height = 16
-        self._marker_width = 3
-        self._marker_height = 24
-        self._marker_hit_tolerance = 8
-
-        self.setMinimumHeight(40)
+        self.setFixedHeight(44)
         self.setMouseTracking(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
 
-    def set_duration(self, duration_ms: int):
-        """Set total duration in milliseconds."""
-        self._duration_ms = max(1, duration_ms)
+    def set_duration(self, ms: int):
+        self._duration_ms = max(1, ms)
         self.update()
 
-    def set_position(self, position_ms: int):
-        """Set current position in milliseconds."""
-        if not self._is_dragging:
-            self._position_ms = max(0, min(position_ms, self._duration_ms))
+    def set_position(self, ms: int):
+        if not self._dragging:
+            self._position_ms = max(0, min(ms, self._duration_ms))
             self.update()
 
     def set_peaks(self, peaks_ms: list):
-        """Set peak positions in milliseconds."""
         self._peaks_ms = peaks_ms
         self.update()
 
     def set_current_peak(self, index: int):
-        """Set the currently highlighted peak."""
         self._current_peak_index = index
         self.update()
 
-    def set_clip_region(self, in_ms: int, out_ms: int):
-        """Set clip In/Out region."""
-        self._clip_in_ms = in_ms
-        self._clip_out_ms = out_ms
-        self._has_clip_region = True
-        self.update()
-
-    def clear_clip_region(self):
-        """Remove clip region display."""
-        self._has_clip_region = False
-        self.update()
-
-    def get_position(self) -> int:
-        """Get current position in milliseconds."""
-        return self._position_ms
-
-    def _pos_to_ms(self, x: int) -> int:
-        """Convert x position to milliseconds."""
-        if self._duration_ms == 0:
+    def _ms_to_x(self, ms: int) -> int:
+        if self._duration_ms <= 0:
             return 0
-        track_rect = self._get_track_rect()
-        ratio = (x - track_rect.left()) / track_rect.width()
-        ratio = max(0, min(1, ratio))
+        margin = 8
+        w = self.width() - 2 * margin
+        return margin + int(w * ms / self._duration_ms)
+
+    def _x_to_ms(self, x: int) -> int:
+        if self._duration_ms <= 0:
+            return 0
+        margin = 8
+        w = self.width() - 2 * margin
+        if w <= 0:
+            return 0
+        ratio = max(0.0, min(1.0, (x - margin) / w))
         return int(ratio * self._duration_ms)
 
-    def _ms_to_pos(self, ms: int) -> int:
-        """Convert milliseconds to x position."""
-        if self._duration_ms == 0:
-            return 0
-        track_rect = self._get_track_rect()
-        ratio = ms / self._duration_ms
-        return int(track_rect.left() + ratio * track_rect.width())
-
-    def _get_track_rect(self) -> QRect:
-        """Get the track rectangle (excluding handle margins)."""
-        margin = self._handle_radius + 2
-        return QRect(
-            margin,
-            (self.height() - self._track_height) // 2,
-            self.width() - 2 * margin,
-            self._track_height
-        )
-
-    def _find_peak_at_pos(self, x: int) -> int:
-        """Find peak index at x position, or -1 if none."""
-        click_tolerance = 10  # pixels
-        for i, peak_ms in enumerate(self._peaks_ms):
-            peak_x = self._ms_to_pos(peak_ms)
-            if abs(x - peak_x) <= click_tolerance:
-                return i
-        return -1
-
-    def _find_marker_at_pos(self, x: int) -> str:
-        """Find which clip marker is at x position. Returns 'in', 'out', or ''."""
-        if not self._has_clip_region:
-            return ""
-        in_x = self._ms_to_pos(self._clip_in_ms)
-        out_x = self._ms_to_pos(self._clip_out_ms)
-        if abs(x - in_x) <= self._marker_hit_tolerance:
-            return "in"
-        if abs(x - out_x) <= self._marker_hit_tolerance:
-            return "out"
-        return ""
-
     def paintEvent(self, event):
-        """Draw the timeline with peaks and clip region."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        track_rect = self._get_track_rect()
+        h = self.height()
+        margin = 8
+        track_y = 4
+        track_h = h - 8
+        track_rect = QRect(margin, track_y, self.width() - 2 * margin, track_h)
 
-        # Draw background track
+        # Background
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(self._bg_color))
-        painter.drawRoundedRect(track_rect, 3, 3)
+        painter.setBrush(QBrush(self._track_color))
+        painter.drawRoundedRect(track_rect, 4, 4)
 
-        # Draw progress
-        if self._duration_ms > 0 and self._position_ms > 0:
-            progress_width = int(track_rect.width() * self._position_ms / self._duration_ms)
-            progress_rect = QRect(
-                track_rect.left(),
-                track_rect.top(),
-                progress_width,
-                track_rect.height()
-            )
-            painter.setBrush(QBrush(self._progress_color))
-            painter.drawRoundedRect(progress_rect, 3, 3)
+        if self._duration_ms <= 0:
+            painter.end()
+            return
 
-        center_y = self.height() // 2
+        # Time ticks
+        tick_font = QFont()
+        tick_font.setPixelSize(11)
+        painter.setFont(tick_font)
 
-        # Draw clip region (after progress, before peak markers)
-        if self._has_clip_region and self._duration_ms > 0:
-            in_x = self._ms_to_pos(self._clip_in_ms)
-            out_x = self._ms_to_pos(self._clip_out_ms)
+        dur_s = self._duration_ms / 1000
+        if dur_s > 3600:
+            tick_interval = 300000   # 5 min
+        elif dur_s > 600:
+            tick_interval = 60000    # 1 min
+        else:
+            tick_interval = 30000    # 30s
 
-            # Semi-transparent blue region
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QBrush(self._clip_region_color))
-            region_rect = QRect(
-                in_x,
-                center_y - self._marker_height // 2,
-                out_x - in_x,
-                self._marker_height
-            )
-            painter.drawRect(region_rect)
+        t = tick_interval
+        while t < self._duration_ms:
+            tx = self._ms_to_x(t)
+            painter.setPen(QPen(self._tick_color, 1))
+            painter.drawLine(tx, track_y, tx, track_y + 6)
 
-            # In marker (green)
-            painter.setBrush(QBrush(self._clip_in_color))
-            painter.drawRect(
-                in_x - self._marker_width // 2,
-                center_y - self._marker_height // 2,
-                self._marker_width,
-                self._marker_height
-            )
-
-            # Out marker (red)
-            painter.setBrush(QBrush(self._clip_out_color))
-            painter.drawRect(
-                out_x - self._marker_width // 2,
-                center_y - self._marker_height // 2,
-                self._marker_width,
-                self._marker_height
-            )
-
-        # Draw peak markers
-        for i, peak_ms in enumerate(self._peaks_ms):
-            peak_x = self._ms_to_pos(peak_ms)
-
-            # Choose color based on whether this is the current peak
-            if i == self._current_peak_index:
-                color = self._current_peak_color
-                width = self._peak_width + 1
-                height = self._peak_height + 4
+            secs = t // 1000
+            if dur_s > 3600:
+                hh = secs // 3600
+                mm = (secs % 3600) // 60
+                label = f"{hh}:{mm:02d}"
             else:
-                color = self._peak_color
-                width = self._peak_width
-                height = self._peak_height
+                label = f"{secs // 60}:{secs % 60:02d}"
+            painter.setPen(self._tick_label_color)
+            painter.drawText(tx - 22, track_y + track_h + 1, 44, 14,
+                             Qt.AlignmentFlag.AlignCenter, label)
+            t += tick_interval
 
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QBrush(color))
-            painter.drawRect(
-                peak_x - width // 2,
-                center_y - height // 2,
-                width,
-                height
-            )
+        # Peak markers
+        for i, peak_ms in enumerate(self._peaks_ms):
+            px = self._ms_to_x(peak_ms)
+            if i == self._current_peak_index:
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(self._current_peak_color))
+                painter.drawRect(px - 1, track_y + 1, 3, track_h - 2)
+            else:
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(self._peak_color))
+                painter.drawRect(px, track_y + 3, 2, track_h - 6)
 
-        # Draw handle
-        handle_x = self._ms_to_pos(self._position_ms)
-        handle_y = self.height() // 2
+        # Playhead
+        ph_x = self._ms_to_x(self._position_ms)
+        painter.setPen(QPen(self._playhead_color, 2))
+        painter.drawLine(ph_x, track_y, ph_x, track_y + track_h)
 
-        # Handle shadow
-        painter.setBrush(QBrush(QColor(0, 0, 0, 50)))
-        painter.drawEllipse(
-            handle_x - self._handle_radius,
-            handle_y - self._handle_radius + 1,
-            self._handle_radius * 2,
-            self._handle_radius * 2
-        )
-
-        # Handle
-        painter.setBrush(QBrush(self._handle_color))
-        painter.drawEllipse(
-            handle_x - self._handle_radius,
-            handle_y - self._handle_radius,
-            self._handle_radius * 2,
-            self._handle_radius * 2
-        )
+        painter.end()
 
     def mousePressEvent(self, event):
-        """Handle mouse press — priority: In/Out marker > Peak > Position."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = True
+            self.setFocus()
+            ms = self._x_to_ms(event.pos().x())
+            self._position_ms = ms
+            self.update()
+            self.position_changed.emit(ms)
+
+    def mouseMoveEvent(self, event):
+        if self._dragging:
+            ms = self._x_to_ms(event.pos().x())
+            self._position_ms = ms
+            self.update()
+            self.position_changed.emit(ms)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = False
+
+
+class PeakStrip(QWidget):
+    """Thin full-duration strip showing all peak markers and current position.
+
+    Height: 20px. No clip editing — that's in ClipTimeline.
+    """
+
+    peak_clicked = pyqtSignal(int)  # peak index
+    position_changed = pyqtSignal(int)  # position in ms (from click)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self._duration_ms = 0
+        self._position_ms = 0
+        self._peaks_ms = []
+        self._current_peak_index = -1
+
+        # Colors
+        self._bg_color = QColor("#2a2a2a")
+        self._track_color = QColor("#3a3a3a")
+        self._peak_color = QColor("#666666")
+        self._current_peak_color = QColor("#FF9500")
+        self._playhead_color = QColor("#ffffff")
+
+        self.setFixedHeight(20)
+        self.setMouseTracking(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def set_duration(self, duration_ms: int):
+        self._duration_ms = max(1, duration_ms)
+        self.update()
+
+    def set_position(self, position_ms: int):
+        self._position_ms = max(0, min(position_ms, self._duration_ms))
+        self.update()
+
+    def set_peaks(self, peaks_ms: list):
+        self._peaks_ms = peaks_ms
+        self.update()
+
+    def set_current_peak(self, index: int):
+        self._current_peak_index = index
+        self.update()
+
+    def _ms_to_x(self, ms: int) -> int:
+        if self._duration_ms == 0:
+            return 0
+        margin = 4
+        w = self.width() - 2 * margin
+        return margin + int(w * ms / self._duration_ms)
+
+    def _x_to_ms(self, x: int) -> int:
+        if self._duration_ms == 0:
+            return 0
+        margin = 4
+        w = self.width() - 2 * margin
+        ratio = max(0, min(1, (x - margin) / w))
+        return int(ratio * self._duration_ms)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        h = self.height()
+        margin = 4
+        track_rect = QRect(margin, 4, self.width() - 2 * margin, h - 8)
+
+        # Background track
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(self._track_color))
+        painter.drawRoundedRect(track_rect, 3, 3)
+
+        center_y = h // 2
+
+        # Peak markers
+        for i, peak_ms in enumerate(self._peaks_ms):
+            x = self._ms_to_x(peak_ms)
+            if i == self._current_peak_index:
+                color = self._current_peak_color
+                w = 3
+                mh = 14
+            else:
+                color = self._peak_color
+                w = 2
+                mh = 10
+            painter.setBrush(QBrush(color))
+            painter.drawRect(x - w // 2, center_y - mh // 2, w, mh)
+
+        # Playhead (thin white line)
+        if self._duration_ms > 0:
+            px = self._ms_to_x(self._position_ms)
+            painter.setPen(QPen(self._playhead_color, 1.5))
+            painter.drawLine(px, 2, px, h - 2)
+
+        painter.end()
+
+    def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             x = event.pos().x()
+            # Check peaks first (10px tolerance)
+            for i, peak_ms in enumerate(self._peaks_ms):
+                peak_x = self._ms_to_x(peak_ms)
+                if abs(x - peak_x) <= 10:
+                    self.peak_clicked.emit(i)
+                    return
+            # Click on strip = seek
+            ms = self._x_to_ms(x)
+            self._position_ms = ms
+            self.update()
+            self.position_changed.emit(ms)
 
-            # Check In/Out markers first
-            marker = self._find_marker_at_pos(x)
+
+class ClipTimeline(QWidget):
+    """Zoomed timeline showing ±30s around the current peak.
+
+    Large draggable In/Out markers for precise clip editing.
+    """
+
+    position_changed = pyqtSignal(int)   # seek position in ms
+    clip_in_changed = pyqtSignal(int)    # in point in ms
+    clip_out_changed = pyqtSignal(int)   # out point in ms
+
+    ZOOM_RANGE_MS = 30000  # ±30s = 60s total visible window
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self._duration_ms = 0
+        self._peak_ms = 0
+        self._in_ms = 0
+        self._out_ms = 0
+        self._position_ms = 0
+
+        # Visible window
+        self._window_start_ms = 0
+        self._window_end_ms = 0
+
+        # Drag state
+        self._dragging_in = False
+        self._dragging_out = False
+        self._dragging_seek = False
+
+        # Colors
+        self._bg_color = QColor("#2a2a2a")
+        self._track_color = QColor("#3a3a3a")
+        self._clip_color = QColor(0, 122, 255, 50)
+        self._peak_color = QColor("#FF9500")
+        self._in_color = QColor("#30D158")
+        self._out_color = QColor("#FF453A")
+        self._playhead_color = QColor("#ffffff")
+        self._tick_color = QColor("#666666")
+        self._tick_label_color = QColor("#bbbbbb")
+
+        # Marker dimensions
+        self._marker_w = 6
+        self._marker_h = 30
+        self._hit_tolerance = 12
+        self._min_clip_ms = 1000
+
+        self.setMinimumHeight(40)
+        self.setFixedHeight(44)
+        self.setMouseTracking(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+
+    def set_duration(self, ms: int):
+        self._duration_ms = max(1, ms)
+        self._recalc_window()
+        self.update()
+
+    def set_peak(self, position_ms: int, in_ms: int, out_ms: int):
+        self._peak_ms = position_ms
+        self._in_ms = in_ms
+        self._out_ms = out_ms
+        self._position_ms = position_ms
+        self._recalc_window()
+        self.update()
+
+    def set_position(self, position_ms: int):
+        self._position_ms = position_ms
+        self.update()
+
+    def _recalc_window(self):
+        self._window_start_ms = max(0, self._peak_ms - self.ZOOM_RANGE_MS)
+        self._window_end_ms = min(self._duration_ms, self._peak_ms + self.ZOOM_RANGE_MS)
+
+    def _ms_to_x(self, ms: int) -> int:
+        window_dur = self._window_end_ms - self._window_start_ms
+        if window_dur <= 0:
+            return 0
+        margin = 8
+        w = self.width() - 2 * margin
+        ratio = (ms - self._window_start_ms) / window_dur
+        return margin + int(ratio * w)
+
+    def _x_to_ms(self, x: int) -> int:
+        margin = 8
+        w = self.width() - 2 * margin
+        if w <= 0:
+            return self._window_start_ms
+        ratio = max(0.0, min(1.0, (x - margin) / w))
+        window_dur = self._window_end_ms - self._window_start_ms
+        return int(self._window_start_ms + ratio * window_dur)
+
+    def _find_marker_at(self, x: int) -> str:
+        in_x = self._ms_to_x(self._in_ms)
+        out_x = self._ms_to_x(self._out_ms)
+        # Out marker gets priority if they overlap (user likely wants to extend)
+        if abs(x - out_x) <= self._hit_tolerance:
+            return "out"
+        if abs(x - in_x) <= self._hit_tolerance:
+            return "in"
+        return ""
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        h = self.height()
+        margin = 8
+        track_y = 6
+        track_h = h - 12
+        track_rect = QRect(margin, track_y, self.width() - 2 * margin, track_h)
+
+        # Background track
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(self._track_color))
+        painter.drawRoundedRect(track_rect, 4, 4)
+
+        window_dur = self._window_end_ms - self._window_start_ms
+        if window_dur <= 0:
+            painter.end()
+            return
+
+        center_y = h // 2
+
+        # Time scale ticks (every 5s)
+        tick_font = QFont()
+        tick_font.setPixelSize(11)
+        painter.setFont(tick_font)
+        tick_interval = 5000  # 5s
+        first_tick = ((self._window_start_ms // tick_interval) + 1) * tick_interval
+        t = first_tick
+        while t < self._window_end_ms:
+            tx = self._ms_to_x(t)
+            painter.setPen(QPen(self._tick_color, 1))
+            painter.drawLine(tx, track_y, tx, track_y + 6)
+            # Label every 10s
+            if t % 10000 == 0:
+                secs = t // 1000
+                m = secs // 60
+                s = secs % 60
+                label = f"{m}:{s:02d}"
+                painter.setPen(self._tick_label_color)
+                painter.drawText(tx - 22, track_y + track_h + 1, 44, 14,
+                                 Qt.AlignmentFlag.AlignCenter, label)
+            t += tick_interval
+
+        # Clip region (highlighted blue between In and Out)
+        in_x = self._ms_to_x(self._in_ms)
+        out_x = self._ms_to_x(self._out_ms)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(self._clip_color))
+        clip_rect = QRect(in_x, track_y, out_x - in_x, track_h)
+        painter.drawRect(clip_rect)
+
+        # Peak center (orange vertical line)
+        peak_x = self._ms_to_x(self._peak_ms)
+        painter.setPen(QPen(self._peak_color, 2))
+        painter.drawLine(peak_x, track_y + 2, peak_x, track_y + track_h - 2)
+
+        # In marker (green)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(self._in_color))
+        painter.drawRoundedRect(
+            in_x - self._marker_w // 2,
+            center_y - self._marker_h // 2,
+            self._marker_w, self._marker_h, 2, 2)
+
+        # Out marker (red)
+        painter.setBrush(QBrush(self._out_color))
+        painter.drawRoundedRect(
+            out_x - self._marker_w // 2,
+            center_y - self._marker_h // 2,
+            self._marker_w, self._marker_h, 2, 2)
+
+        # Playhead (white line, 2px)
+        if (self._window_start_ms <= self._position_ms <= self._window_end_ms):
+            ph_x = self._ms_to_x(self._position_ms)
+            painter.setPen(QPen(self._playhead_color, 2))
+            painter.drawLine(ph_x, track_y, ph_x, track_y + track_h)
+
+        painter.end()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            x = event.pos().x()
+            marker = self._find_marker_at(x)
             if marker == "in":
                 self._dragging_in = True
+                self.setCursor(Qt.CursorShape.SizeHorCursor)
                 return
             if marker == "out":
                 self._dragging_out = True
+                self.setCursor(Qt.CursorShape.SizeHorCursor)
                 return
-
-            # Check if clicked on a peak
-            peak_index = self._find_peak_at_pos(x)
-            if peak_index >= 0:
-                self.peak_clicked.emit(peak_index)
-                return
-
-            # Otherwise, seek to position
-            self._is_dragging = True
-            self._update_position_from_mouse(x)
+            # Click = seek
+            self._dragging_seek = True
+            ms = self._x_to_ms(x)
+            self._position_ms = ms
+            self.update()
+            self.position_changed.emit(ms)
 
     def mouseMoveEvent(self, event):
-        """Handle mouse drag and cursor changes."""
         x = event.pos().x()
 
         if self._dragging_in:
-            new_ms = self._pos_to_ms(x)
-            # Clamp: min 0, max out_point - 1s
-            new_ms = max(0, min(new_ms, self._clip_out_ms - 1000))
-            self._clip_in_ms = new_ms
+            new_ms = self._x_to_ms(x)
+            new_ms = max(0, min(new_ms, self._out_ms - self._min_clip_ms))
+            self._in_ms = new_ms
             self.update()
             self.clip_in_changed.emit(new_ms)
             return
 
         if self._dragging_out:
-            new_ms = self._pos_to_ms(x)
-            # Clamp: min in_point + 1s, max duration
-            new_ms = max(self._clip_in_ms + 1000, min(new_ms, self._duration_ms))
-            self._clip_out_ms = new_ms
+            new_ms = self._x_to_ms(x)
+            new_ms = max(self._in_ms + self._min_clip_ms, min(new_ms, self._duration_ms))
+            self._out_ms = new_ms
             self.update()
             self.clip_out_changed.emit(new_ms)
             return
 
-        if self._is_dragging:
-            self._update_position_from_mouse(x)
+        if self._dragging_seek:
+            ms = self._x_to_ms(x)
+            self._position_ms = ms
+            self.update()
+            self.position_changed.emit(ms)
             return
 
         # Hover cursor
-        if self._find_marker_at_pos(x):
+        if self._find_marker_at(x):
             self.setCursor(Qt.CursorShape.SizeHorCursor)
         else:
             self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def mouseReleaseEvent(self, event):
-        """Handle mouse release."""
         if event.button() == Qt.MouseButton.LeftButton:
-            self._is_dragging = False
             self._dragging_in = False
             self._dragging_out = False
-
-    def _update_position_from_mouse(self, x: int):
-        """Update position from mouse x coordinate."""
-        new_pos = self._pos_to_ms(x)
-        self._position_ms = new_pos
-        self.update()
-        self.position_changed.emit(new_pos)
+            self._dragging_seek = False
+            self.setCursor(Qt.CursorShape.PointingHandCursor)

@@ -8,7 +8,7 @@ def detect_peaks(audio_path, threshold_factor, min_gap_ms):
 
     Returns list of peak times in milliseconds.
     """
-    audio = AudioSegment.from_wav(audio_path)
+    audio = AudioSegment.from_file(audio_path)
     samples = np.array(audio.get_array_of_samples())
     threshold = np.max(samples) * threshold_factor
 

@@ -1,17 +1,17 @@
-# main_window.py - PeakCut Main Window (PyQt6)
+# main_window.py - PeakCut Main Window (2-Phase: Welcome → Workspace)
 
 import os
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFrame, QStatusBar, QFileDialog,
-    QApplication, QTextEdit, QComboBox, QStackedWidget
+    QApplication, QComboBox, QStackedWidget, QInputDialog
 )
-from PyQt6.QtCore import Qt, QTimer, QSettings, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer, QElapsedTimer
 
 from .apple_style import get_stylesheet, COLORS
 from .video_preview_peak import PeakVideoPreview
+from .peak_timeline import ClipTimeline, ScrubTimeline
 
-# Import new core modules
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
@@ -24,8 +24,8 @@ from core.exporters import MP3Exporter, XMLExporter, TXTExporter
 
 class AnalysisWorker(QThread):
     """Background worker for sync + peak analysis."""
-    finished = pyqtSignal()            # session has all data
-    error = pyqtSignal(str)            # error message
+    finished = pyqtSignal()
+    error = pyqtSignal(str)
 
     def __init__(self, session):
         super().__init__()
@@ -39,273 +39,414 @@ class AnalysisWorker(QThread):
             self.error.emit(str(e))
 
 
+# Tab styling
+_TAB_ACTIVE = """
+    QPushButton {
+        background-color: #007AFF;
+        border: none;
+        border-radius: 4px;
+        color: white;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 4px 14px;
+    }
+"""
+_TAB_INACTIVE = """
+    QPushButton {
+        background-color: transparent;
+        border: 1px solid #3a3a3a;
+        border-radius: 4px;
+        color: #888888;
+        font-size: 12px;
+        font-weight: 500;
+        padding: 4px 14px;
+    }
+    QPushButton:hover { border-color: #555555; color: #bbbbbb; }
+"""
+
+
 class MainWindow(QMainWindow):
-    """PeakCut Main Window."""
+    """PeakCut Main Window — Welcome → Workspace."""
 
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PeakCut")
         self.setMinimumSize(1000, 600)
-        self.resize(1200, 700)
+        self.resize(1200, 750)
 
-        # Session (created on analyze)
         self.session = None
+        self._worker = None
+        self._view_mode = "screenshots"  # "peaks" or "screenshots"
+        self._analysis_done = False
 
-        # File selection state (before session exists)
+        # File state
         self._selected_files = []
         self._keyboard_file = None
         self._mic_files = []
         self._video_files = []
 
-        # Settings for remembering last folder
-        self._settings = QSettings("PeakCut", "PeakCut")
+        # Camera state
+        self._current_video_index = 0
+        self._camera_names = {}  # video_path → name
 
-        # Progress animation
-        self._progress_timer = QTimer()
-        self._progress_timer.timeout.connect(self._animate_progress)
-        self._progress_dots = 0
+        self._settings = QSettings("PeakCut", "PeakCut")
 
         self._setup_ui()
         self._setup_statusbar()
 
+    # ── UI Setup ─────────────────────────────────────────────────
+
     def _setup_ui(self):
-        """Setup the main UI layout."""
         central = QWidget()
         self.setCentralWidget(central)
 
         main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(16)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        # Header with title
-        header = QLabel("PeakCut")
-        header.setProperty("class", "title")
-        header.setStyleSheet(f"""
+        self.stack = QStackedWidget()
+        main_layout.addWidget(self.stack)
+
+        self._setup_welcome_page()    # index 0
+        self._setup_workspace_page()  # index 1
+
+        self.stack.setCurrentIndex(0)
+
+    def _setup_welcome_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        title = QLabel("PeakCut")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet(f"""
             color: {COLORS['text_primary']};
-            font-family: 'SF Pro Display', sans-serif;
-            font-size: 28px;
+            font-size: 42px;
             font-weight: 700;
+            font-family: 'SF Pro Display', -apple-system, sans-serif;
         """)
-        main_layout.addWidget(header)
+        layout.addWidget(title)
 
-        # Button row
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(12)
+        layout.addSpacing(30)
 
-        # Load Files button
-        self.load_btn = QPushButton("Dateien wählen")
-        self.load_btn.setProperty("class", "primary")
-        self.load_btn.setMinimumWidth(140)
-        self.load_btn.clicked.connect(self._on_load_files)
-        button_layout.addWidget(self.load_btn)
+        btn = QPushButton("Import Files")
+        btn.setProperty("class", "primary")
+        btn.setMinimumWidth(160)
+        btn.setMinimumHeight(40)
+        btn.clicked.connect(self._on_load_files)
+        btn_row = QHBoxLayout()
+        btn_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        btn_row.addWidget(btn)
+        layout.addLayout(btn_row)
 
-        # Analyze button
-        self.analyze_btn = QPushButton("Analyze")
-        self.analyze_btn.setMinimumWidth(100)
-        self.analyze_btn.clicked.connect(self._on_analyze)
-        self.analyze_btn.setEnabled(False)
-        button_layout.addWidget(self.analyze_btn)
+        self.stack.addWidget(page)
 
-        button_layout.addStretch()
-        main_layout.addLayout(button_layout)
+    def _setup_workspace_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(8, 8, 8, 4)
+        layout.setSpacing(6)
 
-        # Keyboard selection row (initially hidden)
-        self.keyboard_row = QWidget()
-        keyboard_layout = QHBoxLayout(self.keyboard_row)
-        keyboard_layout.setContentsMargins(0, 0, 0, 0)
-        keyboard_layout.setSpacing(8)
+        # ── Top bar: Mode tabs + Camera + LUT ──
+        top_bar = QHBoxLayout()
+        top_bar.setSpacing(6)
 
-        self.keyboard_label = QLabel("Keyboard-Spur:")
-        self.keyboard_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        keyboard_layout.addWidget(self.keyboard_label)
+        self.tab_peaks = QPushButton("Peaks")
+        self.tab_peaks.setStyleSheet(_TAB_INACTIVE)
+        self.tab_peaks.clicked.connect(lambda: self._set_view_mode("peaks"))
+        top_bar.addWidget(self.tab_peaks)
 
-        self.keyboard_combo = QComboBox()
-        self.keyboard_combo.setMinimumWidth(300)
-        self.keyboard_combo.currentIndexChanged.connect(self._on_keyboard_selected)
-        keyboard_layout.addWidget(self.keyboard_combo)
+        self.tab_screenshots = QPushButton("Screenshots")
+        self.tab_screenshots.setStyleSheet(_TAB_ACTIVE)
+        self.tab_screenshots.clicked.connect(lambda: self._set_view_mode("screenshots"))
+        top_bar.addWidget(self.tab_screenshots)
 
-        keyboard_layout.addStretch()
-        self.keyboard_row.hide()
-        main_layout.addWidget(self.keyboard_row)
-
-        # Stacked widget for status/video preview
-        self.preview_stack = QStackedWidget()
-        self.preview_stack.setMinimumHeight(400)
-
-        # Page 0: Status display (welcome/progress messages)
-        self.status_frame = QFrame()
-        self.status_frame.setProperty("class", "card")
-        self.status_frame.setStyleSheet(f"""
-            QFrame[class="card"] {{
-                background-color: #1a1a1a;
-                border: 1px solid {COLORS['border_light']};
-                border-radius: 10px;
-            }}
-        """)
-        status_layout = QVBoxLayout(self.status_frame)
-        status_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        self.status_label = QLabel("Willkommen bei PeakCut\n\nKlicke 'Dateien wählen' um zu starten")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_label.setWordWrap(True)
-        self.status_label.setStyleSheet("""
-            QLabel {
-                color: #ffffff;
-                font-family: 'SF Pro Display', 'SF Pro Text', -apple-system, sans-serif;
-                font-size: 18px;
-                font-weight: 500;
-                padding: 20px;
+        self.screenshot_btn = QPushButton("\U0001F4F7")
+        self.screenshot_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                font-size: 20px;
+                padding: 2px 6px;
             }
+            QPushButton:hover { background-color: #3a3a3a; border-radius: 6px; }
+            QPushButton:pressed { background-color: #4a4a4a; border-radius: 6px; }
+            QPushButton:disabled { opacity: 0.3; }
         """)
-        status_layout.addWidget(self.status_label)
-        self.preview_stack.addWidget(self.status_frame)
-
-        # Page 1: Video preview with peak timeline
-        self.video_preview = PeakVideoPreview()
-        self.video_preview.peak_clicked.connect(self._on_peak_clicked)
-        self.video_preview.clip_in_changed.connect(self._on_clip_in_changed)
-        self.video_preview.clip_out_changed.connect(self._on_clip_out_changed)
-        self.preview_stack.addWidget(self.video_preview)
-
-        # Start with status page
-        self.preview_stack.setCurrentIndex(0)
-
-        main_layout.addWidget(self.preview_stack, stretch=1)
-
-        # Peak controls (hidden until analysis complete)
-        self.peak_controls = QWidget()
-        peak_layout = QHBoxLayout(self.peak_controls)
-        peak_layout.setContentsMargins(0, 0, 0, 0)
-        peak_layout.setSpacing(8)
-
-        self.back_btn = QPushButton("Back")
-        self.back_btn.clicked.connect(self._on_back)
-        peak_layout.addWidget(self.back_btn)
-
-        self.play_btn = QPushButton("Play")
-        self.play_btn.setProperty("class", "primary")
-        self.play_btn.clicked.connect(self._on_play)
-        peak_layout.addWidget(self.play_btn)
-
-        self.stop_btn = QPushButton("Stop")
-        self.stop_btn.clicked.connect(self._on_stop)
-        peak_layout.addWidget(self.stop_btn)
-
-        self.next_btn = QPushButton("Next")
-        self.next_btn.clicked.connect(self._on_next)
-        peak_layout.addWidget(self.next_btn)
-
-        peak_layout.addSpacing(20)
-
-        self.switch_btn = QPushButton("Switch")
-        self.switch_btn.clicked.connect(self._on_switch)
-        peak_layout.addWidget(self.switch_btn)
-
-        self.ignore_btn = QPushButton("Ignore")
-        self.ignore_btn.clicked.connect(self._on_ignore)
-        peak_layout.addWidget(self.ignore_btn)
-
-        peak_layout.addSpacing(20)
-
-        self.export_btn = QPushButton("Export")
-        self.export_btn.clicked.connect(self._on_export)
-        peak_layout.addWidget(self.export_btn)
-
-        peak_layout.addStretch()
-
-        self.mode_label = QLabel("Mode: -")
-        self.mode_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        peak_layout.addWidget(self.mode_label)
-
-        peak_layout.addSpacing(10)
-
-        self.peak_label = QLabel("Peak: - / -")
-        self.peak_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        peak_layout.addWidget(self.peak_label)
-
-        self.peak_controls.hide()
-        main_layout.addWidget(self.peak_controls)
-
-        # Clip info panel (hidden until analysis complete)
-        self.clip_info_widget = QWidget()
-        clip_info_layout = QHBoxLayout(self.clip_info_widget)
-        clip_info_layout.setContentsMargins(0, 0, 0, 0)
-        clip_info_layout.setSpacing(12)
-
-        self.clip_info_label = QLabel("")
-        self.clip_info_label.setStyleSheet(f"""
-            color: {COLORS['text_secondary']};
-            font-family: 'SF Mono', 'Menlo', monospace;
-            font-size: 12px;
-        """)
-        clip_info_layout.addWidget(self.clip_info_label)
-
-        self.clip_reset_btn = QPushButton("Reset")
-        self.clip_reset_btn.setMaximumWidth(60)
-        self.clip_reset_btn.clicked.connect(self._on_clip_reset)
-        clip_info_layout.addWidget(self.clip_reset_btn)
-
-        clip_info_layout.addStretch()
-
-        self.clip_info_widget.hide()
-        main_layout.addWidget(self.clip_info_widget)
-
-        # Tools row (Screenshot + LUT, visible when video loaded)
-        tools_layout = QHBoxLayout()
-        tools_layout.setSpacing(8)
-
-        self.screenshot_btn = QPushButton("Screenshot")
-        self.screenshot_btn.setEnabled(False)
         self.screenshot_btn.clicked.connect(self._on_capture_screenshot)
-        tools_layout.addWidget(self.screenshot_btn)
+        self.screenshot_btn.setEnabled(False)
+        self.screenshot_btn.setVisible(False)
+        top_bar.addWidget(self.screenshot_btn)
 
-        tools_layout.addStretch()
+        top_bar.addSpacing(16)
 
-        # LUT dropdown
+        cam_label = QLabel("Kamera:")
+        cam_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
+        top_bar.addWidget(cam_label)
+
+        self.video_combo = QComboBox()
+        self.video_combo.setEditable(True)
+        self.video_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.video_combo.setCompleter(None)
+        self.video_combo.setMinimumWidth(200)
+        self.video_combo.setStyleSheet(self._dark_combo_style())
+        self.video_combo.activated.connect(self._on_video_activated)
+        self.video_combo.lineEdit().textEdited.connect(self._on_camera_name_typed)
+        top_bar.addWidget(self.video_combo)
+
+        top_bar.addStretch()
+
         lut_label = QLabel("LUT:")
-        lut_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        tools_layout.addWidget(lut_label)
+        lut_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
+        top_bar.addWidget(lut_label)
 
         self.lut_combo = QComboBox()
         self.lut_combo.setMinimumWidth(160)
-        self.lut_combo.setStyleSheet(f"""
-            QComboBox {{
+        self.lut_combo.setStyleSheet(self._dark_combo_style())
+        self._populate_lut_combo()
+        self.lut_combo.currentIndexChanged.connect(self._on_lut_selected)
+        top_bar.addWidget(self.lut_combo)
+
+        layout.addLayout(top_bar)
+
+        # ── Video preview ──
+        self.video_preview = PeakVideoPreview()
+        self.video_preview.position_changed.connect(self._on_video_position_changed)
+        self.video_preview.duration_changed.connect(self._on_video_duration_changed)
+        self.video_preview.screenshot_done.connect(self._on_screenshot_done)
+        layout.addWidget(self.video_preview, stretch=1)
+
+        # ── Timeline stack (switches between modes) ──
+        self.timeline_stack = QStackedWidget()
+
+        # Page 0: Peak mode — ClipTimeline + In/Out controls
+        peak_page = QWidget()
+        clip_row = QHBoxLayout(peak_page)
+        clip_row.setContentsMargins(0, 0, 0, 0)
+        clip_row.setSpacing(8)
+
+        self.in_label = QLabel("In: --:--:--")
+        self.in_label.setMinimumWidth(90)
+        self.in_label.setStyleSheet("color: #30D158; font-size: 12px; font-family: 'SF Mono', Menlo, monospace;")
+        clip_row.addWidget(self.in_label)
+
+        self.set_in_btn = QPushButton("Set In")
+        self.set_in_btn.setProperty("class", "small")
+        self.set_in_btn.setMaximumWidth(55)
+        self.set_in_btn.clicked.connect(self._on_set_in)
+        self.set_in_btn.setEnabled(False)
+        clip_row.addWidget(self.set_in_btn)
+
+        self.clip_timeline = ClipTimeline()
+        self.clip_timeline.position_changed.connect(self._on_clip_seek)
+        self.clip_timeline.clip_in_changed.connect(self._on_clip_in_dragged)
+        self.clip_timeline.clip_out_changed.connect(self._on_clip_out_dragged)
+        clip_row.addWidget(self.clip_timeline, stretch=1)
+
+        self.set_out_btn = QPushButton("Set Out")
+        self.set_out_btn.setProperty("class", "small")
+        self.set_out_btn.setMaximumWidth(55)
+        self.set_out_btn.clicked.connect(self._on_set_out)
+        self.set_out_btn.setEnabled(False)
+        clip_row.addWidget(self.set_out_btn)
+
+        self.out_label = QLabel("Out: --:--:--")
+        self.out_label.setMinimumWidth(90)
+        self.out_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.out_label.setStyleSheet("color: #FF453A; font-size: 12px; font-family: 'SF Mono', Menlo, monospace;")
+        clip_row.addWidget(self.out_label)
+
+        self.reset_btn = QPushButton("Reset")
+        self.reset_btn.setProperty("class", "small")
+        self.reset_btn.setMaximumWidth(50)
+        self.reset_btn.clicked.connect(self._on_clip_reset)
+        self.reset_btn.setEnabled(False)
+        clip_row.addWidget(self.reset_btn)
+
+        self.timeline_stack.addWidget(peak_page)
+
+        # Page 1: Screenshot mode — ScrubTimeline (full duration)
+        scrub_page = QWidget()
+        scrub_row = QHBoxLayout(scrub_page)
+        scrub_row.setContentsMargins(0, 0, 0, 0)
+        scrub_row.setSpacing(0)
+
+        self.scrub_timeline = ScrubTimeline()
+        self.scrub_timeline.position_changed.connect(self._on_scrub_seek)
+        scrub_row.addWidget(self.scrub_timeline, stretch=1)
+
+        self.timeline_stack.addWidget(scrub_page)
+
+        # Start in screenshots mode
+        self.timeline_stack.setCurrentIndex(1)
+        layout.addWidget(self.timeline_stack)
+
+        # ── Bottom bar (stacked: analysis indicator / toolbar) ──
+        self.bottom_stack = QStackedWidget()
+        self.bottom_stack.setFixedHeight(36)
+
+        # Page 0: Analysis indicator
+        analysis_page = QWidget()
+        analysis_layout = QHBoxLayout(analysis_page)
+        analysis_layout.setContentsMargins(4, 0, 4, 0)
+        analysis_layout.setSpacing(8)
+
+        self.analysis_status_label = QLabel("Analyse läuft...")
+        self.analysis_status_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
+        analysis_layout.addWidget(self.analysis_status_label)
+
+        analysis_layout.addStretch()
+
+        self.analysis_time_label = QLabel("00:00")
+        self.analysis_time_label.setStyleSheet("color: #888888; font-size: 13px; font-family: 'SF Mono', Menlo, monospace;")
+        analysis_layout.addWidget(self.analysis_time_label)
+
+        self.bottom_stack.addWidget(analysis_page)
+
+        # Page 1: Toolbar
+        toolbar_widget = QWidget()
+        toolbar = QHBoxLayout(toolbar_widget)
+        toolbar.setContentsMargins(0, 0, 0, 0)
+        toolbar.setSpacing(6)
+
+        self.back_btn = QPushButton("\u25C0")
+        self.back_btn.setMaximumWidth(36)
+        self.back_btn.clicked.connect(self._on_back)
+        self.back_btn.setEnabled(False)
+        toolbar.addWidget(self.back_btn)
+
+        self.next_btn = QPushButton("\u25B6")
+        self.next_btn.setMaximumWidth(36)
+        self.next_btn.clicked.connect(self._on_next)
+        self.next_btn.setEnabled(False)
+        toolbar.addWidget(self.next_btn)
+
+        self.play_pause_btn = QPushButton("Play")
+        self.play_pause_btn.setProperty("class", "primary")
+        self.play_pause_btn.setMinimumWidth(70)
+        self.play_pause_btn.clicked.connect(self._on_play_pause)
+        self.play_pause_btn.setEnabled(False)
+        toolbar.addWidget(self.play_pause_btn)
+
+        sep1 = QFrame()
+        sep1.setFrameShape(QFrame.Shape.VLine)
+        sep1.setStyleSheet(f"color: {COLORS['border_light']};")
+        toolbar.addWidget(sep1)
+
+        self.time_label = QLabel("00:00 / 00:00")
+        self.time_label.setMinimumWidth(100)
+        self.time_label.setStyleSheet("color: #aaaaaa; font-size: 12px;")
+        toolbar.addWidget(self.time_label)
+
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.Shape.VLine)
+        sep2.setStyleSheet(f"color: {COLORS['border_light']};")
+        toolbar.addWidget(sep2)
+
+        self.ignore_btn = QPushButton("Ignore")
+        self.ignore_btn.clicked.connect(self._on_ignore)
+        self.ignore_btn.setEnabled(False)
+        toolbar.addWidget(self.ignore_btn)
+
+        toolbar.addStretch()
+
+        self.mode_btn = QPushButton("KB")
+        self.mode_btn.setProperty("class", "small")
+        self.mode_btn.setMaximumWidth(40)
+        self.mode_btn.clicked.connect(self._on_switch_mode)
+        self.mode_btn.setEnabled(False)
+        toolbar.addWidget(self.mode_btn)
+
+        self.peak_label = QLabel("- / -")
+        self.peak_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
+        toolbar.addWidget(self.peak_label)
+
+        sep3 = QFrame()
+        sep3.setFrameShape(QFrame.Shape.VLine)
+        sep3.setStyleSheet(f"color: {COLORS['border_light']};")
+        toolbar.addWidget(sep3)
+
+        self.export_btn = QPushButton("Export")
+        self.export_btn.setProperty("class", "primary")
+        self.export_btn.clicked.connect(self._on_export)
+        self.export_btn.setEnabled(False)
+        toolbar.addWidget(self.export_btn)
+
+        self.bottom_stack.addWidget(toolbar_widget)
+
+        # Start on analysis indicator
+        self.bottom_stack.setCurrentIndex(0)
+        layout.addWidget(self.bottom_stack)
+
+        # Elapsed time timer
+        self._elapsed_timer = QElapsedTimer()
+        self._tick_timer = QTimer(self)
+        self._tick_timer.setInterval(1000)
+        self._tick_timer.timeout.connect(self._update_remaining_time)
+
+        self.stack.addWidget(page)
+
+    def _setup_statusbar(self):
+        self.statusbar = QStatusBar()
+        self.setStatusBar(self.statusbar)
+
+    # ── View mode switching ──────────────────────────────────────
+
+    def _set_view_mode(self, mode: str):
+        self._view_mode = mode
+        if mode == "peaks":
+            self.tab_peaks.setStyleSheet(_TAB_ACTIVE)
+            self.tab_screenshots.setStyleSheet(_TAB_INACTIVE)
+            self.screenshot_btn.setVisible(False)
+            if self._analysis_done:
+                self.timeline_stack.setCurrentIndex(0)
+                self.timeline_stack.setVisible(True)
+                self.bottom_stack.setCurrentIndex(1)
+            else:
+                # Hide controls until analysis is done
+                self.timeline_stack.setVisible(False)
+                self.bottom_stack.setCurrentIndex(0)
+        else:
+            self.tab_peaks.setStyleSheet(_TAB_INACTIVE)
+            self.tab_screenshots.setStyleSheet(_TAB_ACTIVE)
+            self.screenshot_btn.setVisible(True)
+            self.timeline_stack.setCurrentIndex(1)
+            self.timeline_stack.setVisible(True)
+            self.bottom_stack.setCurrentIndex(1)
+
+    # ── Style helpers ────────────────────────────────────────────
+
+    @staticmethod
+    def _dark_combo_style():
+        return """
+            QComboBox {
                 background-color: #2a2a2a;
                 border: 1px solid #3a3a3a;
                 border-radius: 6px;
                 color: #ffffff;
-                padding: 4px 8px;
-                font-size: 12px;
-            }}
-            QComboBox::drop-down {{ border: none; padding-right: 6px; }}
-            QComboBox::down-arrow {{
+                padding: 5px 10px;
+                font-size: 13px;
+            }
+            QComboBox:hover { border-color: #4a4a4a; }
+            QComboBox::drop-down { border: none; padding-right: 8px; }
+            QComboBox::down-arrow {
                 image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 5px solid #888888;
-                margin-right: 6px;
-            }}
-            QComboBox QAbstractItemView {{
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 6px solid #888888;
+                margin-right: 8px;
+            }
+            QComboBox QAbstractItemView {
                 background-color: #2a2a2a;
                 border: 1px solid #3a3a3a;
                 color: #ffffff;
                 selection-background-color: #007AFF;
-            }}
-        """)
-        self._populate_lut_combo()
-        self.lut_combo.currentIndexChanged.connect(self._on_lut_selected)
-        tools_layout.addWidget(self.lut_combo)
+            }
+        """
 
-        main_layout.addLayout(tools_layout)
-
-    def _setup_statusbar(self):
-        """Setup status bar."""
-        self.statusbar = QStatusBar()
-        self.setStatusBar(self.statusbar)
-        self.statusbar.showMessage("")
+    # ── File import ──────────────────────────────────────────────
 
     def _on_load_files(self):
-        """Open file dialog for multi-file selection."""
         last_folder = self._settings.value("last_folder", MATERIAL_DIR)
         if not os.path.exists(last_folder):
             last_folder = MATERIAL_DIR
@@ -314,30 +455,43 @@ class MainWindow(QMainWindow):
             self,
             "Dateien auswählen",
             last_folder,
-            "Media Files (*.wav *.mp3 *.mp4 *.mov);;Audio (*.wav *.mp3);;Video (*.mp4 *.mov);;All Files (*)"
+            "Media Files (*.wav *.mp3 *.mp4 *.mov);;All Files (*)"
         )
-
         if not files:
             return
 
-        if files:
-            folder = os.path.dirname(files[0])
-            self._settings.setValue("last_folder", folder)
-
+        self._settings.setValue("last_folder", os.path.dirname(files[0]))
         self._selected_files = files
         self._categorize_files()
 
+        if not self._keyboard_file:
+            audio_files = [f for f in files if f.lower().endswith(('.wav', '.mp3'))]
+            if not audio_files:
+                self.statusbar.showMessage("Keine Audio-Dateien gefunden")
+                return
+            items = [os.path.basename(f) for f in audio_files]
+            item, ok = QInputDialog.getItem(
+                self, "Keyboard-Spur wählen",
+                "Welche Datei ist die Keyboard-Spur?",
+                items, 0, False
+            )
+            if not ok:
+                return
+            idx = items.index(item)
+            self._keyboard_file = audio_files[idx]
+            self._mic_files = [f for f in audio_files if f != self._keyboard_file]
+
+        self._copy_files_to_material()
+        self._start_workspace()
+
     def _categorize_files(self):
-        """Categorize selected files by type."""
         self._keyboard_file = None
         self._mic_files = []
         self._video_files = []
 
         audio_files = []
-
         for filepath in self._selected_files:
             filename = os.path.basename(filepath).lower()
-
             if filename.endswith(('.mp4', '.mov')):
                 self._video_files.append(filepath)
             elif filename.endswith(('.wav', '.mp3')):
@@ -349,70 +503,14 @@ class MainWindow(QMainWindow):
             if f != self._keyboard_file:
                 self._mic_files.append(f)
 
-        self._update_file_display()
-
-    def _update_file_display(self):
-        """Update UI based on categorized files."""
-        status_parts = []
-
-        if self._keyboard_file:
-            status_parts.append(f"Keyboard: {os.path.basename(self._keyboard_file)}")
-        if self._mic_files:
-            status_parts.append(f"{len(self._mic_files)} Mic(s)")
-        if self._video_files:
-            status_parts.append(f"{len(self._video_files)} Video(s)")
-
-        audio_files = [f for f in self._selected_files if f.lower().endswith(('.wav', '.mp3'))]
-
-        if not self._keyboard_file and audio_files:
-            self.keyboard_combo.clear()
-            self.keyboard_combo.addItem("-- Bitte wählen --", None)
-            for f in audio_files:
-                self.keyboard_combo.addItem(os.path.basename(f), f)
-            self.keyboard_row.show()
-            self._log("Keyboard-Spur nicht erkannt\n\nBitte wähle die Keyboard-Spur\naus dem Dropdown-Menü")
-            self.statusbar.showMessage("Keyboard-Spur auswählen")
-            self.analyze_btn.setEnabled(False)
-        else:
-            self.keyboard_row.hide()
-
-            if self._keyboard_file:
-                self.statusbar.showMessage(" | ".join(status_parts))
-                self._log("Dateien geladen\n\n" + "\n".join(status_parts) + "\n\nKlicke 'Analyze'")
-                self.analyze_btn.setEnabled(True)
-                self._copy_files_to_material()
-
-                if self._video_files:
-                    self.video_preview.set_videos(self._video_files)
-                    self.preview_stack.setCurrentIndex(1)
-                    self.screenshot_btn.setEnabled(True)
-            elif not audio_files:
-                self.statusbar.showMessage("Keine Audio-Dateien ausgewählt")
-                self._log("Keine Audio-Dateien gefunden\n\nBitte wähle mindestens\neine .wav oder .mp3 Datei")
-                self.analyze_btn.setEnabled(False)
-
-    def _on_keyboard_selected(self, index):
-        """Handle manual keyboard track selection."""
-        filepath = self.keyboard_combo.currentData()
-        if filepath:
-            self._keyboard_file = filepath
-            self._mic_files = [f for f in self._selected_files
-                             if f.lower().endswith(('.wav', '.mp3')) and f != filepath]
-            self.keyboard_row.hide()
-            self._update_file_display()
-
     def _copy_files_to_material(self):
-        """Copy selected files to MATERIAL_DIR for processing (if not already there)."""
         import shutil
-
-        if not os.path.exists(MATERIAL_DIR):
-            os.makedirs(MATERIAL_DIR)
+        os.makedirs(MATERIAL_DIR, exist_ok=True)
 
         all_in_material = all(
             os.path.dirname(os.path.abspath(f)) == os.path.abspath(MATERIAL_DIR)
             for f in self._selected_files
         )
-
         if all_in_material:
             return
 
@@ -420,21 +518,36 @@ class MainWindow(QMainWindow):
             src_abs = os.path.abspath(filepath)
             dest = os.path.join(MATERIAL_DIR, os.path.basename(filepath))
             dest_abs = os.path.abspath(dest)
-
             if src_abs != dest_abs:
                 shutil.copy2(filepath, dest)
 
-    def _on_analyze(self):
-        """Run sync and peak analysis in background thread."""
-        self.analyze_btn.setEnabled(False)
-        self.load_btn.setEnabled(False)
-        self.statusbar.showMessage("Analyse läuft...")
+    def _default_camera_name(self, filepath: str) -> str:
+        """Filename without extension as default camera name."""
+        return os.path.splitext(os.path.basename(filepath))[0]
 
-        # Start button text animation
-        self._progress_dots = 0
-        self._progress_timer.start(400)
+    # ── Start workspace + analysis ───────────────────────────────
 
-        # Create project and session
+    def _start_workspace(self):
+        self.stack.setCurrentIndex(1)
+
+        # Start in screenshots mode (full timeline for pre-analysis browsing)
+        self._set_view_mode("screenshots")
+
+        if self._video_files:
+            self._populate_video_combo()
+            self.video_preview.set_videos(self._video_files)
+            self.screenshot_btn.setEnabled(True)
+            self.play_pause_btn.setEnabled(True)
+
+        self._analysis_done = False
+        self.bottom_stack.setCurrentIndex(0)
+
+        # Estimate analysis time from file sizes
+        self._estimated_seconds = self._estimate_analysis_time()
+        self._elapsed_timer.start()
+        self._tick_timer.start()
+        self._update_remaining_time()
+
         project = PeakCutProject(MATERIAL_DIR, EXPORT_DIR)
         project.set_files(self._keyboard_file, self._mic_files, self._video_files)
 
@@ -442,119 +555,280 @@ class MainWindow(QMainWindow):
         self.session.status_update.connect(self._on_analysis_status)
         self.session.clip_adjusted.connect(self._on_clip_adjusted)
 
-        # Start background worker
         self._worker = AnalysisWorker(self.session)
         self._worker.finished.connect(self._on_analysis_complete)
         self._worker.error.connect(self._on_analysis_error)
         self._worker.start()
 
     def _on_analysis_status(self, message):
-        """Handle status updates from session."""
         self.statusbar.showMessage(message)
+        self.analysis_status_label.setText(message)
 
     def _on_analysis_complete(self):
-        """Handle completed analysis - set peaks and enable controls."""
-        self._progress_timer.stop()
-        self.analyze_btn.setText("Analyze")
+        self._tick_timer.stop()
+        self._analysis_done = True
 
-        peaks = self.session.peaks
-        num_peaks = len(peaks)
+        try:
+            peaks = self.session.peaks
+            num_peaks = len(peaks)
 
-        if num_peaks > 0:
-            self._enable_playback_controls(True)
-            self._update_peak_label()
-            self._update_clip_info()
-            self.clip_info_widget.show()
-            self.mode_label.setText(f"Mode: {self.session.mode.upper()}")
+            if num_peaks > 0:
+                self._set_peak_controls_enabled(True)
+                self.mode_btn.setText("KB" if self.session.mode == "keyboard" else "MIC")
 
-            if self._video_files:
-                self.video_preview.set_peaks(
-                    [p.position_ms for p in peaks], self.session.current_peak)
-                peak = peaks[self.session.current_peak]
-                self.video_preview.set_clip_region(
-                    peak.in_point_ms, peak.out_point_ms)
-                self.preview_stack.setCurrentIndex(1)
+                # Feed peaks to scrub timeline
+                self.scrub_timeline.set_peaks([p.position_ms for p in peaks])
+
+                # Switch to peaks mode and navigate to first peak
+                self._set_view_mode("peaks")
+                self.navigate_to_peak(0)
                 self.statusbar.showMessage(f"{num_peaks} Peaks gefunden")
             else:
-                self._log(f"{num_peaks} Peaks gefunden\n\nDrücke Play oder Leertaste")
-        else:
-            self._log("Keine Peaks gefunden")
-            self.statusbar.showMessage("Keine Peaks gefunden")
+                self.bottom_stack.setCurrentIndex(1)
+                self.statusbar.showMessage("Keine Peaks gefunden")
+        except Exception as e:
+            self.bottom_stack.setCurrentIndex(1)
+            self.statusbar.showMessage(f"Fehler: {e}")
 
-        self.analyze_btn.setEnabled(True)
-        self.load_btn.setEnabled(True)
         self._worker = None
 
     def _on_analysis_error(self, error_msg):
-        """Handle analysis errors."""
-        self._progress_timer.stop()
-        self.analyze_btn.setText("Analyze")
-        self._log(f"Fehler: {error_msg}")
+        self._tick_timer.stop()
+        self._analysis_done = True
+        self.bottom_stack.setCurrentIndex(1)
         self.statusbar.showMessage(f"Fehler: {error_msg}")
-        self.analyze_btn.setEnabled(True)
-        self.load_btn.setEnabled(True)
         self._worker = None
 
-    def _on_peak_clicked(self, peak_index):
-        """Handle click on peak marker in timeline."""
-        if self.session and 0 <= peak_index < len(self.session.peaks):
-            self.session.set_current_peak(peak_index)
-            self._update_peak_label()
-            self.session.play_current()
-            peak = self.session.peaks[peak_index]
-            self.video_preview.set_clip_region(
-                peak.in_point_ms, peak.out_point_ms)
-            self.statusbar.showMessage(f"Peak {peak_index + 1}")
+    def _estimate_analysis_time(self) -> int:
+        """Estimate analysis time in seconds based on file sizes."""
+        total = 5  # base overhead
+        if self._keyboard_file and os.path.exists(self._keyboard_file):
+            size_mb = os.path.getsize(self._keyboard_file) / (1024 * 1024)
+            total += int(size_mb * 0.15)
+        for mic in self._mic_files:
+            if os.path.exists(mic):
+                size_mb = os.path.getsize(mic) / (1024 * 1024)
+                total += int(size_mb * 0.05)
+        total += len(self._video_files) * 12
+        return max(5, total)
 
-    def _on_clip_in_changed(self, ms):
-        """Handle clip In-point change from timeline drag."""
-        if self.session:
-            self.session.adjust_clip(self.session.current_peak, in_ms=ms)
+    def _update_remaining_time(self):
+        elapsed_s = self._elapsed_timer.elapsed() // 1000
+        remaining = max(0, self._estimated_seconds - elapsed_s)
+        if remaining > 60:
+            m = remaining // 60
+            self.analysis_time_label.setText(f"~{m} Min.")
+        else:
+            self.analysis_time_label.setText(f"~{remaining} Sek.")
 
-    def _on_clip_out_changed(self, ms):
-        """Handle clip Out-point change from timeline drag."""
-        if self.session:
-            self.session.adjust_clip(self.session.current_peak, out_ms=ms)
+    # ── Peak Navigation ──────────────────────────────────────────
 
-    def _on_clip_adjusted(self, index):
-        """Handle clip adjustment from session."""
-        if self.session and index == self.session.current_peak:
-            self._update_clip_info()
-
-    def _on_clip_reset(self):
-        """Reset current clip to default In/Out."""
-        if self.session:
-            idx = self.session.current_peak
-            self.session.reset_clip(idx)
-            peak = self.session.peaks[idx]
-            self.video_preview.set_clip_region(
-                peak.in_point_ms, peak.out_point_ms)
-
-    def _update_clip_info(self):
-        """Update clip info label with current peak's In/Out/Duration."""
+    def navigate_to_peak(self, index: int):
         if not self.session or not self.session.peaks:
             return
-        peak = self.session.peaks[self.session.current_peak]
-        in_tc = self._ms_to_mmss(peak.in_point_ms)
-        out_tc = self._ms_to_mmss(peak.out_point_ms)
-        dur = peak.clip_duration_ms / 1000
-        idx = self.session.current_peak + 1
-        total = len(self.session.peaks)
-        self.clip_info_label.setText(
-            f"Peak {idx}/{total}  |  In: {in_tc}  |  Out: {out_tc}  |  "
-            f"Dauer: {dur:.1f}s")
+        if not (0 <= index < len(self.session.peaks)):
+            return
 
-    @staticmethod
-    def _ms_to_mmss(ms):
-        """Format milliseconds as HH:MM:SS."""
-        total_s = ms // 1000
-        h = total_s // 3600
-        m = (total_s % 3600) // 60
-        s = total_s % 60
-        return f"{h:02d}:{m:02d}:{s:02d}"
+        self.session.set_current_peak(index)
+        peak = self.session.peaks[index]
+
+        # Update clip timeline
+        self.clip_timeline.set_peak(peak.position_ms, peak.in_point_ms, peak.out_point_ms)
+
+        # Update scrub timeline
+        self.scrub_timeline.set_current_peak(index)
+        self.scrub_timeline.set_position(peak.position_ms)
+
+        # Update labels
+        self.in_label.setText(f"In: {self._ms_to_hhmmss(peak.in_point_ms)}")
+        self.out_label.setText(f"Out: {self._ms_to_hhmmss(peak.out_point_ms)}")
+        self.peak_label.setText(f"{index + 1} / {len(self.session.peaks)}")
+
+        # Video: play from In to Out
+        if self._video_files:
+            self.video_preview.play_from(peak.in_point_ms, peak.out_point_ms)
+            self.play_pause_btn.setText("Pause")
+        else:
+            self.session.play_current()
+
+    def _on_back(self):
+        if self.session and self.session.current_peak > 0:
+            self.navigate_to_peak(self.session.current_peak - 1)
+
+    def _on_next(self):
+        if self.session and self.session.current_peak < len(self.session.peaks) - 1:
+            self.navigate_to_peak(self.session.current_peak + 1)
+
+    def _on_play_pause(self):
+        if not self.video_preview:
+            return
+        playing = self.video_preview.toggle_play_pause()
+        self.play_pause_btn.setText("Pause" if playing else "Play")
+
+    # ── Clip editing ─────────────────────────────────────────────
+
+    def _on_set_in(self):
+        if not self.session:
+            return
+        pos = self.video_preview.get_position()
+        idx = self.session.current_peak
+        self.session.adjust_clip(idx, in_ms=pos)
+        peak = self.session.peaks[idx]
+        self.clip_timeline.set_peak(peak.position_ms, peak.in_point_ms, peak.out_point_ms)
+        self.in_label.setText(f"In: {self._ms_to_hhmmss(peak.in_point_ms)}")
+        self.statusbar.showMessage(f"In: {self._ms_to_hhmmss(peak.in_point_ms)}")
+
+    def _on_set_out(self):
+        if not self.session:
+            return
+        pos = self.video_preview.get_position()
+        idx = self.session.current_peak
+        self.session.adjust_clip(idx, out_ms=pos)
+        peak = self.session.peaks[idx]
+        self.clip_timeline.set_peak(peak.position_ms, peak.in_point_ms, peak.out_point_ms)
+        self.out_label.setText(f"Out: {self._ms_to_hhmmss(peak.out_point_ms)}")
+        self.statusbar.showMessage(f"Out: {self._ms_to_hhmmss(peak.out_point_ms)}")
+
+    def _on_clip_in_dragged(self, ms):
+        if not self.session:
+            return
+        idx = self.session.current_peak
+        self.session.adjust_clip(idx, in_ms=ms)
+        self.video_preview.set_position(ms)
+        peak = self.session.peaks[idx]
+        self.in_label.setText(f"In: {self._ms_to_hhmmss(peak.in_point_ms)}")
+
+    def _on_clip_out_dragged(self, ms):
+        if not self.session:
+            return
+        idx = self.session.current_peak
+        self.session.adjust_clip(idx, out_ms=ms)
+        self.video_preview.set_position(ms)
+        peak = self.session.peaks[idx]
+        self.out_label.setText(f"Out: {self._ms_to_hhmmss(peak.out_point_ms)}")
+
+    def _on_clip_seek(self, ms):
+        self.video_preview.set_position(ms)
+        self.video_preview.stop_clip_playback()
+        self.play_pause_btn.setText("Play")
+
+    def _on_scrub_seek(self, ms):
+        """Seek from ScrubTimeline (screenshot mode)."""
+        self.video_preview.set_position(ms)
+        self.video_preview.stop_clip_playback()
+        self.play_pause_btn.setText("Play")
+
+    def _on_clip_reset(self):
+        if not self.session:
+            return
+        idx = self.session.current_peak
+        self.session.reset_clip(idx)
+        peak = self.session.peaks[idx]
+        self.clip_timeline.set_peak(peak.position_ms, peak.in_point_ms, peak.out_point_ms)
+        self.in_label.setText(f"In: {self._ms_to_hhmmss(peak.in_point_ms)}")
+        self.out_label.setText(f"Out: {self._ms_to_hhmmss(peak.out_point_ms)}")
+        self.statusbar.showMessage("Clip reset")
+
+    def _on_clip_adjusted(self, index):
+        if self.session and index == self.session.current_peak:
+            peak = self.session.peaks[index]
+            self.clip_timeline.set_peak(peak.position_ms, peak.in_point_ms, peak.out_point_ms)
+            self.in_label.setText(f"In: {self._ms_to_hhmmss(peak.in_point_ms)}")
+            self.out_label.setText(f"Out: {self._ms_to_hhmmss(peak.out_point_ms)}")
+
+    # ── Video position updates ───────────────────────────────────
+
+    def _on_video_position_changed(self, ms):
+        # Update whichever timeline is active
+        self.clip_timeline.set_position(ms)
+        self.scrub_timeline.set_position(ms)
+        self.time_label.setText(
+            f"{self._ms_to_mmss(ms)} / {self._ms_to_mmss(self.video_preview.get_duration())}")
+        if not self.video_preview.is_playing():
+            self.play_pause_btn.setText("Play")
+
+    def _on_video_duration_changed(self, ms):
+        self.clip_timeline.set_duration(ms)
+        self.scrub_timeline.set_duration(ms)
+
+    # ── Camera combo (editable = name field) ─────────────────────
+
+    def _populate_video_combo(self):
+        self.video_combo.blockSignals(True)
+        self.video_combo.clear()
+        for i, filepath in enumerate(self._video_files):
+            filename = os.path.basename(filepath)
+            self.video_combo.addItem(f"Kamera {i + 1}: {filename}", filepath)
+        self._current_video_index = 0
+        if self._video_files:
+            path = self._video_files[0]
+            name = self._camera_names.get(path, self._default_camera_name(path))
+            self._camera_names[path] = name
+            self.video_combo.setEditText(name)
+            self.video_preview.set_camera_name(name)
+        self.video_combo.blockSignals(False)
+
+    def _on_video_activated(self, index):
+        if not (0 <= index < len(self._video_files)):
+            return
+
+        # Store current name
+        if 0 <= self._current_video_index < len(self._video_files):
+            old_path = self._video_files[self._current_video_index]
+            self._camera_names[old_path] = self.video_combo.currentText().strip()
+
+        self._current_video_index = index
+        self.video_preview.load_video_at_index(index)
+
+        # Restore name (default to filename)
+        path = self._video_files[index]
+        name = self._camera_names.get(path, self._default_camera_name(path))
+        self._camera_names[path] = name
+        self.video_combo.setEditText(name)
+        self.video_preview.set_camera_name(name)
+
+    def _on_camera_name_typed(self, text):
+        if 0 <= self._current_video_index < len(self._video_files):
+            path = self._video_files[self._current_video_index]
+            self._camera_names[path] = text.strip()
+            self.video_preview.set_camera_name(text)
+
+    # ── Screenshot (async) ───────────────────────────────────────
+
+    def _on_capture_screenshot(self):
+        self.screenshot_btn.setEnabled(False)
+        self.statusbar.showMessage("Screenshot...")
+        name = ""
+        if 0 <= self._current_video_index < len(self._video_files):
+            path = self._video_files[self._current_video_index]
+            name = self._camera_names.get(path, "")
+        self.video_preview.capture_screenshot_async(name)
+
+    def _on_screenshot_done(self, filepath):
+        self.screenshot_btn.setEnabled(True)
+        if filepath:
+            self.statusbar.showMessage(f"Screenshot: {os.path.basename(filepath)}")
+        else:
+            self.statusbar.showMessage("Screenshot fehlgeschlagen")
+
+    # ── Mode switch ──────────────────────────────────────────────
+
+    def _on_switch_mode(self):
+        if self.session:
+            self.session.switch_mode()
+            self.mode_btn.setText("KB" if self.session.mode == "keyboard" else "MIC")
+            self.statusbar.showMessage(f"Mode: {self.session.mode.upper()}")
+
+    # ── Ignore ───────────────────────────────────────────────────
+
+    def _on_ignore(self):
+        if self.session:
+            self.session.ignore_peak()
+            self.statusbar.showMessage(f"Peak {self.session.current_peak + 1} ignoriert")
+
+    # ── Export ───────────────────────────────────────────────────
 
     def _on_export(self):
-        """Run export via pluggable exporters."""
         stop_playback()
         self.statusbar.showMessage("Export läuft...")
         self.export_btn.setEnabled(False)
@@ -564,82 +838,19 @@ class MainWindow(QMainWindow):
             exporters = [MP3Exporter(), TXTExporter(), XMLExporter()]
             for exporter in exporters:
                 exporter.export(self.session)
-            self.statusbar.showMessage(f"Export fertig! Dateien in: {EXPORT_DIR}")
+            self.statusbar.showMessage(f"Export fertig! → {EXPORT_DIR}")
         except Exception as e:
-            self.statusbar.showMessage(f"Export-Fehler: {str(e)}")
-            self._log(f"Export-Fehler: {str(e)}")
+            self.statusbar.showMessage(f"Export-Fehler: {e}")
 
         self.export_btn.setEnabled(True)
 
-    def _enable_playback_controls(self, enabled):
-        """Show or hide peak playback controls."""
-        self.peak_controls.setVisible(enabled)
-
-    def _update_peak_label(self):
-        """Update the peak counter label."""
-        if self.session:
-            self.peak_label.setText(
-                f"Peak: {self.session.current_peak + 1} / {len(self.session.peaks)}")
-
-    def _on_play(self):
-        """Play current peak."""
-        if self.session:
-            self.session.play_current()
-            self.statusbar.showMessage(f"Playing peak {self.session.current_peak + 1}")
-
-    def _on_stop(self):
-        """Stop playback."""
-        stop_playback()
-        self.statusbar.showMessage("Stopped")
-
-    def _on_back(self):
-        """Go to previous peak."""
-        if self.session and self.session.current_peak > 0:
-            self.session.prev_peak()
-            self._update_peak_label()
-            self._update_clip_info()
-            self._update_video_preview_peak()
-            self.statusbar.showMessage(f"Peak {self.session.current_peak + 1}")
-
-    def _on_next(self):
-        """Go to next peak."""
-        if self.session and self.session.current_peak < len(self.session.peaks) - 1:
-            self.session.next_peak()
-            self._update_peak_label()
-            self._update_clip_info()
-            self._update_video_preview_peak()
-            self.statusbar.showMessage(f"Peak {self.session.current_peak + 1}")
-
-    def _update_video_preview_peak(self):
-        """Update video preview to show current peak."""
-        if self.session and self._video_files and self.preview_stack.currentIndex() == 1:
-            self.video_preview.set_current_peak(self.session.current_peak)
-            if self.session.peaks and self.session.current_peak < len(self.session.peaks):
-                peak = self.session.peaks[self.session.current_peak]
-                self.video_preview.set_position(peak.position_ms)
-                self.video_preview.set_clip_region(
-                    peak.in_point_ms, peak.out_point_ms)
-
-    def _on_switch(self):
-        """Switch between keyboard and mic mode."""
-        if self.session:
-            self.session.switch_mode()
-            self.mode_label.setText(f"Mode: {self.session.mode.upper()}")
-            self.statusbar.showMessage(f"Mode: {self.session.mode.upper()}")
-
-    def _on_ignore(self):
-        """Ignore current peak."""
-        if self.session:
-            self.session.ignore_peak()
-            self.statusbar.showMessage(f"Peak {self.session.current_peak + 1} ignored")
+    # ── LUT ──────────────────────────────────────────────────────
 
     def _populate_lut_combo(self):
-        """Fill LUT dropdown from luts/ library directory."""
         self.lut_combo.blockSignals(True)
         self.lut_combo.clear()
 
         current_lut = config.get("lut_path") or ""
-
         if current_lut and os.sep in current_lut:
             self._migrate_lut_path(current_lut)
             current_lut = config.get("lut_path") or ""
@@ -648,9 +859,7 @@ class MainWindow(QMainWindow):
 
         os.makedirs(LUTS_DIR, exist_ok=True)
         lut_files = sorted(
-            f for f in os.listdir(LUTS_DIR)
-            if f.lower().endswith('.cube')
-        )
+            f for f in os.listdir(LUTS_DIR) if f.lower().endswith('.cube'))
 
         selected_index = 0
         for i, filename in enumerate(lut_files):
@@ -660,12 +869,10 @@ class MainWindow(QMainWindow):
                 selected_index = i + 1
 
         self.lut_combo.addItem("LUT importieren...", "__browse__")
-
         self.lut_combo.setCurrentIndex(selected_index)
         self.lut_combo.blockSignals(False)
 
     def _migrate_lut_path(self, full_path):
-        """Migrate old full-path lut_path to library filename."""
         import shutil
         if os.path.isfile(full_path):
             os.makedirs(LUTS_DIR, exist_ok=True)
@@ -678,7 +885,6 @@ class MainWindow(QMainWindow):
             config.set("lut_path", "")
 
     def _on_lut_selected(self, index):
-        """Handle LUT selection from dropdown."""
         import shutil
         data = self.lut_combo.currentData()
         if data is None:
@@ -686,8 +892,7 @@ class MainWindow(QMainWindow):
 
         if data == "__browse__":
             filepath, _ = QFileDialog.getOpenFileName(
-                self,
-                "LUT importieren",
+                self, "LUT importieren",
                 os.path.expanduser("~/Downloads"),
                 "LUT Files (*.cube);;All Files (*)"
             )
@@ -700,46 +905,34 @@ class MainWindow(QMainWindow):
                 config.set("lut_path", filename)
                 self._populate_lut_combo()
                 self.video_preview.refresh_lut()
-                name = os.path.splitext(filename)[0]
-                self.statusbar.showMessage(f"LUT importiert: {name}")
+                self.statusbar.showMessage(f"LUT importiert: {os.path.splitext(filename)[0]}")
             else:
                 self._populate_lut_combo()
         else:
             config.set("lut_path", data)
             self.video_preview.refresh_lut()
             if data:
-                name = os.path.splitext(data)[0]
-                self.statusbar.showMessage(f"LUT: {name}")
+                self.statusbar.showMessage(f"LUT: {os.path.splitext(data)[0]}")
             else:
                 self.statusbar.showMessage("LUT deaktiviert")
 
-    def _on_capture_screenshot(self):
-        """Capture screenshot of current video frame with LUT."""
-        self.statusbar.showMessage("Screenshot wird erstellt...")
-        QApplication.processEvents()
+    # ── Controls enable/disable ──────────────────────────────────
 
-        camera_name = self.video_preview.get_current_camera_name()
-        filepath = self.video_preview.capture_screenshot(camera_name)
-        if filepath:
-            self.statusbar.showMessage(f"Screenshot gespeichert: {os.path.basename(filepath)}")
-        else:
-            self.statusbar.showMessage("Screenshot fehlgeschlagen")
+    def _set_peak_controls_enabled(self, enabled):
+        for btn in (self.back_btn, self.next_btn,
+                    self.ignore_btn, self.export_btn, self.mode_btn,
+                    self.set_in_btn, self.set_out_btn, self.reset_btn):
+            btn.setEnabled(enabled)
 
-    def _log(self, message):
-        """Show message in status label (replaces previous)."""
-        self.status_label.setText(message)
-        QApplication.processEvents()
-
-    def _animate_progress(self):
-        """Animate the analyze button text with dots."""
-        dots = "." * (self._progress_dots % 3 + 1)
-        self.analyze_btn.setText(f"Analysiere{dots}")
-        self._progress_dots += 1
+    # ── Keyboard shortcuts ───────────────────────────────────────
 
     def keyPressEvent(self, event):
-        """Handle keyboard shortcuts."""
         key = event.key()
         text = event.text()
+
+        if self.video_combo.lineEdit().hasFocus():
+            super().keyPressEvent(event)
+            return
 
         if key == Qt.Key.Key_Right:
             if self.session and self.session.peaks:
@@ -751,44 +944,47 @@ class MainWindow(QMainWindow):
                 self._on_back()
             return
 
-        # Clip editing shortcuts (use event.text() for keyboard-layout compatibility)
+        if key == Qt.Key.Key_Space:
+            if self.stack.currentIndex() == 1:
+                self._on_play_pause()
+            return
+
         if self.session and self.session.peaks:
             if text == "[":
-                # Set In-point to current video position
-                pos = self.video_preview.get_position()
-                idx = self.session.current_peak
-                self.session.adjust_clip(idx, in_ms=pos)
-                peak = self.session.peaks[idx]
-                self.video_preview.set_clip_region(
-                    peak.in_point_ms, peak.out_point_ms)
-                self._update_clip_info()
-                self.statusbar.showMessage(
-                    f"In-Point: {self._ms_to_mmss(peak.in_point_ms)}")
+                self._on_set_in()
                 return
-
             if text == "]":
-                # Set Out-point to current video position
-                pos = self.video_preview.get_position()
-                idx = self.session.current_peak
-                self.session.adjust_clip(idx, out_ms=pos)
-                peak = self.session.peaks[idx]
-                self.video_preview.set_clip_region(
-                    peak.in_point_ms, peak.out_point_ms)
-                self._update_clip_info()
-                self.statusbar.showMessage(
-                    f"Out-Point: {self._ms_to_mmss(peak.out_point_ms)}")
+                self._on_set_out()
                 return
-
-            if text == "p":
-                # Play clip from In to Out
-                self.video_preview.play_clip()
-                self.statusbar.showMessage("Playing clip...")
-                return
-
             if text == "r":
-                # Reset In/Out to default
                 self._on_clip_reset()
-                self.statusbar.showMessage("Clip reset")
                 return
 
         super().keyPressEvent(event)
+
+    # ── Clean shutdown ───────────────────────────────────────────
+
+    def closeEvent(self, event):
+        self._tick_timer.stop()
+        self.video_preview.cleanup()
+        if self._worker and self._worker.isRunning():
+            self._worker.wait(2000)
+        stop_playback()
+        event.accept()
+
+    # ── Helpers ──────────────────────────────────────────────────
+
+    @staticmethod
+    def _ms_to_hhmmss(ms):
+        total_s = ms // 1000
+        h = total_s // 3600
+        m = (total_s % 3600) // 60
+        s = total_s % 60
+        return f"{h:02d}:{m:02d}:{s:02d}"
+
+    @staticmethod
+    def _ms_to_mmss(ms):
+        seconds = ms // 1000
+        m = seconds // 60
+        s = seconds % 60
+        return f"{m:02d}:{s:02d}"
