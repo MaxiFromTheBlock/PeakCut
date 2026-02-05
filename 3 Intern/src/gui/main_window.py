@@ -11,41 +11,30 @@ from PyQt6.QtCore import Qt, QTimer, QSettings, QThread, pyqtSignal
 from .apple_style import get_stylesheet, COLORS
 from .video_preview_peak import PeakVideoPreview
 
-# Import PeakCut core modules
+# Import new core modules
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 from utils import MATERIAL_DIR, EXPORT_DIR, LUTS_DIR
-from sync import run_sync
-from peaks import (
-    run_peak_analysis, get_peaks, get_mode,
-    play_current_peak, go_back, go_forward,
-    stop_playback, switch_mode, ignore_current_peak,
-    get_current_peak_index, set_current_peak
-)
-from export import run_export
-from status import set_callback
+from core.project import PeakCutProject
+from core.session import PeakCutSession
+from core.audio import stop_playback
+from core.exporters import MP3Exporter, XMLExporter, TXTExporter
 
 
 class AnalysisWorker(QThread):
     """Background worker for sync + peak analysis."""
-    finished = pyqtSignal(list)       # peaks list
-    status_update = pyqtSignal(str)   # progress messages
-    error = pyqtSignal(str)           # error message
+    finished = pyqtSignal()            # session has all data
+    error = pyqtSignal(str)            # error message
+
+    def __init__(self, session):
+        super().__init__()
+        self.session = session
 
     def run(self):
         try:
-            # Redirect status updates to signal (thread-safe queued connection)
-            set_callback(self.status_update.emit)
-
-            self.status_update.emit("Synchronisiere...")
-            run_sync()
-
-            self.status_update.emit("Analysiere Peaks...")
-            run_peak_analysis()
-
-            peaks = get_peaks()
-            self.finished.emit(peaks)
+            self.session.analyze()
+            self.finished.emit()
         except Exception as e:
             self.error.emit(str(e))
 
@@ -59,12 +48,10 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1000, 600)
         self.resize(1200, 700)
 
-        # Track current peak locally
-        self._current_peak = 0
-        self._num_peaks = 0
-        self._is_playing = False
+        # Session (created on analyze)
+        self.session = None
 
-        # File selection state
+        # File selection state (before session exists)
         self._selected_files = []
         self._keyboard_file = None
         self._mic_files = []
@@ -80,9 +67,6 @@ class MainWindow(QMainWindow):
 
         self._setup_ui()
         self._setup_statusbar()
-
-        # Connect status updates to GUI
-        set_callback(self._on_status_update)
 
     def _setup_ui(self):
         """Setup the main UI layout."""
@@ -292,17 +276,14 @@ class MainWindow(QMainWindow):
         """Setup status bar."""
         self.statusbar = QStatusBar()
         self.setStatusBar(self.statusbar)
-        # Keep status bar empty/minimal
         self.statusbar.showMessage("")
 
     def _on_load_files(self):
         """Open file dialog for multi-file selection."""
-        # Get last used folder from settings
         last_folder = self._settings.value("last_folder", MATERIAL_DIR)
         if not os.path.exists(last_folder):
             last_folder = MATERIAL_DIR
 
-        # Open file dialog
         files, _ = QFileDialog.getOpenFileNames(
             self,
             "Dateien auswählen",
@@ -311,9 +292,8 @@ class MainWindow(QMainWindow):
         )
 
         if not files:
-            return  # User cancelled
+            return
 
-        # Save folder for next time
         if files:
             folder = os.path.dirname(files[0])
             self._settings.setValue("last_folder", folder)
@@ -336,11 +316,9 @@ class MainWindow(QMainWindow):
                 self._video_files.append(filepath)
             elif filename.endswith(('.wav', '.mp3')):
                 audio_files.append(filepath)
-                # Auto-detect keyboard track
                 if any(kw in filename for kw in ["keyboard", "keys", "klavier"]):
                     self._keyboard_file = filepath
 
-        # Separate mic files (all audio that's not keyboard)
         for f in audio_files:
             if f != self._keyboard_file:
                 self._mic_files.append(f)
@@ -349,7 +327,6 @@ class MainWindow(QMainWindow):
 
     def _update_file_display(self):
         """Update UI based on categorized files."""
-        # Build status message
         status_parts = []
 
         if self._keyboard_file:
@@ -359,11 +336,9 @@ class MainWindow(QMainWindow):
         if self._video_files:
             status_parts.append(f"{len(self._video_files)} Video(s)")
 
-        # Check if we need manual keyboard selection
         audio_files = [f for f in self._selected_files if f.lower().endswith(('.wav', '.mp3'))]
 
         if not self._keyboard_file and audio_files:
-            # Show dropdown for manual selection
             self.keyboard_combo.clear()
             self.keyboard_combo.addItem("-- Bitte wählen --", None)
             for f in audio_files:
@@ -381,7 +356,6 @@ class MainWindow(QMainWindow):
                 self.analyze_btn.setEnabled(True)
                 self._copy_files_to_material()
 
-                # Show video preview immediately (before analysis)
                 if self._video_files:
                     self.video_preview.set_videos(self._video_files)
                     self.preview_stack.setCurrentIndex(1)
@@ -396,7 +370,6 @@ class MainWindow(QMainWindow):
         filepath = self.keyboard_combo.currentData()
         if filepath:
             self._keyboard_file = filepath
-            # Update mic files (remove keyboard from list)
             self._mic_files = [f for f in self._selected_files
                              if f.lower().endswith(('.wav', '.mp3')) and f != filepath]
             self.keyboard_row.hide()
@@ -406,27 +379,22 @@ class MainWindow(QMainWindow):
         """Copy selected files to MATERIAL_DIR for processing (if not already there)."""
         import shutil
 
-        # Ensure material dir exists
         if not os.path.exists(MATERIAL_DIR):
             os.makedirs(MATERIAL_DIR)
 
-        # Check if ALL files are already in MATERIAL_DIR
         all_in_material = all(
             os.path.dirname(os.path.abspath(f)) == os.path.abspath(MATERIAL_DIR)
             for f in self._selected_files
         )
 
         if all_in_material:
-            # Files already in Material folder, don't touch anything
             return
 
-        # Files from outside - copy them (don't delete existing files)
         for filepath in self._selected_files:
             src_abs = os.path.abspath(filepath)
             dest = os.path.join(MATERIAL_DIR, os.path.basename(filepath))
             dest_abs = os.path.abspath(dest)
 
-            # Only copy if source is different from destination
             if src_abs != dest_abs:
                 shutil.copy2(filepath, dest)
 
@@ -440,36 +408,38 @@ class MainWindow(QMainWindow):
         self._progress_dots = 0
         self._progress_timer.start(400)
 
-        self._worker = AnalysisWorker()
-        self._worker.status_update.connect(self._on_analysis_status)
+        # Create project and session
+        project = PeakCutProject(MATERIAL_DIR, EXPORT_DIR)
+        project.set_files(self._keyboard_file, self._mic_files, self._video_files)
+
+        self.session = PeakCutSession(project, config.load())
+        self.session.status_update.connect(self._on_analysis_status)
+
+        # Start background worker
+        self._worker = AnalysisWorker(self.session)
         self._worker.finished.connect(self._on_analysis_complete)
         self._worker.error.connect(self._on_analysis_error)
         self._worker.start()
 
     def _on_analysis_status(self, message):
-        """Handle status updates from analysis worker."""
+        """Handle status updates from session."""
         self.statusbar.showMessage(message)
 
-    def _on_analysis_complete(self, peaks):
+    def _on_analysis_complete(self):
         """Handle completed analysis - set peaks and enable controls."""
         self._progress_timer.stop()
         self.analyze_btn.setText("Analyze")
 
-        # Restore status callback to GUI
-        set_callback(self._on_status_update)
-
+        peaks = self.session.peaks
         num_peaks = len(peaks)
 
         if num_peaks > 0:
-            self._num_peaks = num_peaks
-            self._current_peak = 0
             self._enable_playback_controls(True)
             self._update_peak_label()
-            self.mode_label.setText(f"Mode: {get_mode().upper()}")
+            self.mode_label.setText(f"Mode: {self.session.mode.upper()}")
 
-            # Set peaks on timeline
             if self._video_files:
-                self.video_preview.set_peaks(peaks, self._current_peak)
+                self.video_preview.set_peaks(peaks, self.session.current_peak)
                 self.preview_stack.setCurrentIndex(1)
                 self.statusbar.showMessage(f"{num_peaks} Peaks gefunden")
             else:
@@ -486,39 +456,31 @@ class MainWindow(QMainWindow):
         """Handle analysis errors."""
         self._progress_timer.stop()
         self.analyze_btn.setText("Analyze")
-        set_callback(self._on_status_update)
         self._log(f"Fehler: {error_msg}")
         self.statusbar.showMessage(f"Fehler: {error_msg}")
         self.analyze_btn.setEnabled(True)
         self.load_btn.setEnabled(True)
         self._worker = None
 
-    def _setup_video_preview(self, peaks):
-        """Setup video preview with peaks."""
-        # Load videos into preview
-        self.video_preview.set_videos(self._video_files)
-
-        # peaks from peaks.py are already in milliseconds
-        self.video_preview.set_peaks(peaks, self._current_peak)
-
     def _on_peak_clicked(self, peak_index):
         """Handle click on peak marker in timeline."""
-        if 0 <= peak_index < self._num_peaks:
-            self._current_peak = peak_index
-            set_current_peak(peak_index)  # Sync with peaks.py
+        if self.session and 0 <= peak_index < len(self.session.peaks):
+            self.session.set_current_peak(peak_index)
             self._update_peak_label()
-            play_current_peak()
+            self.session.play_current()
             self.statusbar.showMessage(f"Peak {peak_index + 1}")
 
     def _on_export(self):
-        """Run export."""
+        """Run export via pluggable exporters."""
         stop_playback()
         self.statusbar.showMessage("Export läuft...")
         self.export_btn.setEnabled(False)
         QApplication.processEvents()
 
         try:
-            run_export()
+            exporters = [MP3Exporter(), TXTExporter(), XMLExporter()]
+            for exporter in exporters:
+                exporter.export(self.session)
             self.statusbar.showMessage(f"Export fertig! Dateien in: {EXPORT_DIR}")
         except Exception as e:
             self.statusbar.showMessage(f"Export-Fehler: {str(e)}")
@@ -532,12 +494,15 @@ class MainWindow(QMainWindow):
 
     def _update_peak_label(self):
         """Update the peak counter label."""
-        self.peak_label.setText(f"Peak: {self._current_peak + 1} / {self._num_peaks}")
+        if self.session:
+            self.peak_label.setText(
+                f"Peak: {self.session.current_peak + 1} / {len(self.session.peaks)}")
 
     def _on_play(self):
         """Play current peak."""
-        play_current_peak()
-        self.statusbar.showMessage(f"Playing peak {self._current_peak + 1}")
+        if self.session:
+            self.session.play_current()
+            self.statusbar.showMessage(f"Playing peak {self.session.current_peak + 1}")
 
     def _on_stop(self):
         """Stop playback."""
@@ -546,41 +511,39 @@ class MainWindow(QMainWindow):
 
     def _on_back(self):
         """Go to previous peak."""
-        if self._current_peak > 0:
-            self._current_peak -= 1
-            go_back()
+        if self.session and self.session.current_peak > 0:
+            self.session.prev_peak()
             self._update_peak_label()
             self._update_video_preview_peak()
-            self.statusbar.showMessage(f"Peak {self._current_peak + 1}")
+            self.statusbar.showMessage(f"Peak {self.session.current_peak + 1}")
 
     def _on_next(self):
         """Go to next peak."""
-        if self._current_peak < self._num_peaks - 1:
-            self._current_peak += 1
-            go_forward()
+        if self.session and self.session.current_peak < len(self.session.peaks) - 1:
+            self.session.next_peak()
             self._update_peak_label()
             self._update_video_preview_peak()
-            self.statusbar.showMessage(f"Peak {self._current_peak + 1}")
+            self.statusbar.showMessage(f"Peak {self.session.current_peak + 1}")
 
     def _update_video_preview_peak(self):
         """Update video preview to show current peak."""
-        if self._video_files and self.preview_stack.currentIndex() == 1:
-            self.video_preview.set_current_peak(self._current_peak)
-            # Also seek video to peak position
-            peaks = get_peaks()
-            if peaks and self._current_peak < len(peaks):
-                self.video_preview.set_position(peaks[self._current_peak])
+        if self.session and self._video_files and self.preview_stack.currentIndex() == 1:
+            self.video_preview.set_current_peak(self.session.current_peak)
+            if self.session.peaks and self.session.current_peak < len(self.session.peaks):
+                self.video_preview.set_position(self.session.peaks[self.session.current_peak])
 
     def _on_switch(self):
         """Switch between keyboard and mic mode."""
-        switch_mode()
-        self.mode_label.setText(f"Mode: {get_mode().upper()}")
-        self.statusbar.showMessage(f"Mode: {get_mode().upper()}")
+        if self.session:
+            self.session.switch_mode()
+            self.mode_label.setText(f"Mode: {self.session.mode.upper()}")
+            self.statusbar.showMessage(f"Mode: {self.session.mode.upper()}")
 
     def _on_ignore(self):
         """Ignore current peak."""
-        ignore_current_peak()
-        self.statusbar.showMessage(f"Peak {self._current_peak + 1} ignored")
+        if self.session:
+            self.session.ignore_peak()
+            self.statusbar.showMessage(f"Peak {self.session.current_peak + 1} ignored")
 
     def _populate_lut_combo(self):
         """Fill LUT dropdown from luts/ library directory."""
@@ -589,14 +552,12 @@ class MainWindow(QMainWindow):
 
         current_lut = config.get("lut_path") or ""
 
-        # Migrate: if lut_path is a full path, copy to library
         if current_lut and os.sep in current_lut:
             self._migrate_lut_path(current_lut)
             current_lut = config.get("lut_path") or ""
 
         self.lut_combo.addItem("Kein LUT", "")
 
-        # Scan luts/ directory for .cube files
         os.makedirs(LUTS_DIR, exist_ok=True)
         lut_files = sorted(
             f for f in os.listdir(LUTS_DIR)
@@ -608,7 +569,7 @@ class MainWindow(QMainWindow):
             name = os.path.splitext(filename)[0]
             self.lut_combo.addItem(name, filename)
             if filename == current_lut:
-                selected_index = i + 1  # +1 for "Kein LUT"
+                selected_index = i + 1
 
         self.lut_combo.addItem("LUT importieren...", "__browse__")
 
@@ -643,7 +604,6 @@ class MainWindow(QMainWindow):
                 "LUT Files (*.cube);;All Files (*)"
             )
             if filepath:
-                # Copy to library
                 os.makedirs(LUTS_DIR, exist_ok=True)
                 filename = os.path.basename(filepath)
                 dest = os.path.join(LUTS_DIR, filename)
@@ -655,7 +615,6 @@ class MainWindow(QMainWindow):
                 name = os.path.splitext(filename)[0]
                 self.statusbar.showMessage(f"LUT importiert: {name}")
             else:
-                # User cancelled - revert to previous selection
                 self._populate_lut_combo()
         else:
             config.set("lut_path", data)
@@ -683,10 +642,6 @@ class MainWindow(QMainWindow):
         self.status_label.setText(message)
         QApplication.processEvents()
 
-    def _on_status_update(self, message):
-        """Callback for status.py updates."""
-        self._log(message)
-
     def _animate_progress(self):
         """Animate the analyze button text with dots."""
         dots = "." * (self._progress_dots % 3 + 1)
@@ -697,15 +652,13 @@ class MainWindow(QMainWindow):
         """Handle keyboard shortcuts."""
         key = event.key()
 
-        # Right arrow → Next
         if key == Qt.Key.Key_Right:
-            if self._num_peaks > 0:
+            if self.session and self.session.peaks:
                 self._on_next()
             return
 
-        # Left arrow → Back
         if key == Qt.Key.Key_Left:
-            if self._num_peaks > 0:
+            if self.session and self.session.peaks:
                 self._on_back()
             return
 
