@@ -17,7 +17,7 @@ PeakCut ist eine Python/PyQt6 Desktop-App für Podcast-Nachbearbeitung. Sie erke
 ```
 App/
 ├── 1 Material/          ← User Input (Audio/Video)
-├── 2 Export/            ← Output (MP3 + TXT + EDL)
+├── 2 Export/            ← Output (MP3 + TXT + XML + Screenshots)
 ├── 3 Intern/            ← Source Code
 │   ├── src/
 │   │   ├── gui/         ← PyQt6 GUI Components
@@ -80,9 +80,8 @@ src/
 │   └── lut_processor.py # LUT für Color Grading
 ├── peaks.py             # Peak Detection, Playback, Navigation
 ├── sync.py              # Video-Audio Sync (Cross-Correlation)
-├── export.py            # MP3 + TXT + EDL Export
+├── export.py            # MP3 + TXT + XML Export
 ├── config.py            # JSON Config Management
-├── screenshots.py       # Frame Extraction mit LUT
 ├── status.py            # Observer Pattern für UI
 ├── utils.py             # Pfade, Hilfsfunktionen
 └── gui.py               # Tkinter UI (Legacy)
@@ -120,7 +119,8 @@ main_pyqt.py
 2. **Sync** (`sync.py`): Extrahiert Audio aus Videos, berechnet Offsets via Cross-Correlation
 3. **Peak Analysis** (`peaks.py`): Findet Peaks über Threshold, filtert mit min_gap
 4. **Navigation**: User navigiert durch Peaks (Play/Next/Back)
-5. **Export**: MP3 mit TTS-Nummern + TXT mit Timecodes + EDL für NLE
+5. **Export**: MP3 mit TTS-Nummern + TXT mit Timecodes + FCP XML für Premiere
+6. **Screenshot**: Frame aus Video + LUT Color Grading → PNG in Export/Screenshots/
 
 ---
 
@@ -134,7 +134,9 @@ main_pyqt.py
   "preview_duration_ms": 1000,
   "context_duration_ms": 15000,
   "fps": 25,
-  "tts_voice": "Anna"
+  "tts_voice": "Anna",
+  "lut_path": "",
+  "lut_recent": []
 }
 ```
 
@@ -146,6 +148,8 @@ main_pyqt.py
 | `context_duration_ms` | 15000 | Mic-Mode Kontext (±15s) |
 | `fps` | 25 | Framerate für Timecode-Berechnung |
 | `tts_voice` | "Anna" | macOS TTS Stimme |
+| `lut_path` | "" | Aktiver LUT-Pfad (.cube Datei) |
+| `lut_recent` | [] | Zuletzt verwendete LUT-Pfade |
 
 ---
 
@@ -153,12 +157,10 @@ main_pyqt.py
 
 | Taste | Aktion |
 |-------|--------|
-| `Space` | Play/Stop |
 | `→` | Next Peak |
 | `←` | Previous Peak |
-| `S` | Switch Mode (Keyboard/Mic) |
-| `I` / `Delete` | Ignore Peak |
-| `E` | Export (MP3 + TXT + EDL) |
+
+Alle anderen Aktionen (Play, Stop, Export, Screenshot, Switch, Ignore) sind nur über Buttons erreichbar.
 
 ---
 
@@ -214,7 +216,6 @@ EOF
 
 ### Später
 - [ ] Progress Indicator mit Animation
-- [ ] LUT Integration im GUI
 
 ### Mittelfristig (V2)
 - [ ] Smart Scan: Ordner wählen, leere Spuren erkennen
@@ -230,8 +231,18 @@ EOF
 
 ## Changelog
 
+### v1.4.0-dev (2026-02-05)
+- **Screenshot mit LUT** - Frame-Capture aus Video-Preview mit Color Grading
+  - ffmpeg für Frame-Extraktion, LUTProcessor für trilineare Interpolation
+  - Speichert nach Export/Screenshots/ mit Timecode im Dateinamen
+- **LUT Dropdown** - LUT-Auswahl im GUI mit History der zuletzt verwendeten LUTs
+- **Screenshot Button** - Sichtbarer Button in der Controls-Leiste
+- **Keyboard Shortcuts entfernt** - Nur noch Pfeiltasten (←/→) für Peak-Navigation
+- **XML Sequence Name** - Heißt jetzt einfach "PeakCut" statt "PeakCut - Gastname"
+- **screenshots.py gelöscht** - Alte Logik mit nearest-neighbor LUT und MoviePy entfernt
+
 ### v1.3.0-dev (2025-02-04)
-- **EDL Export** - CMX 3600 Format für Premiere/Final Cut/DaVinci
+- **FCP XML Export** - Für Premiere Pro/Final Cut/DaVinci
   - Echte 30s Clips (±15s context_duration um jeden Peak)
   - Source IN/OUT = Position im Original-Material
   - Record IN/OUT = Position in der generierten Sequence
@@ -259,35 +270,31 @@ EOF
 
 - **macOS only** - Nutzt `say` Command für TTS
 - **Global State** - Kein Class-basiertes Design
-- **Screenshots LUT** - Unterscheidet sich von Premiere (nearest-neighbor)
 - **No Tests** - Zero Test Coverage
 
 ---
 
 ---
 
-## Session Notes (2025-02-04)
+## Session Notes (2026-02-05)
 
 ### Was wurde gemacht
-1. ✅ EDL Export implementiert mit echten 30s Clips
-2. ✅ EDL Button entfernt - Export erstellt jetzt MP3 + TXT + EDL zusammen
-3. ✅ Dokumentation konsolidiert (10 → 2 Dateien)
-4. ✅ Git aufgeräumt: feature/pyqt-migration → develop gemerged, gepusht
+1. ✅ Screenshot-Feature mit LUT (ffmpeg + LUTProcessor)
+2. ✅ LUT-Dropdown mit Recent-History im GUI
+3. ✅ Screenshot-Button in Controls-Leiste
+4. ✅ Keyboard Shortcuts entfernt (nur noch Pfeiltasten)
+5. ✅ XML Sequence Name → "PeakCut"
+6. ✅ screenshots.py gelöscht (alte Logik)
+7. ✅ Doku aktualisiert
 
 ### Was noch offen ist
-1. **EDL in Premiere testen** - Import prüfen, Workflow validieren
-2. **Threading für UI** - Nächstes Feature (UI friert bei Analyse ein)
-3. **Multiprocessing für Video-Sync** - Danach (Performance bei großen Dateien)
-
-### Bekannte Probleme
-- App lief "unruhig" beim letzten Test - Performance untersuchen
-- EDL noch nicht in Premiere getestet
+1. **Threading für UI** - Analyse blockiert UI, Rainbow Wheel
+2. **Multiprocessing für Video-Sync** - Performance bei großen Dateien
+3. **XML in Premiere testen** - Import prüfen
 
 ### Git Status
 - Branch: `develop`
-- Letzter Commit: Docs cleanup
-- Uncommitted: EDL Änderungen (noch committen!)
 
 ---
 
-*Zuletzt aktualisiert: 2025-02-04*
+*Zuletzt aktualisiert: 2026-02-05*

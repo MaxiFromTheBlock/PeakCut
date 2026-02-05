@@ -14,6 +14,7 @@ from .video_preview_peak import PeakVideoPreview
 # Import PeakCut core modules
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import config
 from utils import MATERIAL_DIR, EXPORT_DIR
 from sync import run_sync
 from peaks import (
@@ -207,7 +208,51 @@ class MainWindow(QMainWindow):
         self.ignore_btn.clicked.connect(self._on_ignore)
         controls_layout.addWidget(self.ignore_btn)
 
+        controls_layout.addSpacing(20)
+
+        self.screenshot_btn = QPushButton("Screenshot")
+        self.screenshot_btn.setEnabled(False)
+        self.screenshot_btn.clicked.connect(self._on_capture_screenshot)
+        controls_layout.addWidget(self.screenshot_btn)
+
         controls_layout.addStretch()
+
+        # LUT dropdown
+        lut_label = QLabel("LUT:")
+        lut_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        controls_layout.addWidget(lut_label)
+
+        self.lut_combo = QComboBox()
+        self.lut_combo.setMinimumWidth(160)
+        self.lut_combo.setStyleSheet(f"""
+            QComboBox {{
+                background-color: #2a2a2a;
+                border: 1px solid #3a3a3a;
+                border-radius: 6px;
+                color: #ffffff;
+                padding: 4px 8px;
+                font-size: 12px;
+            }}
+            QComboBox::drop-down {{ border: none; padding-right: 6px; }}
+            QComboBox::down-arrow {{
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 5px solid #888888;
+                margin-right: 6px;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: #2a2a2a;
+                border: 1px solid #3a3a3a;
+                color: #ffffff;
+                selection-background-color: #007AFF;
+            }}
+        """)
+        self._populate_lut_combo()
+        self.lut_combo.currentIndexChanged.connect(self._on_lut_selected)
+        controls_layout.addWidget(self.lut_combo)
+
+        controls_layout.addSpacing(20)
 
         self.mode_label = QLabel("Mode: -")
         self.mode_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
@@ -440,6 +485,7 @@ class MainWindow(QMainWindow):
         self.next_btn.setEnabled(enabled)
         self.switch_btn.setEnabled(enabled)
         self.ignore_btn.setEnabled(enabled)
+        self.screenshot_btn.setEnabled(enabled and bool(self._video_files))
 
     def _update_peak_label(self):
         """Update the peak counter label."""
@@ -493,6 +539,75 @@ class MainWindow(QMainWindow):
         ignore_current_peak()
         self.statusbar.showMessage(f"Peak {self._current_peak + 1} ignored")
 
+    def _populate_lut_combo(self):
+        """Fill LUT dropdown with recent LUTs + browse option."""
+        self.lut_combo.blockSignals(True)
+        self.lut_combo.clear()
+
+        current_lut = config.get("lut_path") or ""
+        recent_luts = config.get("lut_recent") or []
+
+        self.lut_combo.addItem("Kein LUT", "")
+
+        selected_index = 0
+        for i, path in enumerate(recent_luts):
+            name = os.path.splitext(os.path.basename(path))[0]
+            self.lut_combo.addItem(name, path)
+            if path == current_lut:
+                selected_index = i + 1  # +1 for "Kein LUT"
+
+        self.lut_combo.addItem("LUT wählen...", "__browse__")
+
+        self.lut_combo.setCurrentIndex(selected_index)
+        self.lut_combo.blockSignals(False)
+
+    def _on_lut_selected(self, index):
+        """Handle LUT selection from dropdown."""
+        data = self.lut_combo.currentData()
+        if data is None:
+            return
+
+        if data == "__browse__":
+            filepath, _ = QFileDialog.getOpenFileName(
+                self,
+                "LUT wählen",
+                os.path.expanduser("~/Downloads"),
+                "LUT Files (*.cube);;All Files (*)"
+            )
+            if filepath:
+                # Add to recent list
+                recent = config.get("lut_recent") or []
+                if filepath in recent:
+                    recent.remove(filepath)
+                recent.insert(0, filepath)
+                recent = recent[:10]  # Keep max 10
+                config.set("lut_recent", recent)
+                config.set("lut_path", filepath)
+                self._populate_lut_combo()
+                name = os.path.splitext(os.path.basename(filepath))[0]
+                self.statusbar.showMessage(f"LUT: {name}")
+            else:
+                # User cancelled - revert to previous selection
+                self._populate_lut_combo()
+        else:
+            config.set("lut_path", data)
+            if data:
+                name = os.path.splitext(os.path.basename(data))[0]
+                self.statusbar.showMessage(f"LUT: {name}")
+            else:
+                self.statusbar.showMessage("LUT deaktiviert")
+
+    def _on_capture_screenshot(self):
+        """Capture screenshot of current video frame with LUT."""
+        self.statusbar.showMessage("Screenshot wird erstellt...")
+        QApplication.processEvents()
+
+        filepath = self.video_preview.capture_screenshot()
+        if filepath:
+            self.statusbar.showMessage(f"Screenshot gespeichert: {os.path.basename(filepath)}")
+        else:
+            self.statusbar.showMessage("Screenshot fehlgeschlagen")
+
     def _log(self, message):
         """Show message in status label (replaces previous)."""
         self.status_label.setText(message)
@@ -523,17 +638,6 @@ class MainWindow(QMainWindow):
         """Handle keyboard shortcuts."""
         key = event.key()
 
-        # Space → Play/Stop toggle
-        if key == Qt.Key.Key_Space:
-            if self._num_peaks > 0:
-                if self._is_playing:
-                    self._on_stop()
-                    self._is_playing = False
-                else:
-                    self._on_play()
-                    self._is_playing = True
-            return
-
         # Right arrow → Next
         if key == Qt.Key.Key_Right:
             if self._num_peaks > 0:
@@ -544,24 +648,6 @@ class MainWindow(QMainWindow):
         if key == Qt.Key.Key_Left:
             if self._num_peaks > 0:
                 self._on_back()
-            return
-
-        # S → Switch mode
-        if key == Qt.Key.Key_S:
-            if self._num_peaks > 0:
-                self._on_switch()
-            return
-
-        # I or Delete → Ignore
-        if key in (Qt.Key.Key_I, Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
-            if self._num_peaks > 0:
-                self._on_ignore()
-            return
-
-        # E → Export
-        if key == Qt.Key.Key_E:
-            if self.export_btn.isEnabled():
-                self._on_export()
             return
 
         super().keyPressEvent(event)

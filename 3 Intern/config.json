@@ -4,5 +4,7 @@
   "preview_duration_ms": 1000,
   "context_duration_ms": 15000,
   "fps": 25,
-  "tts_voice": "Anna"
+  "tts_voice": "Anna",
+  "lut_path": "/Users/max/Downloads/Hotel Matze.cube",
+  "lut_recent": ["/Users/max/Downloads/Hotel Matze.cube"]
 }

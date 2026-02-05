@@ -1,6 +1,7 @@
 # video_preview_peak.py - PeakCut Video Preview with Peak Timeline
 
 import os
+import subprocess
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QComboBox, QSizePolicy, QFrame
@@ -261,6 +262,71 @@ class PeakVideoPreview(QWidget):
     def set_position(self, position_ms: int):
         """Set position in ms."""
         self.player.setPosition(position_ms)
+
+    def capture_screenshot(self) -> str:
+        """Capture current frame, apply LUT, save as PNG.
+
+        Returns:
+            Path to saved screenshot, or empty string on failure.
+        """
+        if not self._current_video:
+            return ""
+
+        import config
+        from utils import EXPORT_DIR
+        from lib.lut_processor import LUTProcessor
+        from PIL import Image
+        import io
+
+        # Get current position
+        position_ms = self.player.position()
+        position_s = position_ms / 1000.0
+
+        # Extract frame via ffmpeg
+        try:
+            result = subprocess.run(
+                [
+                    "ffmpeg", "-ss", str(position_s),
+                    "-i", self._current_video,
+                    "-frames:v", "1",
+                    "-f", "image2pipe", "-vcodec", "png", "pipe:1"
+                ],
+                capture_output=True, timeout=10
+            )
+            if result.returncode != 0:
+                return ""
+        except Exception:
+            return ""
+
+        # Load image from ffmpeg output
+        image = Image.open(io.BytesIO(result.stdout)).convert("RGB")
+
+        # Apply LUT if configured
+        lut_path = config.get("lut_path")
+        if lut_path and os.path.exists(lut_path):
+            lut = LUTProcessor()
+            if lut.load_cube(lut_path):
+                image = lut.apply_to_pil_image(image)
+
+        # Save to Export/Screenshots/
+        screenshots_dir = os.path.join(EXPORT_DIR, "Screenshots")
+        os.makedirs(screenshots_dir, exist_ok=True)
+
+        # Build filename: VideoName_HH-MM-SS-FF.png
+        video_name = os.path.splitext(os.path.basename(self._current_video))[0]
+        fps = config.get("fps") or 25
+        total_frames = int(position_s * fps)
+        h = total_frames // (3600 * fps)
+        m = (total_frames % (3600 * fps)) // (60 * fps)
+        s = (total_frames % (60 * fps)) // fps
+        f = total_frames % fps
+        timecode = f"{h:02d}-{m:02d}-{s:02d}-{f:02d}"
+
+        filename = f"{video_name}_{timecode}.png"
+        filepath = os.path.join(screenshots_dir, filename)
+        image.save(filepath)
+
+        return filepath
 
     def get_duration(self) -> int:
         """Get video duration in ms."""

@@ -1,5 +1,6 @@
 import os
 import subprocess
+from urllib.parse import quote
 from pydub import AudioSegment
 from status import update
 from utils import format_peak_time, MATERIAL_DIR, EXPORT_DIR, TEMP_DIR, ASSETS_DIR
@@ -148,52 +149,259 @@ def run_export():
             f.write(f"clip_start = {format_peak_time(start)}\n")
             f.write(f"clip_end = {format_peak_time(end)}\n\n")
 
-    # Also create EDL
-    run_edl_export(gastname)
+    # Also create FCP XML for Premiere Pro
+    run_xml_export(gastname)
 
-    update(f"✅ Export complete: MP3 + TXT + EDL")
+    update(f"✅ Export complete: MP3 + TXT + XML")
 
 
-def run_edl_export(gastname):
-    """Export peaks as EDL file (CMX 3600 format) with real clips."""
+def _file_url(filepath):
+    """Convert file path to file:// URL for FCP XML."""
+    abs_path = os.path.abspath(filepath)
+    encoded = quote(abs_path, safe='/:')
+    return f"file://localhost{encoded}"
+
+
+def _ms_to_frames(ms, fps):
+    """Convert milliseconds to frame count."""
+    return int(ms / 1000 * fps)
+
+
+def _parse_timecode_to_ms(tc_str, fps):
+    """Parse timecode string (HH:MM:SS:FF) to milliseconds."""
+    negative = tc_str.startswith("-")
+    tc_str = tc_str.lstrip("-")
+    parts = tc_str.split(":")
+    if len(parts) != 4:
+        return 0
+    hours, minutes, seconds, frames = map(int, parts)
+    total_ms = (hours * 3600 + minutes * 60 + seconds) * 1000 + int(frames * 1000 / fps)
+    return -total_ms if negative else total_ms
+
+
+def run_xml_export(gastname):
+    """Export peaks as FCP XML for Premiere Pro with all video + audio tracks."""
     peaks = get_peaks()
     ignored = get_ignored_peaks()
     fps = config.get("fps")
     context_duration = config.get("context_duration_ms")
+    video_offsets = get_video_offsets()
 
     if not peaks:
         return
 
-    edl_path = os.path.join(EXPORT_DIR, f"Keyboardstellen - {gastname}.edl")
+    # Find media files in MATERIAL_DIR
+    video_files = []
+    audio_files = []
+    for f in sorted(os.listdir(MATERIAL_DIR)):
+        fl = f.lower()
+        if fl.endswith(('.mp4', '.mov')):
+            video_files.append(f)
+        elif fl.endswith(('.wav', '.mp3')):
+            if not any(kw in fl for kw in ["keyboard", "keys", "klavier"]):
+                audio_files.append(f)
 
-    with open(edl_path, "w") as f:
-        f.write(f"TITLE: PeakCut Export - {gastname}\n")
-        f.write("FCM: NON-DROP FRAME\n\n")
+    # Build offset lookup (video filename → offset in ms)
+    offset_lookup = {}
+    for video_filename, offset_str in video_offsets:
+        offset_lookup[video_filename] = _parse_timecode_to_ms(offset_str, fps)
 
-        event_num = 1
-        record_position_ms = 0
+    # Filter active peaks
+    active_peaks = []
+    peak_num = 1
+    for i, peak_ms in enumerate(peaks):
+        if i not in ignored:
+            active_peaks.append((peak_num, peak_ms))
+            peak_num += 1
 
-        for i, peak_ms in enumerate(peaks):
-            if i in ignored:
-                continue
+    if not active_peaks:
+        return
 
-            # Source timecodes (in original media)
-            source_in_ms = max(0, peak_ms - context_duration)
-            source_out_ms = peak_ms + context_duration
-            clip_duration_ms = source_out_ms - source_in_ms
+    # Calculate total sequence duration in frames
+    total_frames = 0
+    for _, peak_ms in active_peaks:
+        clip_in = max(0, peak_ms - context_duration)
+        clip_out = peak_ms + context_duration
+        total_frames += _ms_to_frames(clip_out - clip_in, fps)
 
-            # Record timecodes (position in sequence)
-            record_in_ms = record_position_ms
-            record_out_ms = record_position_ms + clip_duration_ms
+    # Rate block (reused everywhere)
+    rate_block = f"""<rate><timebase>{fps}</timebase><ntsc>FALSE</ntsc></rate>"""
 
-            source_in = ms_to_timecode(source_in_ms, fps)
-            source_out = ms_to_timecode(source_out_ms, fps)
-            record_in = ms_to_timecode(record_in_ms, fps)
-            record_out = ms_to_timecode(record_out_ms, fps)
+    # Timecode block
+    tc_block = f"""<timecode>
+        {rate_block}
+        <string>00:00:00:00</string>
+        <frame>0</frame>
+        <displayformat>NDF</displayformat>
+      </timecode>"""
 
-            f.write(f"{event_num:03d}  AX       V     C        ")
-            f.write(f"{source_in} {source_out} {record_in} {record_out}\n")
-            f.write(f"* FROM CLIP NAME: Peak {event_num}\n\n")
+    xml_path = os.path.join(EXPORT_DIR, f"Keyboardstellen - {gastname}.xml")
 
-            record_position_ms = record_out_ms
-            event_num += 1
+    with open(xml_path, "w") as f:
+        # Header
+        f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
+        f.write('<!DOCTYPE xmeml>\n')
+        f.write('<xmeml version="5">\n')
+        f.write(f'  <sequence id="peakcut-sequence">\n')
+        f.write(f'    <name>PeakCut</name>\n')
+        f.write(f'    <duration>{total_frames}</duration>\n')
+        f.write(f'    {rate_block}\n')
+        f.write(f'    {tc_block}\n')
+        f.write(f'    <format>\n')
+        f.write(f'      <samplecharacteristics>\n')
+        f.write(f'        <width>3840</width>\n')
+        f.write(f'        <height>2160</height>\n')
+        f.write(f'        <pixelaspectratio>Square</pixelaspectratio>\n')
+        f.write(f'        {rate_block}\n')
+        f.write(f'      </samplecharacteristics>\n')
+        f.write(f'    </format>\n')
+        f.write(f'    <media>\n')
+
+        # === VIDEO TRACKS ===
+        f.write(f'      <video>\n')
+        f.write(f'        <format>\n')
+        f.write(f'          <samplecharacteristics>\n')
+        f.write(f'            <width>3840</width>\n')
+        f.write(f'            <height>2160</height>\n')
+        f.write(f'            <pixelaspectratio>Square</pixelaspectratio>\n')
+        f.write(f'            {rate_block}\n')
+        f.write(f'          </samplecharacteristics>\n')
+        f.write(f'        </format>\n')
+
+        for track_idx, video_file in enumerate(video_files):
+            file_id = f"file-video-{track_idx + 1}"
+            video_path = os.path.join(MATERIAL_DIR, video_file)
+            video_name = os.path.splitext(video_file)[0]
+            offset_ms = offset_lookup.get(video_file, 0)
+
+            f.write(f'        <track>\n')
+
+            record_pos = 0
+            for clip_idx, (peak_num, peak_ms) in enumerate(active_peaks):
+                clip_id = f"clipitem-v{track_idx + 1}-{clip_idx + 1}"
+                adjusted_peak = peak_ms + offset_ms
+                source_in = max(0, adjusted_peak - context_duration)
+                source_out = adjusted_peak + context_duration
+                clip_duration = source_out - source_in
+
+                source_in_f = _ms_to_frames(source_in, fps)
+                source_out_f = _ms_to_frames(source_out, fps)
+                clip_dur_f = _ms_to_frames(clip_duration, fps)
+                rec_start_f = record_pos
+                rec_end_f = record_pos + clip_dur_f
+
+                f.write(f'          <clipitem id="{clip_id}">\n')
+                f.write(f'            <name>Peak {peak_num}</name>\n')
+                f.write(f'            <duration>{clip_dur_f}</duration>\n')
+                f.write(f'            {rate_block}\n')
+                f.write(f'            <start>{rec_start_f}</start>\n')
+                f.write(f'            <end>{rec_end_f}</end>\n')
+                f.write(f'            <in>{source_in_f}</in>\n')
+                f.write(f'            <out>{source_out_f}</out>\n')
+
+                # First clip defines the file, rest reference it
+                if clip_idx == 0:
+                    f.write(f'            <file id="{file_id}">\n')
+                    f.write(f'              <name>{video_file}</name>\n')
+                    f.write(f'              <pathurl>{_file_url(video_path)}</pathurl>\n')
+                    f.write(f'              {rate_block}\n')
+                    f.write(f'              {tc_block}\n')
+                    f.write(f'              <media>\n')
+                    f.write(f'                <video>\n')
+                    f.write(f'                  <samplecharacteristics>\n')
+                    f.write(f'                    <width>3840</width>\n')
+                    f.write(f'                    <height>2160</height>\n')
+                    f.write(f'                    <pixelaspectratio>Square</pixelaspectratio>\n')
+                    f.write(f'                    {rate_block}\n')
+                    f.write(f'                  </samplecharacteristics>\n')
+                    f.write(f'                </video>\n')
+                    f.write(f'                <audio>\n')
+                    f.write(f'                  <samplecharacteristics>\n')
+                    f.write(f'                    <samplerate>48000</samplerate>\n')
+                    f.write(f'                    <depth>16</depth>\n')
+                    f.write(f'                  </samplecharacteristics>\n')
+                    f.write(f'                  <channelcount>2</channelcount>\n')
+                    f.write(f'                </audio>\n')
+                    f.write(f'              </media>\n')
+                    f.write(f'            </file>\n')
+                else:
+                    f.write(f'            <file id="{file_id}"/>\n')
+
+                f.write(f'          </clipitem>\n')
+                record_pos = rec_end_f
+
+            f.write(f'        </track>\n')
+
+        f.write(f'      </video>\n')
+
+        # === AUDIO TRACKS ===
+        f.write(f'      <audio>\n')
+        f.write(f'        <format>\n')
+        f.write(f'          <samplecharacteristics>\n')
+        f.write(f'            <samplerate>48000</samplerate>\n')
+        f.write(f'            <depth>16</depth>\n')
+        f.write(f'          </samplecharacteristics>\n')
+        f.write(f'        </format>\n')
+
+        for track_idx, audio_file in enumerate(audio_files):
+            file_id = f"file-audio-{track_idx + 1}"
+            audio_path = os.path.join(MATERIAL_DIR, audio_file)
+
+            f.write(f'        <track>\n')
+
+            record_pos = 0
+            for clip_idx, (peak_num, peak_ms) in enumerate(active_peaks):
+                clip_id = f"clipitem-a{track_idx + 1}-{clip_idx + 1}"
+                source_in = max(0, peak_ms - context_duration)
+                source_out = peak_ms + context_duration
+                clip_duration = source_out - source_in
+
+                source_in_f = _ms_to_frames(source_in, fps)
+                source_out_f = _ms_to_frames(source_out, fps)
+                clip_dur_f = _ms_to_frames(clip_duration, fps)
+                rec_start_f = record_pos
+                rec_end_f = record_pos + clip_dur_f
+
+                audio_name = os.path.splitext(audio_file)[0]
+                f.write(f'          <clipitem id="{clip_id}">\n')
+                f.write(f'            <name>{audio_name}</name>\n')
+                f.write(f'            <duration>{clip_dur_f}</duration>\n')
+                f.write(f'            {rate_block}\n')
+                f.write(f'            <start>{rec_start_f}</start>\n')
+                f.write(f'            <end>{rec_end_f}</end>\n')
+                f.write(f'            <in>{source_in_f}</in>\n')
+                f.write(f'            <out>{source_out_f}</out>\n')
+
+                if clip_idx == 0:
+                    f.write(f'            <file id="{file_id}">\n')
+                    f.write(f'              <name>{audio_file}</name>\n')
+                    f.write(f'              <pathurl>{_file_url(audio_path)}</pathurl>\n')
+                    f.write(f'              {rate_block}\n')
+                    f.write(f'              {tc_block}\n')
+                    f.write(f'              <media>\n')
+                    f.write(f'                <audio>\n')
+                    f.write(f'                  <samplecharacteristics>\n')
+                    f.write(f'                    <samplerate>48000</samplerate>\n')
+                    f.write(f'                    <depth>16</depth>\n')
+                    f.write(f'                  </samplecharacteristics>\n')
+                    f.write(f'                  <channelcount>2</channelcount>\n')
+                    f.write(f'                </audio>\n')
+                    f.write(f'              </media>\n')
+                    f.write(f'            </file>\n')
+                else:
+                    f.write(f'            <file id="{file_id}"/>\n')
+
+                f.write(f'            <sourcetrack>\n')
+                f.write(f'              <mediatype>audio</mediatype>\n')
+                f.write(f'            </sourcetrack>\n')
+                f.write(f'          </clipitem>\n')
+                record_pos = rec_end_f
+
+            f.write(f'        </track>\n')
+
+        f.write(f'      </audio>\n')
+
+        # Close
+        f.write(f'    </media>\n')
+        f.write(f'  </sequence>\n')
+        f.write(f'</xmeml>\n')

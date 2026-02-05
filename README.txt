@@ -1,5 +1,5 @@
 ===========================================
-PEAKCUT (v1.3.0)
+PEAKCUT (v1.4.0)
 ===========================================
 Automatische Clip-Extraktion für Podcast-Produktion
 
@@ -63,10 +63,10 @@ WORKFLOW
 
 5. "Ignore" für falsche Peaks
 
-6. "Export" klicken → MP3 + TXT landen in "2 Export"
+6. "Export" klicken → MP3 + TXT + XML landen in "2 Export"
    (Export enthält immer die Mic-Spuren, nicht das Keyboard-Audio)
 
-7. Optional: "Screenshots" für Thumbnails
+7. Optional: "Screenshot" Button für Frame mit LUT → landet in "2 Export/Screenshots"
 
 
 EINSTELLUNGEN
@@ -77,3 +77,4 @@ Die Datei "3 Intern/config.json" enthält alle Parameter:
 - context_duration_ms: Kontext um jeden Peak im Export (15000 = ±15s)
 - fps: Framerate für Timecodes (25)
 - tts_voice: macOS Stimme für Nummern ("Anna" = Deutsch)
+- lut_path: Pfad zur aktiven .cube LUT-Datei (über GUI wählbar)
