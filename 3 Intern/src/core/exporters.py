@@ -114,11 +114,8 @@ class MP3Exporter(BaseExporter):
     def export(self, session) -> str:
         os.makedirs(session.project.export_dir, exist_ok=True)
 
-        peaks = session.peaks
-        ignored = session.ignored_peaks
         mic_audios = session.mic_audios
         config = session.config
-        context_duration = config.get("context_duration_ms", 15000)
         voice = config.get("tts_voice", "Anna")
 
         # Get temp and assets dirs
@@ -127,23 +124,20 @@ class MP3Exporter(BaseExporter):
         temp_dir = os.path.join(intern_dir, "temp")
         assets_dir = os.path.join(intern_dir, "assets")
 
-        if not peaks or not mic_audios:
+        active_peaks = session.get_active_peaks()
+        if not active_peaks or not mic_audios:
             return ""
 
         segments = []
-        counter = 1
-        for i, t in enumerate(peaks):
-            if i in ignored:
-                continue
-            number_audio = load_spoken_number(counter, temp_dir, assets_dir, voice)
-            start = max(0, t - context_duration)
-            end = t + context_duration
+        for peak_num, peak in active_peaks:
+            number_audio = load_spoken_number(peak_num, temp_dir, assets_dir, voice)
+            start = peak.in_point_ms
+            end = peak.out_point_ms
             segment = mic_audios[0][start:end]
             for m in mic_audios[1:]:
                 segment = segment.overlay(m[start:end])
             segments.append(number_audio + AudioSegment.silent(duration=100) + segment)
             segments.append(AudioSegment.silent(duration=PAUSE_DURATION_MS))
-            counter += 1
 
         if not segments:
             return ""
@@ -169,13 +163,11 @@ class TXTExporter(BaseExporter):
     def export(self, session) -> str:
         os.makedirs(session.project.export_dir, exist_ok=True)
 
-        peaks = session.peaks
-        ignored = session.ignored_peaks
         config = session.config
-        context_duration = config.get("context_duration_ms", 15000)
         fps = config.get("fps", 25)
 
-        if not peaks:
+        active_peaks = session.get_active_peaks()
+        if not active_peaks:
             return ""
 
         gastname = extract_guest_name(session.project.material_dir)
@@ -196,17 +188,11 @@ class TXTExporter(BaseExporter):
             f.write("=" * 40 + "\n")
             f.write("KEYBOARD PEAKS\n")
             f.write("=" * 40 + "\n\n")
-            counter = 1
-            for i, t in enumerate(peaks):
-                if i in ignored:
-                    continue
-                start = max(0, t - context_duration)
-                end = t + context_duration
-                f.write(f"[PEAK {counter}]\n")
-                f.write(f"peak_time = {ms_to_timecode(t, fps)}\n")
-                f.write(f"clip_start = {ms_to_timecode(start, fps)}\n")
-                f.write(f"clip_end = {ms_to_timecode(end, fps)}\n\n")
-                counter += 1
+            for peak_num, peak in active_peaks:
+                f.write(f"[PEAK {peak_num}]\n")
+                f.write(f"peak_time = {ms_to_timecode(peak.position_ms, fps)}\n")
+                f.write(f"clip_start = {ms_to_timecode(peak.in_point_ms, fps)}\n")
+                f.write(f"clip_end = {ms_to_timecode(peak.out_point_ms, fps)}\n\n")
 
         session.status_update.emit(f"TXT exported: {os.path.basename(txt_path)}")
         return txt_path
@@ -220,14 +206,12 @@ class XMLExporter(BaseExporter):
     def export(self, session) -> str:
         os.makedirs(session.project.export_dir, exist_ok=True)
 
-        peaks = session.peaks
-        ignored = session.ignored_peaks
         config = session.config
         fps = config.get("fps", 25)
-        context_duration = config.get("context_duration_ms", 15000)
         video_offsets = session.video_offsets
 
-        if not peaks:
+        active_peaks = session.get_active_peaks()
+        if not active_peaks:
             return ""
 
         # Find media files in material_dir
@@ -246,23 +230,10 @@ class XMLExporter(BaseExporter):
         for video_filename, offset_str in video_offsets:
             offset_lookup[video_filename] = _parse_timecode_to_ms(offset_str, fps)
 
-        # Filter active peaks
-        active_peaks = []
-        peak_num = 1
-        for i, peak_ms in enumerate(peaks):
-            if i not in ignored:
-                active_peaks.append((peak_num, peak_ms))
-                peak_num += 1
-
-        if not active_peaks:
-            return ""
-
         # Calculate total sequence duration in frames
         total_frames = 0
-        for _, peak_ms in active_peaks:
-            clip_in = max(0, peak_ms - context_duration)
-            clip_out = peak_ms + context_duration
-            total_frames += _ms_to_frames(clip_out - clip_in, fps)
+        for _, peak in active_peaks:
+            total_frames += _ms_to_frames(peak.clip_duration_ms, fps)
 
         rate_block = f"""<rate><timebase>{fps}</timebase><ntsc>FALSE</ntsc></rate>"""
         tc_block = f"""<timecode>
@@ -315,11 +286,10 @@ class XMLExporter(BaseExporter):
                 f.write(f'        <track>\n')
 
                 record_pos = 0
-                for clip_idx, (peak_num, peak_ms) in enumerate(active_peaks):
+                for clip_idx, (peak_num, peak) in enumerate(active_peaks):
                     clip_id = f"clipitem-v{track_idx + 1}-{clip_idx + 1}"
-                    adjusted_peak = peak_ms + offset_ms
-                    source_in = max(0, adjusted_peak - context_duration)
-                    source_out = adjusted_peak + context_duration
+                    source_in = max(0, peak.in_point_ms + offset_ms)
+                    source_out = peak.out_point_ms + offset_ms
                     clip_duration = source_out - source_in
 
                     source_in_f = _ms_to_frames(source_in, fps)
@@ -387,10 +357,10 @@ class XMLExporter(BaseExporter):
                 f.write(f'        <track>\n')
 
                 record_pos = 0
-                for clip_idx, (peak_num, peak_ms) in enumerate(active_peaks):
+                for clip_idx, (peak_num, peak) in enumerate(active_peaks):
                     clip_id = f"clipitem-a{track_idx + 1}-{clip_idx + 1}"
-                    source_in = max(0, peak_ms - context_duration)
-                    source_out = peak_ms + context_duration
+                    source_in = peak.in_point_ms
+                    source_out = peak.out_point_ms
                     clip_duration = source_out - source_in
 
                     source_in_f = _ms_to_frames(source_in, fps)
