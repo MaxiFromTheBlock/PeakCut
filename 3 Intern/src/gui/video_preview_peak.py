@@ -1,4 +1,4 @@
-# video_preview_peak.py - PeakCut Video Preview (pure video player with LUT)
+# video_preview_peak.py - PeakCut Video Preview (video only, muted)
 
 import os
 import subprocess
@@ -16,6 +16,7 @@ class LUTWorker(QThread):
     """Worker thread for LUT frame processing off the main thread.
 
     Only processes the latest submitted frame — intermediate frames are dropped.
+    Has its OWN LUTProcessor instance to avoid thread-safety issues.
     """
     frame_ready = pyqtSignal(QImage, float)  # processed image, device pixel ratio
 
@@ -23,17 +24,26 @@ class LUTWorker(QThread):
         super().__init__(parent)
         self._mutex = QMutex()
         self._wait = QWaitCondition()
-        self._pending = None  # (QImage, QSize, float, LUTProcessor)
+        self._pending = None  # (QImage, QSize, float, lut_path)
         self._abort = False
+        # Worker owns its own LUTProcessor - thread safe
+        self._lut_processor = None
+        self._loaded_lut_path = None
 
-    def submit(self, image, target_size, dpr, lut_processor):
-        """Submit frame for processing. Drops any pending unprocessed frame."""
+    def submit(self, image, target_size, dpr, lut_path):
+        """Submit frame for processing. Drops any pending unprocessed frame.
+
+        Args:
+            lut_path: Full path to .cube file (worker loads its own copy)
+        """
         self._mutex.lock()
-        self._pending = (image, target_size, dpr, lut_processor)
+        self._pending = (image.copy(), target_size, dpr, lut_path)  # Copy image for thread safety
         self._mutex.unlock()
         self._wait.wakeOne()
 
     def run(self):
+        from lib.lut_processor import LUTProcessor
+
         while True:
             self._mutex.lock()
             while self._pending is None and not self._abort:
@@ -41,18 +51,25 @@ class LUTWorker(QThread):
             if self._abort:
                 self._mutex.unlock()
                 return
-            image, target_size, dpr, lut = self._pending
+            image, target_size, dpr, lut_path = self._pending
             self._pending = None
             self._mutex.unlock()
 
             try:
-                result = self._process(image, target_size, dpr, lut)
+                # Load LUT if needed (worker's own instance)
+                if lut_path != self._loaded_lut_path:
+                    self._lut_processor = LUTProcessor()
+                    if lut_path and os.path.exists(lut_path):
+                        self._lut_processor.load_cube(lut_path)
+                    self._loaded_lut_path = lut_path
+
+                result = self._process(image, target_size, dpr)
                 if result is not None:
                     self.frame_ready.emit(result, dpr)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"LUT processing error: {e}", file=__import__('sys').stderr)
 
-    def _process(self, image, target_size, dpr, lut):
+    def _process(self, image, target_size, dpr):
         """Scale, convert to numpy, apply LUT, return QImage."""
         image = image.scaled(
             target_size,
@@ -67,8 +84,11 @@ class LUTWorker(QThread):
         raw = np.frombuffer(ptr, dtype=np.uint8).reshape(h, bpl)
         arr = raw[:, :w * 3].reshape(h, w, 3).copy()
 
-        graded = lut.apply_fast(arr)
-        return QImage(graded.data, w, h, w * 3, QImage.Format.Format_RGB888).copy()
+        if self._lut_processor and self._lut_processor.is_loaded():
+            graded = self._lut_processor.apply_fast(arr)
+            return QImage(graded.data, w, h, w * 3, QImage.Format.Format_RGB888).copy()
+        else:
+            return QImage(arr.data, w, h, w * 3, QImage.Format.Format_RGB888).copy()
 
     def stop(self):
         self._mutex.lock()
@@ -79,7 +99,11 @@ class LUTWorker(QThread):
 
 
 class ScreenshotWorker(QThread):
-    """Async worker for capturing screenshots via ffmpeg + LUT."""
+    """Async worker for screenshots - uses ffmpeg for everything (including LUT).
+
+    This keeps all heavy processing in the ffmpeg subprocess,
+    avoiding conflicts with the main thread's LUTWorker.
+    """
     screenshot_done = pyqtSignal(str)  # filepath or "" on error
 
     def __init__(self, video_path, position_s, lut_filename, luts_dir,
@@ -95,39 +119,9 @@ class ScreenshotWorker(QThread):
         self._fps = fps
 
     def run(self):
-        try:
-            result = subprocess.run(
-                [
-                    "ffmpeg", "-ss", str(self._position_s),
-                    "-i", self._video_path,
-                    "-frames:v", "1",
-                    "-f", "image2pipe", "-vcodec", "png", "pipe:1"
-                ],
-                capture_output=True, timeout=10
-            )
-            if result.returncode != 0:
-                self.screenshot_done.emit("")
-                return
-        except Exception:
-            self.screenshot_done.emit("")
-            return
-
-        from PIL import Image
-        import io
-        image = Image.open(io.BytesIO(result.stdout)).convert("RGB")
-
-        # Apply LUT
-        if self._lut_filename:
-            lut_path = os.path.join(self._luts_dir, self._lut_filename)
-            if os.path.exists(lut_path):
-                from lib.lut_processor import LUTProcessor
-                lut = LUTProcessor()
-                if lut.load_cube(lut_path):
-                    image = lut.apply_to_pil_image(image)
-
         os.makedirs(self._output_dir, exist_ok=True)
 
-        # Build filename
+        # Build output filename
         if self._camera_name:
             filename = f"{self._camera_name} {self._counter}.jpg"
         else:
@@ -141,14 +135,39 @@ class ScreenshotWorker(QThread):
             filename = f"{video_name}_{timecode}.jpg"
 
         filepath = os.path.join(self._output_dir, filename)
-        image.save(filepath, "JPEG", quality=95)
-        self.screenshot_done.emit(filepath)
+
+        # Build ffmpeg command
+        cmd = [
+            "ffmpeg", "-y",  # Overwrite output
+            "-ss", str(self._position_s),  # Seek before input (fast)
+            "-i", self._video_path,
+            "-frames:v", "1",
+        ]
+
+        # Add LUT filter if configured
+        if self._lut_filename:
+            lut_path = os.path.join(self._luts_dir, self._lut_filename)
+            if os.path.exists(lut_path):
+                cmd.extend(["-vf", f"lut3d='{lut_path}'"])
+
+        # Output as high-quality JPEG
+        cmd.extend(["-q:v", "2", filepath])
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, timeout=30)
+            if result.returncode == 0 and os.path.exists(filepath):
+                self.screenshot_done.emit(filepath)
+            else:
+                self.screenshot_done.emit("")
+        except Exception:
+            self.screenshot_done.emit("")
 
 
 class PeakVideoPreview(QWidget):
-    """Pure video player widget with LUT support.
+    """Video player widget with LUT support.
 
-    No embedded timeline — that's handled externally by PeakStrip/ClipTimeline.
+    Video plays MUTED - audio sync with mix is handled separately.
+    No embedded timeline — that's handled externally by ClipTimeline/ScrubTimeline.
     """
 
     position_changed = pyqtSignal(int)  # position in ms
@@ -161,13 +180,16 @@ class PeakVideoPreview(QWidget):
 
         self._video_files = []
         self._current_video = None
+        self._current_video_index = 0
         self._duration_ms = 0
         self._is_seeking = False
 
-        # LUT state
-        self._lut_processor = None
-        self._lut_loaded_filename = None
-        self._last_frame = None
+        # Session reference (for video offsets)
+        self._session = None
+        self._video_offset_ms = 0
+
+        # LUT state (main thread no longer needs LUTProcessor - worker has its own)
+        self._last_frame_image = None  # Stored as QImage copy for refresh_lut()
 
         # Clip playback state
         self._clip_playback_active = False
@@ -210,6 +232,7 @@ class PeakVideoPreview(QWidget):
     def _setup_player(self):
         self.player = QMediaPlayer()
         self.audio_output = QAudioOutput()
+        self.audio_output.setMuted(True)  # MUTED - no camera audio
         self.player.setAudioOutput(self.audio_output)
 
         self.video_sink = QVideoSink()
@@ -220,47 +243,42 @@ class PeakVideoPreview(QWidget):
         self.player.positionChanged.connect(self._on_position_changed)
         self.player.errorOccurred.connect(self._on_error)
 
-    def _ensure_lut(self):
+    def _get_lut_path(self):
+        """Get the current LUT file path (or None if disabled)."""
         import config
         from utils import LUTS_DIR
-        from lib.lut_processor import LUTProcessor
 
         lut_filename = config.get("lut_path") or ""
-        if lut_filename == self._lut_loaded_filename:
-            return
-        self._lut_loaded_filename = lut_filename
-
         if not lut_filename:
-            self._lut_processor = None
-            return
+            return None
 
         lut_full_path = os.path.join(LUTS_DIR, lut_filename)
         if os.path.exists(lut_full_path):
-            proc = LUTProcessor()
-            if proc.load_cube(lut_full_path):
-                self._lut_processor = proc
-            else:
-                self._lut_processor = None
-        else:
-            self._lut_processor = None
+            return lut_full_path
+        return None
 
     def _on_video_frame(self, frame):
         if not frame.isValid():
             return
-        self._last_frame = frame
 
         image = frame.toImage()
         if image.isNull():
             return
 
-        self._ensure_lut()
+        # Store a COPY of the image, not the frame
+        # QVideoFrame is only valid during this callback - storing it causes crashes
+        self._last_frame_image = image.copy()
 
-        if self._lut_processor and self._lut_processor.is_loaded():
+        lut_path = self._get_lut_path()
+
+        if lut_path:
+            # Send to worker thread for LUT processing (worker has its own LUTProcessor)
             dpr = self.video_label.devicePixelRatioF()
             logical = self.video_label.size()
             target = QSize(int(logical.width() * dpr), int(logical.height() * dpr))
-            self._lut_worker.submit(image, target, dpr, self._lut_processor)
+            self._lut_worker.submit(image, target, dpr, lut_path)
         else:
+            # No LUT - display directly
             self.video_label.setPixmap(QPixmap.fromImage(image))
 
     def _on_lut_frame_ready(self, image, dpr):
@@ -270,19 +288,51 @@ class PeakVideoPreview(QWidget):
 
     def refresh_lut(self):
         """Re-apply LUT to current frame (call after LUT selection change)."""
-        self._lut_loaded_filename = None
-        if self._last_frame and self._last_frame.isValid():
-            self._on_video_frame(self._last_frame)
+        # Re-process the stored image copy with new LUT setting
+        if hasattr(self, '_last_frame_image') and self._last_frame_image and not self._last_frame_image.isNull():
+            lut_path = self._get_lut_path()
+            if lut_path:
+                dpr = self.video_label.devicePixelRatioF()
+                logical = self.video_label.size()
+                target = QSize(int(logical.width() * dpr), int(logical.height() * dpr))
+                # Pass empty string to force worker to reload LUT
+                self._lut_worker.submit(self._last_frame_image.copy(), target, dpr, lut_path)
+            else:
+                self.video_label.setPixmap(QPixmap.fromImage(self._last_frame_image))
+
+    # --- Session & Offset ---
+
+    def set_session(self, session):
+        """Set session for video offset access."""
+        self._session = session
+        self._update_video_offset()
+
+    def _update_video_offset(self):
+        """Update offset for current video."""
+        if self._session and self._current_video:
+            self._video_offset_ms = self._session.get_video_offset_ms(self._current_video)
+        else:
+            self._video_offset_ms = 0
+
+    def _mix_to_video_ms(self, mix_ms: int) -> int:
+        """Convert mix audio position to video position (apply offset)."""
+        return max(0, mix_ms + self._video_offset_ms)
+
+    def _video_to_mix_ms(self, video_ms: int) -> int:
+        """Convert video position to mix audio position (remove offset)."""
+        return video_ms - self._video_offset_ms
 
     # --- Video loading ---
 
     def set_videos(self, video_files: list):
         self._video_files = video_files
         if video_files:
+            self._current_video_index = 0
             self._load_video(video_files[0])
 
     def load_video_at_index(self, index: int):
         if 0 <= index < len(self._video_files):
+            self._current_video_index = index
             path = self._video_files[index]
             name = self._camera_names.get(path, "")
             self._load_video(path)
@@ -291,6 +341,7 @@ class PeakVideoPreview(QWidget):
 
     def _load_video(self, filepath: str):
         self._current_video = filepath
+        self._update_video_offset()
         self.player.setSource(QUrl.fromLocalFile(filepath))
         self.player.play()
         QTimer.singleShot(50, self._show_first_frame)
@@ -314,24 +365,29 @@ class PeakVideoPreview(QWidget):
     # --- Playback ---
 
     def play_from(self, in_ms: int, out_ms: int):
-        """Play video from in_ms, stop at out_ms."""
+        """Play video from in_ms, stop at out_ms. Positions are in MIX coordinates."""
+        # Store out point in MIX coordinates for comparison
         self._clip_out_ms = out_ms
         self._clip_playback_active = True
         if self._duration_ms > 0:
-            self.player.setPosition(in_ms)
+            # Convert mix position to video position
+            video_in = self._mix_to_video_ms(in_ms)
+            self.player.setPosition(video_in)
             self.player.play()
         else:
-            # Video not ready yet — defer until duration is known
+            # Video not ready yet — defer until duration is known (store MIX coordinates)
             self._deferred_play = (in_ms, out_ms)
 
     def _try_deferred_play(self):
         """Execute deferred play_from after video loads."""
         if hasattr(self, '_deferred_play') and self._deferred_play:
-            in_ms, out_ms = self._deferred_play
+            in_ms, out_ms = self._deferred_play  # MIX coordinates
             self._deferred_play = None
-            self._clip_out_ms = out_ms
+            self._clip_out_ms = out_ms  # Keep in MIX coordinates
             self._clip_playback_active = True
-            self.player.setPosition(in_ms)
+            # Convert mix position to video position
+            video_in = self._mix_to_video_ms(in_ms)
+            self.player.setPosition(video_in)
             self.player.play()
 
     def play(self):
@@ -359,10 +415,13 @@ class PeakVideoPreview(QWidget):
         return self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
 
     def get_position(self) -> int:
-        return self.player.position()
+        """Get current position in MIX coordinates."""
+        return self._video_to_mix_ms(self.player.position())
 
     def set_position(self, position_ms: int):
-        self.player.setPosition(position_ms)
+        """Set position using MIX coordinates."""
+        video_pos = self._mix_to_video_ms(position_ms)
+        self.player.setPosition(video_pos)
 
     def get_duration(self) -> int:
         return self._duration_ms
@@ -375,18 +434,23 @@ class PeakVideoPreview(QWidget):
         self._try_deferred_play()
 
     def _on_position_changed(self, position: int):
+        """Handle position change from player. position is in VIDEO coordinates."""
         if not self._is_seeking:
-            self.position_changed.emit(position)
-            # Stop at out-point during clip playback
-            if self._clip_playback_active and position >= self._clip_out_ms:
+            # Convert video position to mix position for external consumers
+            mix_position = self._video_to_mix_ms(position)
+            self.position_changed.emit(mix_position)
+            # Stop at out-point during clip playback (compare in MIX coordinates)
+            if self._clip_playback_active and mix_position >= self._clip_out_ms:
                 self._clip_playback_active = False
                 self.player.pause()
-                self.player.setPosition(self._clip_out_ms)
+                # Seek to exact out point in VIDEO coordinates
+                video_out = self._mix_to_video_ms(self._clip_out_ms)
+                self.player.setPosition(video_out)
 
     def _on_error(self, error):
         print(f"Video error: {error}, {self.player.errorString()}")
 
-    # --- Async Screenshot ---
+    # --- Screenshot ---
 
     def capture_screenshot_async(self, camera_name: str = ""):
         """Start async screenshot capture. Emits screenshot_done when finished."""
@@ -423,7 +487,10 @@ class PeakVideoPreview(QWidget):
 
     def _on_screenshot_done(self, filepath):
         self.screenshot_done.emit(filepath)
-        self._screenshot_worker = None
+        # Use deleteLater for proper QThread cleanup
+        if self._screenshot_worker:
+            self._screenshot_worker.deleteLater()
+            self._screenshot_worker = None
 
     # --- Cleanup ---
 

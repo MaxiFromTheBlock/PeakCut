@@ -20,7 +20,11 @@ def cleanup_temp(temp_dir):
 def extract_audio_from_video(video_path, output_path):
     """Extract audio track from video file."""
     clip = VideoFileClip(video_path)
-    clip.audio.write_audiofile(output_path, codec='pcm_s16le')
+    try:
+        # logger=None suppresses MoviePy's stdout output that breaks JSON parsing
+        clip.audio.write_audiofile(output_path, codec='pcm_s16le', logger=None)
+    finally:
+        clip.close()  # CRITICAL: Prevent file handle leaks and zombie ffmpeg processes
 
 
 def load_audio_as_array(path):
@@ -31,11 +35,21 @@ def load_audio_as_array(path):
     return data, samplerate
 
 
-def calculate_offset(reference, target):
-    """Calculate offset between reference and target audio via cross-correlation."""
-    corr = correlate(target, reference, mode='full')
-    lag = np.argmax(corr) - len(reference) + 1
-    return lag
+def calculate_offset(reference, target, downsample_factor=10):
+    """Calculate offset between reference and target audio via cross-correlation.
+
+    Uses downsampling to prevent memory explosion on long audio files.
+    A 1-hour file at 48kHz would otherwise need ~2.7GB RAM for correlation.
+    """
+    # Downsample to reduce memory usage (10x = 270MB instead of 2.7GB)
+    ref_ds = reference[::downsample_factor]
+    target_ds = target[::downsample_factor]
+
+    corr = correlate(target_ds, ref_ds, mode='full')
+    lag = np.argmax(corr) - len(ref_ds) + 1
+
+    # Scale back to original sample rate
+    return lag * downsample_factor
 
 
 def format_offset(offset_seconds, fps=25):

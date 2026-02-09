@@ -33,13 +33,15 @@ def play_audio(segment):
     try:
         sa.stop_all()
         sa.play_buffer(raw, 1, 2, 44100)
-    except Exception:
-        pass
+    except Exception as e:
+        import sys
+        print(f"Audio playback error: {e}", file=sys.stderr)
 
 
 def stop_playback():
     """Stop all audio playback."""
     try:
         sa.stop_all()
-    except Exception:
-        pass
+    except Exception as e:
+        import sys
+        print(f"Stop playback error: {e}", file=sys.stderr)

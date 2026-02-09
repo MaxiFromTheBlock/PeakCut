@@ -4,6 +4,29 @@ Das zentrale Entwickler-Dokument für PeakCut. Enthält alles was Claude Code (u
 
 ---
 
+## ⚠️ AKTUELLER STATUS (2026-02-06)
+
+**ACHTUNG: Uncommitted Changes!**
+
+Die App wurde radikal vereinfacht nach einer Debug-Session mit vielen Crashes.
+
+**Aktueller Stand:**
+- UI vereinfacht: Welcome → Analyse (warten) → Peak Review
+- Analyse läuft in separatem Subprocess (`core/analysis_process.py`)
+- Screenshots-Feature temporär entfernt
+- Clip-Editing-Feature temporär entfernt
+- Audio-Video-Sync noch nicht perfekt
+
+**Siehe:** `DEV_NOTES_2026-02-06.md` für alle Details der Debug-Session.
+
+**Nächste Schritte:**
+1. Testen ob Export (MP3/TXT/XML) funktioniert
+2. Audio-Sync verbessern
+3. Wenn stabil → committen
+4. Optional: Screenshots/Clip-Editing sauber neu bauen
+
+---
+
 ## Project Overview
 
 PeakCut ist eine Python/PyQt6 Desktop-App für Podcast-Nachbearbeitung. Sie erkennt Keyboard-Peaks (Fußpedal-Marker) in Audioaufnahmen und exportiert nummerierte Clips mit Timecodes.

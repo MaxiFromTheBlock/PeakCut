@@ -114,6 +114,9 @@ class MP3Exporter(BaseExporter):
     def export(self, session) -> str:
         os.makedirs(session.project.export_dir, exist_ok=True)
 
+        # Ensure audio is loaded (lazy loading after subprocess analysis)
+        session.load_audio_lazy()
+
         mic_audios = session.mic_audios
         config = session.config
         voice = config.get("tts_voice", "Anna")

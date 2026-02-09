@@ -35,6 +35,7 @@ class PeakCutSession(QObject):
 
         # Sync data
         self.video_offsets: list[tuple[str, str]] = []
+        self._offset_lookup_ms: dict[str, int] = {}  # video filename -> offset in ms
 
     def analyze(self):
         """Run sync + peak detection. Populates peaks, audio, and offsets."""
@@ -58,6 +59,10 @@ class PeakCutSession(QObject):
                     fps=self.config.get("fps", 25),
                     status_fn=self.status_update.emit
                 )
+                # Build offset lookup for quick access
+                fps = self.config.get("fps", 25)
+                for video_filename, offset_str in self.video_offsets:
+                    self._offset_lookup_ms[video_filename] = self._parse_timecode_to_ms(offset_str, fps)
                 self.status_update.emit(
                     f"Sync complete. {len(self.video_offsets)} offset(s) ready.")
 
@@ -113,6 +118,12 @@ class PeakCutSession(QObject):
         if self.current_peak >= len(self.peaks):
             return
 
+        # Ensure audio is loaded (lazy loading after subprocess analysis)
+        self.load_audio_lazy()
+
+        if not self.keyboard_audio:
+            return
+
         peak = self.peaks[self.current_peak]
         time_ms = peak.position_ms
         preview_duration = self.config.get("preview_duration_ms", 1000)
@@ -122,6 +133,8 @@ class PeakCutSession(QObject):
         else:
             start = peak.in_point_ms
             end = peak.out_point_ms
+            if not self.mic_audios:
+                return
             segment = self.mic_audios[0][start:end]
             for audio in self.mic_audios[1:]:
                 segment = segment.overlay(audio[start:end])
@@ -171,3 +184,78 @@ class PeakCutSession(QObject):
             ctx = self.config.get("context_duration_ms", 15000)
             self.peaks[index].reset_offsets(ctx)
             self.clip_adjusted.emit(index)
+
+    def get_video_offset_ms(self, video_path: str) -> int:
+        """Get offset in ms for a video file. Returns 0 if not found."""
+        filename = os.path.basename(video_path)
+        return self._offset_lookup_ms.get(filename, 0)
+
+    def load_analysis_results(self, results: dict):
+        """Load analysis results from subprocess.
+
+        Args:
+            results: Dict with 'peaks' (list of peak dicts) and 'video_offsets' (list of tuples)
+        """
+        # Load video offsets
+        self.video_offsets = results.get("video_offsets", [])
+        fps = self.config.get("fps", 25)
+        for video_filename, offset_str in self.video_offsets:
+            self._offset_lookup_ms[video_filename] = self._parse_timecode_to_ms(offset_str, fps)
+
+        # Load peaks
+        peak_data = results.get("peaks", [])
+        self.peaks = []
+        for p in peak_data:
+            peak = Peak(
+                index=p["index"],
+                position_ms=p["position_ms"],
+                context_ms=p.get("context_ms", self.config.get("context_duration_ms", 15000))
+            )
+            if p.get("in_point_ms") is not None:
+                peak.set_in_point(p["in_point_ms"])
+            if p.get("out_point_ms") is not None:
+                peak.set_out_point(p["out_point_ms"])
+            if p.get("ignored"):
+                peak.ignored = True
+            self.peaks.append(peak)
+
+        self.current_peak = 0
+        self.mode = "keyboard"
+
+        # Emit signal
+        self.peaks_found.emit([p.position_ms for p in self.peaks])
+
+    def load_audio_lazy(self):
+        """Load audio segments on demand (after analysis results are loaded)."""
+        if self.keyboard_audio is None and self.project.keyboard_track:
+            self.status_update.emit("Lade Audio...")
+            self.keyboard_audio = AudioSegment.from_file(self.project.keyboard_track)
+            self.mic_audios = [AudioSegment.from_file(f) for f in self.project.mic_tracks]
+            self.status_update.emit("Audio geladen")
+
+    def get_mix_audio(self) -> 'AudioSegment | None':
+        """Get the mixed mic audio for playback."""
+        # Ensure audio is loaded
+        self.load_audio_lazy()
+
+        if not self.mic_audios:
+            return None
+        if len(self.mic_audios) == 1:
+            return self.mic_audios[0]
+        # Mix all mic tracks
+        mixed = self.mic_audios[0]
+        for audio in self.mic_audios[1:]:
+            mixed = mixed.overlay(audio)
+        return mixed
+
+    @staticmethod
+    def _parse_timecode_to_ms(tc_str: str, fps: int) -> int:
+        """Parse timecode string (HH:MM:SS:FF) to milliseconds."""
+        negative = tc_str.startswith("-")
+        tc_str = tc_str.lstrip("-")
+        parts = tc_str.split(":")
+        if len(parts) != 4:
+            return 0
+        hours, minutes, seconds, frames = map(int, parts)
+        total_ms = (hours * 3600 + minutes * 60 + seconds) * 1000 + int(frames * 1000 / fps)
+        return -total_ms if negative else total_ms
