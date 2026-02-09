@@ -3,7 +3,6 @@ LUT Processor - Loads and applies .cube LUT files to images
 Correctly handles the .cube file format where R varies fastest
 """
 import numpy as np
-from PIL import Image
 from pathlib import Path
 
 
@@ -212,45 +211,6 @@ class LUTProcessor:
                + image[:, :, 2])
         return self._flat_lookup[idx.ravel()].reshape(h, w, 3)
 
-    def apply_to_pil_image(self, image: Image.Image) -> Image.Image:
-        """
-        Apply the loaded LUT to a PIL Image.
-
-        Args:
-            image: Input PIL Image
-
-        Returns:
-            PIL Image with LUT applied
-        """
-        if self.lut_data is None:
-            return image
-
-        # Convert to RGB if necessary
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
-
-        # Apply LUT (uses lookup table if available)
-        img_array = np.array(image)
-        result_array = self.apply_fast(img_array)
-
-        return Image.fromarray(result_array)
-
     def is_loaded(self) -> bool:
         """Check if a LUT is currently loaded."""
         return self.lut_data is not None
-
-    def get_lut_name(self) -> str:
-        """Get the name of the loaded LUT file."""
-        if self.lut_path:
-            return Path(self.lut_path).stem
-        return ""
-
-    def clear(self):
-        """Clear the loaded LUT."""
-        self.lut_data = None
-        self.lut_size = 0
-        self.lut_path = None
-        self.domain_min = np.array([0.0, 0.0, 0.0])
-        self.domain_max = np.array([1.0, 1.0, 1.0])
-        self._lookup_table = None
-        self._flat_lookup = None

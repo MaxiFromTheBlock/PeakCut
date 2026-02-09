@@ -11,16 +11,15 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFrame, QStatusBar, QFileDialog,
     QApplication, QComboBox, QStackedWidget, QInputDialog,
-    QProgressBar
 )
-from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal
 
-from .apple_style import get_stylesheet, COLORS
+from .apple_style import COLORS, get_stylesheet
 from .video_preview_peak import PeakVideoPreview
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
-from utils import MATERIAL_DIR, EXPORT_DIR, LUTS_DIR
+from utils import MATERIAL_DIR, EXPORT_DIR, LUTS_DIR, TEMP_DIR
 from core.project import PeakCutProject
 from core.session import PeakCutSession
 from core.audio import stop_playback
@@ -47,8 +46,7 @@ class AnalysisWorker(QThread):
             "mic_tracks": project.mic_tracks,
             "videos": project.videos,
             "reference_track": project.get_reference_track(),
-            "temp_dir": os.path.join(os.path.dirname(os.path.dirname(
-                os.path.dirname(os.path.abspath(__file__)))), "temp"),
+            "temp_dir": TEMP_DIR,
             "export_dir": project.export_dir,
             "config": cfg
         }
@@ -505,7 +503,7 @@ class MainWindow(QMainWindow):
     def _on_lut_changed(self, index):
         data = self.lut_combo.currentData()
         if data is not None:
-            config.set("lut_path", data)
+            config.set_value("lut_path", data)
             self.video_preview.refresh_lut()
 
     # ══════════════════════════════════════════════════════════════

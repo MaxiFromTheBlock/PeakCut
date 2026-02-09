@@ -344,7 +344,9 @@ class PeakVideoPreview(QWidget):
         self._update_video_offset()
         self.player.setSource(QUrl.fromLocalFile(filepath))
         self.player.play()
-        QTimer.singleShot(50, self._show_first_frame)
+        # Delay before pausing to allow first frame to render
+        _FIRST_FRAME_DELAY_MS = 100
+        QTimer.singleShot(_FIRST_FRAME_DELAY_MS, self._show_first_frame)
         self.video_changed.emit(filepath)
 
     def _show_first_frame(self):

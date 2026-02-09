@@ -1,15 +1,19 @@
 import os
+import sys
 import subprocess
 from abc import ABC, abstractmethod
 from urllib.parse import quote
 
 from pydub import AudioSegment
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils import TEMP_DIR, ASSETS_DIR, parse_timecode_to_ms
+
 
 PAUSE_DURATION_MS = 500
 
 
-# --- Helper functions (extracted from export.py) ---
+# --- Helper functions ---
 
 def ms_to_timecode(ms, fps):
     """Convert milliseconds to SMPTE timecode HH:MM:SS:FF"""
@@ -83,16 +87,38 @@ def _ms_to_frames(ms, fps):
     return int(ms / 1000 * fps)
 
 
-def _parse_timecode_to_ms(tc_str, fps):
-    """Parse timecode string (HH:MM:SS:FF) to milliseconds."""
-    negative = tc_str.startswith("-")
-    tc_str = tc_str.lstrip("-")
-    parts = tc_str.split(":")
-    if len(parts) != 4:
-        return 0
-    hours, minutes, seconds, frames = map(int, parts)
-    total_ms = (hours * 3600 + minutes * 60 + seconds) * 1000 + int(frames * 1000 / fps)
-    return -total_ms if negative else total_ms
+def _probe_video_info(video_path):
+    """Probe video file for resolution using ffprobe. Returns (width, height) or (3840, 2160) as fallback."""
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height",
+             "-of", "csv=p=0", video_path],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            parts = result.stdout.strip().split(",")
+            if len(parts) >= 2:
+                return int(parts[0]), int(parts[1])
+    except Exception:
+        pass
+    return 3840, 2160
+
+
+def _probe_audio_info(audio_path):
+    """Probe audio file for sample rate using ffprobe. Returns sample_rate or 48000 as fallback."""
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-select_streams", "a:0",
+             "-show_entries", "stream=sample_rate",
+             "-of", "csv=p=0", audio_path],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return int(result.stdout.strip())
+    except Exception:
+        pass
+    return 48000
 
 
 # --- Exporter base class ---
@@ -121,19 +147,13 @@ class MP3Exporter(BaseExporter):
         config = session.config
         voice = config.get("tts_voice", "Anna")
 
-        # Get temp and assets dirs
-        intern_dir = os.path.dirname(os.path.dirname(os.path.dirname(
-            os.path.abspath(__file__))))
-        temp_dir = os.path.join(intern_dir, "temp")
-        assets_dir = os.path.join(intern_dir, "assets")
-
         active_peaks = session.get_active_peaks()
         if not active_peaks or not mic_audios:
             return ""
 
         segments = []
         for peak_num, peak in active_peaks:
-            number_audio = load_spoken_number(peak_num, temp_dir, assets_dir, voice)
+            number_audio = load_spoken_number(peak_num, TEMP_DIR, ASSETS_DIR, voice)
             start = peak.in_point_ms
             end = peak.out_point_ms
             segment = mic_audios[0][start:end]
@@ -231,7 +251,18 @@ class XMLExporter(BaseExporter):
         # Build offset lookup (video filename -> offset in ms)
         offset_lookup = {}
         for video_filename, offset_str in video_offsets:
-            offset_lookup[video_filename] = _parse_timecode_to_ms(offset_str, fps)
+            offset_lookup[video_filename] = parse_timecode_to_ms(offset_str, fps)
+
+        # Probe media info from first available files
+        vid_w, vid_h = 3840, 2160
+        if video_files:
+            first_video = os.path.join(session.project.material_dir, video_files[0])
+            vid_w, vid_h = _probe_video_info(first_video)
+
+        sample_rate = 48000
+        if audio_files:
+            first_audio = os.path.join(session.project.material_dir, audio_files[0])
+            sample_rate = _probe_audio_info(first_audio)
 
         # Calculate total sequence duration in frames
         total_frames = 0
@@ -262,8 +293,8 @@ class XMLExporter(BaseExporter):
             f.write(f'    {tc_block}\n')
             f.write(f'    <format>\n')
             f.write(f'      <samplecharacteristics>\n')
-            f.write(f'        <width>3840</width>\n')
-            f.write(f'        <height>2160</height>\n')
+            f.write(f'        <width>{vid_w}</width>\n')
+            f.write(f'        <height>{vid_h}</height>\n')
             f.write(f'        <pixelaspectratio>Square</pixelaspectratio>\n')
             f.write(f'        {rate_block}\n')
             f.write(f'      </samplecharacteristics>\n')
@@ -274,8 +305,8 @@ class XMLExporter(BaseExporter):
             f.write(f'      <video>\n')
             f.write(f'        <format>\n')
             f.write(f'          <samplecharacteristics>\n')
-            f.write(f'            <width>3840</width>\n')
-            f.write(f'            <height>2160</height>\n')
+            f.write(f'            <width>{vid_w}</width>\n')
+            f.write(f'            <height>{vid_h}</height>\n')
             f.write(f'            <pixelaspectratio>Square</pixelaspectratio>\n')
             f.write(f'            {rate_block}\n')
             f.write(f'          </samplecharacteristics>\n')
@@ -319,15 +350,15 @@ class XMLExporter(BaseExporter):
                         f.write(f'              <media>\n')
                         f.write(f'                <video>\n')
                         f.write(f'                  <samplecharacteristics>\n')
-                        f.write(f'                    <width>3840</width>\n')
-                        f.write(f'                    <height>2160</height>\n')
+                        f.write(f'                    <width>{vid_w}</width>\n')
+                        f.write(f'                    <height>{vid_h}</height>\n')
                         f.write(f'                    <pixelaspectratio>Square</pixelaspectratio>\n')
                         f.write(f'                    {rate_block}\n')
                         f.write(f'                  </samplecharacteristics>\n')
                         f.write(f'                </video>\n')
                         f.write(f'                <audio>\n')
                         f.write(f'                  <samplecharacteristics>\n')
-                        f.write(f'                    <samplerate>48000</samplerate>\n')
+                        f.write(f'                    <samplerate>{sample_rate}</samplerate>\n')
                         f.write(f'                    <depth>16</depth>\n')
                         f.write(f'                  </samplecharacteristics>\n')
                         f.write(f'                  <channelcount>2</channelcount>\n')
@@ -391,7 +422,7 @@ class XMLExporter(BaseExporter):
                         f.write(f'              <media>\n')
                         f.write(f'                <audio>\n')
                         f.write(f'                  <samplecharacteristics>\n')
-                        f.write(f'                    <samplerate>48000</samplerate>\n')
+                        f.write(f'                    <samplerate>{sample_rate}</samplerate>\n')
                         f.write(f'                    <depth>16</depth>\n')
                         f.write(f'                  </samplecharacteristics>\n')
                         f.write(f'                  <channelcount>2</channelcount>\n')

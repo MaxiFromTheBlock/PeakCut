@@ -2,6 +2,7 @@
 
 import os
 import json
+import threading
 
 # Config file path
 INTERN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -19,31 +20,38 @@ DEFAULTS = {
 }
 
 _config = None
+_lock = threading.Lock()
 
 
 def load():
     """Load config from file, create with defaults if missing."""
     global _config
 
-    if os.path.exists(CONFIG_PATH):
-        try:
-            with open(CONFIG_PATH, 'r') as f:
-                _config = json.load(f)
-            # Add any missing keys from defaults
-            for key, value in DEFAULTS.items():
-                if key not in _config:
-                    _config[key] = value
-        except Exception:
+    with _lock:
+        if os.path.exists(CONFIG_PATH):
+            try:
+                with open(CONFIG_PATH, 'r') as f:
+                    _config = json.load(f)
+                for key, value in DEFAULTS.items():
+                    if key not in _config:
+                        _config[key] = value
+            except Exception:
+                _config = DEFAULTS.copy()
+        else:
             _config = DEFAULTS.copy()
-    else:
-        _config = DEFAULTS.copy()
-        save()
+            _save_unlocked()
 
-    return _config
+        return _config.copy()
 
 
 def save():
     """Save current config to file."""
+    with _lock:
+        _save_unlocked()
+
+
+def _save_unlocked():
+    """Save without acquiring lock (caller must hold _lock)."""
     global _config
     if _config is None:
         _config = DEFAULTS.copy()
@@ -53,17 +61,19 @@ def save():
 
 
 def get(key):
-    """Get a config value."""
+    """Get a config value (thread-safe)."""
     global _config
-    if _config is None:
-        load()
-    return _config.get(key, DEFAULTS.get(key))
+    with _lock:
+        if _config is None:
+            load()
+        return _config.get(key, DEFAULTS.get(key))
 
 
-def set(key, value):
-    """Set a config value and save."""
+def set_value(key, value):
+    """Set a config value and save (thread-safe)."""
     global _config
-    if _config is None:
-        load()
-    _config[key] = value
-    save()
+    with _lock:
+        if _config is None:
+            _config = DEFAULTS.copy()
+        _config[key] = value
+        _save_unlocked()

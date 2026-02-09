@@ -1,14 +1,13 @@
-# utils.py - shared helpers
+# utils.py - shared helpers and path constants
 
 import os
-import config
 
 # Directory structure:
 # App/
 #   1 Material/
 #   2 Export/
-#   3 Intern/             ← INTERN_DIR
-#     src/                ← this file lives here
+#   3 Intern/             <- INTERN_DIR
+#     src/                <- this file lives here
 #     assets/
 #     temp/
 
@@ -25,14 +24,13 @@ ASSETS_DIR = os.path.join(INTERN_DIR, "assets")
 LUTS_DIR = os.path.join(INTERN_DIR, "luts")
 
 
-def format_peak_time(ms, fps=None):
-    """Convert milliseconds to timecode HH:MM:SS:FF"""
-    if fps is None:
-        fps = config.get("fps")
-    total_seconds = ms / 1000
-    total_frames = int(total_seconds * fps)
-    hours = total_frames // (3600 * fps)
-    minutes = (total_frames % (3600 * fps)) // (60 * fps)
-    seconds = (total_frames % (60 * fps)) // fps
-    frames = total_frames % fps
-    return f"{hours:02d}:{minutes:02d}:{seconds:02d}:{frames:02d}"
+def parse_timecode_to_ms(tc_str: str, fps: int) -> int:
+    """Parse timecode string (HH:MM:SS:FF) to milliseconds."""
+    negative = tc_str.startswith("-")
+    tc_str = tc_str.lstrip("-")
+    parts = tc_str.split(":")
+    if len(parts) != 4:
+        return 0
+    hours, minutes, seconds, frames = map(int, parts)
+    total_ms = (hours * 3600 + minutes * 60 + seconds) * 1000 + int(frames * 1000 / fps)
+    return -total_ms if negative else total_ms

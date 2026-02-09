@@ -436,34 +436,3 @@ def get_stylesheet():
         color: {COLORS['text_primary']};
     }}
     '''
-
-
-def get_video_preview_style():
-    """Return stylesheet for video preview area."""
-    return f'''
-        background-color: #000000;
-        border-radius: 8px;
-    '''
-
-
-def get_frame_thumbnail_style(selected=False):
-    """Return stylesheet for frame thumbnails."""
-    if selected:
-        return f'''
-            QFrame {{
-                background-color: {COLORS['bg_primary']};
-                border: 2px solid {COLORS['accent_blue']};
-                border-radius: 8px;
-            }}
-        '''
-    return f'''
-        QFrame {{
-            background-color: {COLORS['bg_primary']};
-            border: 1px solid {COLORS['border_light']};
-            border-radius: 8px;
-        }}
-        QFrame:hover {{
-            border-color: {COLORS['accent_blue']};
-            border-width: 2px;
-        }}
-    '''
