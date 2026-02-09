@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QFrame, QStatusBar, QFileDialog,
     QApplication, QComboBox, QStackedWidget, QInputDialog,
 )
-from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer
 
 from .apple_style import COLORS, get_stylesheet
 from .video_preview_peak import PeakVideoPreview
@@ -22,7 +22,7 @@ import config
 from utils import MATERIAL_DIR, EXPORT_DIR, LUTS_DIR, TEMP_DIR
 from core.project import PeakCutProject
 from core.session import PeakCutSession
-from core.audio import stop_playback
+from core.audio import stop_playback, is_playing
 from core.exporters import MP3Exporter, XMLExporter, TXTExporter
 
 
@@ -123,6 +123,12 @@ class MainWindow(QMainWindow):
 
         self.session = None
         self._worker = None
+        self._is_playing = False
+
+        # Playback poll timer
+        self._play_timer = QTimer()
+        self._play_timer.setInterval(200)
+        self._play_timer.timeout.connect(self._poll_playback)
 
         # File state
         self._keyboard_file = None
@@ -278,6 +284,13 @@ class MainWindow(QMainWindow):
         self.ignore_btn.clicked.connect(self._on_ignore)
         controls.addWidget(self.ignore_btn)
 
+        controls.addSpacing(20)
+
+        # Mode toggle
+        self.mode_btn = QPushButton("Mode")
+        self.mode_btn.clicked.connect(self._on_mode_toggle)
+        controls.addWidget(self.mode_btn)
+
         controls.addStretch()
 
         # Peak counter
@@ -285,13 +298,11 @@ class MainWindow(QMainWindow):
         self.peak_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 16px;")
         controls.addWidget(self.peak_label)
 
-        controls.addSpacing(20)
+        controls.addStretch()
 
-        # Mode toggle (KB/MIC)
-        self.mode_btn = QPushButton("KB")
-        self.mode_btn.setMaximumWidth(50)
-        self.mode_btn.clicked.connect(self._on_mode_toggle)
-        controls.addWidget(self.mode_btn)
+        self.screenshot_btn = QPushButton("Screenshot")
+        self.screenshot_btn.clicked.connect(self._on_screenshot)
+        controls.addWidget(self.screenshot_btn)
 
         controls.addSpacing(20)
 
@@ -413,6 +424,7 @@ class MainWindow(QMainWindow):
         if self._video_files:
             self.video_preview.set_videos(self._video_files)
             self.video_preview.set_session(self.session)
+            self.video_preview.screenshot_done.connect(self._on_screenshot_done)
 
         # Populate LUT combo
         self._populate_lut_combo()
@@ -459,6 +471,7 @@ class MainWindow(QMainWindow):
 
         # Play audio
         self.session.play_current()
+        self._start_play_state()
 
     def _on_back(self):
         if self.session and self.session.current_peak > 0:
@@ -469,8 +482,28 @@ class MainWindow(QMainWindow):
             self._navigate_to_peak(self.session.current_peak + 1)
 
     def _on_play(self):
-        if self.session:
+        if not self.session:
+            return
+        if self._is_playing:
+            stop_playback()
+            self._stop_play_state()
+        else:
             self.session.play_current()
+            self._start_play_state()
+
+    def _start_play_state(self):
+        self._is_playing = True
+        self.play_btn.setText("■ Stop")
+        self._play_timer.start()
+
+    def _stop_play_state(self):
+        self._is_playing = False
+        self.play_btn.setText("▶ Play")
+        self._play_timer.stop()
+
+    def _poll_playback(self):
+        if not is_playing():
+            self._stop_play_state()
 
     def _on_ignore(self):
         if not self.session:
@@ -485,8 +518,30 @@ class MainWindow(QMainWindow):
     def _on_mode_toggle(self):
         if self.session:
             self.session.switch_mode()
-            self.mode_btn.setText("KB" if self.session.mode == "keyboard" else "MIC")
+            mode_name = "Keyboard" if self.session.mode == "keyboard" else "Mikrofon"
+            self.statusbar.showMessage(f"Mode: {mode_name}")
             self.session.play_current()
+            self._start_play_state()
+
+    # ══════════════════════════════════════════════════════════════
+    # Screenshot
+    # ══════════════════════════════════════════════════════════════
+
+    def _on_screenshot(self):
+        if not self._video_files:
+            self.statusbar.showMessage("Keine Videos geladen")
+            return
+        camera_name = self.camera_combo.currentText()
+        self.screenshot_btn.setEnabled(False)
+        self.statusbar.showMessage("Screenshot wird erstellt...")
+        self.video_preview.capture_screenshot_async(camera_name)
+
+    def _on_screenshot_done(self, filepath):
+        self.screenshot_btn.setEnabled(True)
+        if filepath:
+            self.statusbar.showMessage(f"Screenshot: {os.path.basename(filepath)}")
+        else:
+            self.statusbar.showMessage("Screenshot fehlgeschlagen")
 
     # ══════════════════════════════════════════════════════════════
     # Camera & LUT
@@ -552,6 +607,8 @@ class MainWindow(QMainWindow):
             self._on_play()
         elif key == Qt.Key.Key_I or event.text() == 'i':
             self._on_ignore()
+        elif key == Qt.Key.Key_S or event.text() == 's':
+            self._on_screenshot()
         else:
             super().keyPressEvent(event)
 
@@ -560,6 +617,7 @@ class MainWindow(QMainWindow):
     # ══════════════════════════════════════════════════════════════
 
     def closeEvent(self, event):
+        self._play_timer.stop()
         if hasattr(self, 'video_preview'):
             self.video_preview.cleanup()
 

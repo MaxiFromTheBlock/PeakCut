@@ -68,7 +68,7 @@ src/
 │   ├── project.py             # PeakCutProject - Datei-Abstraktion
 │   ├── session.py             # PeakCutSession - State Management + Qt Signals
 │   ├── peak.py                # Peak Datenmodell (position_ms, in/out points, bounds)
-│   ├── audio.py               # Peak Detection + Audio Playback (pydub + simpleaudio)
+│   ├── audio.py               # Peak Detection + Audio Playback + State Tracking (pydub + simpleaudio)
 │   ├── sync.py                # Video-Audio Sync (Cross-Correlation)
 │   ├── analysis_process.py    # Standalone subprocess for analysis (avoids MoviePy/Qt conflicts)
 │   └── exporters.py           # MP3/XML/TXT Exporter (ffprobe for runtime media info)
@@ -179,14 +179,13 @@ Status-Updates laufen über `session.status_update` Signal + stderr vom Subproce
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│ [Keyboard][Mic] Kamera:[▼ name] LUT:[▼]             │ ← Top-Bar
+│ Kamera:[▼ name]  LUT:[▼]                            │ ← Top-Bar
 │ ┌──────────────────────────────────────────────────┐ │
 │ │                                                  │ │
 │ │              VIDEO PLAYER                        │ │
 │ │                                                  │ │
 │ └──────────────────────────────────────────────────┘ │
-│ Peak Info: In/Out Labels + Duration                  │ ← Clip Info
-│ [◀][▶] [Play] | [Ignore] | KB/Mic | 3/47 | [Export] │ ← Toolbar
+│ [◀][Play/Stop][▶] | [Ignore] [Mode] Peak 3/47 [Screenshot] [Export] │
 │                Statusbar                             │ ← Statusbar
 └──────────────────────────────────────────────────────┘
 ```
@@ -202,10 +201,9 @@ Status-Updates laufen über `session.status_update` Signal + stderr vom Subproce
 
 ### Kamera-Namen
 
-- `video_combo` ist **editierbar** — Kamera-Wähler und Name-Eingabe
-- Default-Name: Dateiname ohne Extension (z.B. "C0001" für "C0001.MP4")
-- Namen werden in `_camera_names` dict gespeichert
-- Screenshots nutzen den Kamera-Namen: "Matze 1.jpg", "Matze 2.jpg"
+- `camera_combo` — Kamera-Wähler (Dropdown)
+- Default-Name: Dateiname ohne Extension (z.B. "MV_20260126_7798" für "MV_20260126_7798.MP4")
+- Screenshots nutzen den Kamera-Namen: "{name} 1.jpg", "{name} 2.jpg"
 
 ---
 
@@ -242,8 +240,9 @@ Status-Updates laufen über `session.status_update` Signal + stderr vom Subproce
 |-------|--------|---------|
 | `→` | Next Peak | Review-Page |
 | `←` | Previous Peak | Review-Page |
-| `Space` | Play / Pause | Review-Page |
+| `Space` | Play / Stop | Review-Page |
 | `I` | Ignore Peak | Review-Page |
+| `S` | Screenshot | Review-Page |
 
 Shortcuts sind nur auf der Review-Page aktiv (Page Index 2).
 
@@ -275,16 +274,18 @@ develop  ← Aktive Entwicklung (hier arbeiten)
 
 ## TODO
 
-### Aktuell offen (Priorität)
-- [ ] **UX-Review mit Designer** — Gesamtlayout, Workflows, Interaktionsmuster
+### Nächste Schritte — Modulare Production Suite
+PeakCut entwickelt sich von einem Peak-Detection-Tool zu einer modularen Production Suite mit eigenständigen Modulen:
+
+- [ ] **Smart Scan** — Ordner analysieren, Dateien automatisch erkennen/zuordnen (unabhängig von Namenskonventionen)
+- [ ] **Create Mix** — Mix aus erkannten Spuren erstellen
+- [ ] **Screenshots** — Eigene Seite mit Video-Scrubbing, Kamera-Benennung, Frame-Export
+- [ ] **Kamera-Namen editierbar** — Camera-Combo editierbar machen für Screenshot-Dateinamen
+
+### Offen
 - [ ] **Multiprocessing für Video-Sync** — Sync ist langsam bei großen Dateien
 - [ ] EDL/XML in Premiere testen — Format validieren
-
-### Mittelfristig
-- [ ] Smart Scan: Ordner wählen statt einzelne Dateien
 - [ ] Undo/Redo für Clip-Editing
-- [ ] Profile System
-- [ ] Batch Processing (Session pro Projekt)
 - [ ] Test Coverage aufbauen
 
 ### Langfristig (V4)
@@ -295,6 +296,16 @@ develop  ← Aktive Entwicklung (hier arbeiten)
 ---
 
 ## Changelog
+
+### v2.3.0 (2026-02-09) — Play/Stop Toggle, Screenshot Button, Toolbar Redesign
+
+- **Play/Stop Toggle**: Play-Button wechselt zu "■ Stop" während Playback, automatisch zurück bei Ende
+- **Playback State Tracking**: `audio.py` trackt `_current_playback`, neue `is_playing()` Funktion
+- **QTimer Polling** (200ms): Erkennt wenn Playback natürlich endet, resettet Button-State
+- **Screenshot Button**: Async Screenshots via ffmpeg + LUT direkt aus der Review-Page
+- **Keyboard Shortcut `S`**: Screenshot auf der Review-Page
+- **Toolbar Redesign**: `[◀][Play/Stop][▶] | [Ignorieren] [Mode] Peak X/Y [Screenshot] [Export]`
+- **Mode-Button**: Zeigt "Mode" statt "KB"/"MIC", aktueller Modus in Statusbar
 
 ### v2.2.0-dev (2026-02-09) — Health Check & Stabilisierung
 
@@ -313,7 +324,7 @@ develop  ← Aktive Entwicklung (hier arbeiten)
 - project.py: `scan()` Methode
 - apple_style.py: `get_video_preview_style()`, `get_frame_thumbnail_style()`
 - lut_processor.py: `apply_to_pil_image()`, `get_lut_name()`, `clear()`, PIL Import
-- main_window.py: Unused Imports (QProgressBar, QTimer, get_stylesheet)
+- main_window.py: Unused Imports (QProgressBar, get_stylesheet)
 
 **Code-Konsolidierung:**
 - `parse_timecode_to_ms()` aus session.py + exporters.py → shared in `utils.py`
@@ -365,4 +376,4 @@ develop  ← Aktive Entwicklung (hier arbeiten)
 
 ---
 
-*Zuletzt aktualisiert: 2026-02-09*
+*Zuletzt aktualisiert: 2026-02-09 (v2.3.0)*

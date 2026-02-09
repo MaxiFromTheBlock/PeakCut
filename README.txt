@@ -1,5 +1,5 @@
 ===========================================
-PEAKCUT (v1.4.0)
+PEAKCUT (v2.3.0)
 ===========================================
 Automatische Clip-Extraktion für Podcast-Produktion
 
@@ -8,7 +8,7 @@ FÜR MAX (Entwickler)
 --------------------
 
 PeakCut starten:
-    source ~/Desktop/PeakCut/App/"3 Intern"/venv311/bin/activate && python ~/Desktop/PeakCut/App/"3 Intern"/src/main.py
+    cd ~/Desktop/PeakCut/App && "./3 Intern/venv311/bin/python" "./3 Intern/src/main_pyqt.py"
 
 Mit Claude Code weiterarbeiten:
     cd ~/Desktop/PeakCut/App && claude
@@ -35,7 +35,7 @@ Download: https://www.python.org/downloads/
 
 4. PeakCut starten:
 
-    cd ~/Desktop/PeakCut/App && source "3 Intern/venv311/bin/activate" && python "3 Intern/src/main.py"
+    cd ~/Desktop/PeakCut/App && "./3 Intern/venv311/bin/python" "./3 Intern/src/main_pyqt.py"
 
 
 
@@ -57,16 +57,18 @@ WORKFLOW
 
 2. PeakCut starten
 
-3. "Analyze" klicken → erkennt Peaks
+3. "Import Files" klicken → Dateien wählen → Analyse startet automatisch
 
-4. Mit Play/Next/Back die Peaks durchhören
+4. Mit Play/Next/Back die Peaks durchhören (Play wird zu Stop während Playback)
 
 5. "Ignore" für falsche Peaks
 
-6. "Export" klicken → MP3 + TXT + XML landen in "2 Export"
-   (Export enthält immer die Mic-Spuren, nicht das Keyboard-Audio)
+6. "Mode" wechselt zwischen Keyboard- und Mikrofon-Vorschau
 
-7. Optional: "Screenshot" Button für Frame mit LUT → landet in "2 Export/Screenshots"
+7. "Screenshot" für Frame-Export mit LUT → landet in "2 Export/{Gastname} - Screenshots"
+
+8. "Export" klicken → MP3 + TXT + XML landen in "2 Export"
+   (Export enthält immer die Mic-Spuren, nicht das Keyboard-Audio)
 
 
 EINSTELLUNGEN
