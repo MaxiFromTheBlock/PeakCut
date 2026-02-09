@@ -274,18 +274,54 @@ develop  ← Aktive Entwicklung (hier arbeiten)
 
 ## TODO
 
-### Nächste Schritte — Modulare Production Suite
-PeakCut entwickelt sich von einem Peak-Detection-Tool zu einer modularen Production Suite mit eigenständigen Modulen:
+### V3 Vision — Modulare Production Suite
 
-- [ ] **Smart Scan** — Ordner analysieren, Dateien automatisch erkennen/zuordnen (unabhängig von Namenskonventionen)
-- [ ] **Create Mix** — Mix aus erkannten Spuren erstellen
-- [ ] **Screenshots** — Eigene Seite mit Video-Scrubbing, Kamera-Benennung, Frame-Export
-- [ ] **Kamera-Namen editierbar** — Camera-Combo editierbar machen für Screenshot-Dateinamen
+PeakCut entwickelt sich von einem Peak-Detection-Tool zu einer modularen Production Suite.
+Die Welcome-Page wird zum **Hub**, von dem aus einzelne Module gestartet werden.
+Alle Module teilen sich ein gemeinsames Projekt (Dateien, Offsets, Config).
 
-### Offen
+```
+┌─────────────────────────────────────┐
+│           PEAKCUT HUB               │
+│                                     │
+│  [Smart Scan]  → Projekt erstellen  │
+│  [Create Mix]  → Mix aus Spuren     │
+│  [Peaks]       → Peak Detection     │
+│  [Screenshots] → Frame Export       │
+└─────────────────────────────────────┘
+         ↑ alle teilen sich ↑
+      ein gemeinsames Projekt
+      (Dateien, Offsets, Config)
+```
+
+#### Module
+
+| Modul | Beschreibung | Status |
+|-------|-------------|--------|
+| **Smart Scan** | Ordner analysieren, Dateien automatisch erkennen/zuordnen (Keyboard, Mics, Videos, Reference/Mix). Unabhängig von Namenskonventionen. Ersetzt den aktuellen manuellen Import-Flow. | Konzept |
+| **Create Mix** | Mix aus erkannten Spuren erstellen. Details noch offen: Einfaches Zusammenlegen? Lautstärke-Anpassung? Stereo-Mix? | Konzept |
+| **Peaks** | Peak Detection + Review + Export. Existiert bereits als Kern-Feature. | Vorhanden |
+| **Screenshots** | Eigene Page mit Video-Scrubbing (Timeline/Slider), Kamera-Benennung (editierbar), Frame-Export mit LUT. Unabhängig von Peaks navigierbar. | Teilweise (Button vorhanden, eigene Page fehlt) |
+
+#### Offene Architektur-Fragen
+
+1. **Smart Scan als Einstiegspunkt?** — Muss man immer erst scannen, bevor andere Module verfügbar sind? Oder kann man auch direkt Dateien reinwerfen (wie jetzt)?
+2. **Create Mix — Was genau?** — Alle Mic-Spuren + Keyboard zu einem Stereo-Mix? Mit Lautstärke-Kontrolle? Oder simples Zusammenlegen?
+3. **Modul-Abhängigkeiten** — Welche Module brauchen welche Vorbedingungen? (z.B. Screenshots brauchen Video-Sync, Peaks brauchen Audio-Analyse)
+4. **Shared State** — Wie teilen sich Module den Projekt-State? Erweiterte `PeakCutSession`? Oder neues `Project`-Objekt als zentrale Datenschicht?
+
+#### Umsetzungsreihenfolge (Vorschlag)
+
+1. Smart Scan (Fundament für alles)
+2. Create Mix
+3. Peaks (Refactor: eigene Page statt linearer Flow)
+4. Screenshots (eigene Page mit Video-Scrubbing)
+
+### Offen (aktuelles Release)
 - [ ] **Multiprocessing für Video-Sync** — Sync ist langsam bei großen Dateien
 - [ ] EDL/XML in Premiere testen — Format validieren
 - [ ] Undo/Redo für Clip-Editing
+- [ ] Kamera-Namen editierbar — Camera-Combo editierbar machen
 - [ ] Test Coverage aufbauen
 
 ### Langfristig (V4)
