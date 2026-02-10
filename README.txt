@@ -50,14 +50,15 @@ ORDNERSTRUKTUR
 
 WORKFLOW
 --------
-1. Dateien in "1 Material" legen:
+1. PeakCut starten
+
+2. "Import Files" klicken → Dateien wählen:
    - Keyboard-Audio (Dateiname muss "keyboard", "keys" oder "klavier" enthalten)
    - Mix-Audio (Dateiname muss "mix" enthalten)
    - Videos (.mp4/.mov) - optional
+   Falls Keyboard nicht automatisch erkannt → Dialog zur Auswahl
 
-2. PeakCut starten
-
-3. "Import Files" klicken → Dateien wählen → Analyse startet automatisch
+3. Analyse startet automatisch
 
 4. Mit Play/Next/Back die Peaks durchhören (Play wird zu Stop während Playback)
 
@@ -69,6 +70,15 @@ WORKFLOW
 
 8. "Export" klicken → MP3 + TXT + XML landen in "2 Export"
    (Export enthält immer die Mic-Spuren, nicht das Keyboard-Audio)
+
+
+TASTATURKÜRZEL
+--------------
+→         Nächster Peak
+←         Vorheriger Peak
+Leertaste Play / Stop
+I         Peak ignorieren
+S         Screenshot
 
 
 EINSTELLUNGEN

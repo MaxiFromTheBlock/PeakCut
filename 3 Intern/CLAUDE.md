@@ -4,6 +4,22 @@ Das zentrale Entwickler-Dokument für PeakCut. Enthält alles was Claude Code (u
 
 ---
 
+## Zusammenarbeit mit Claude
+
+Claude ist **technischer Partner**, nicht nur Ausführer.
+
+- **Mitdenken** — Bedenken äußern, bessere Wege vorschlagen
+- **Qualitätsanspruch** — Zaha-Hadid-Niveau, kein Baumhaus
+- **Max' Rücken sein** — Architektur-Entscheidungen hinterfragen, Risiken aufzeigen
+
+Wenn Claude eine Idee von Max bekommt:
+1. Ist das ein etabliertes Pattern? → sagen
+2. Gibt es einen besseren Weg? → vorschlagen
+3. Gibt es Risiken? → warnen
+4. Overengineered? → simpler vorschlagen
+
+---
+
 ## Project Overview
 
 PeakCut ist eine Python/PyQt6 Desktop-App für Podcast-Nachbearbeitung. Sie erkennt Keyboard-Peaks (Fußpedal-Marker) in Audioaufnahmen und exportiert nummerierte Clips mit Timecodes.
@@ -16,22 +32,22 @@ PeakCut ist eine Python/PyQt6 Desktop-App für Podcast-Nachbearbeitung. Sie erke
 
 ```
 App/
-├── 1 Material/          ← User Input (Audio/Video)
-├── 2 Export/            ← Output (MP3 + TXT + XML + Screenshots)
-├── 3 Intern/            ← Source Code
+├── 1 Material/              ← User Input (Audio/Video)
+├── 2 Export/                 ← Output (MP3 + TXT + XML + Screenshots)
+├── 3 Intern/                 ← Source Code
 │   ├── src/
-│   │   ├── core/        ← Core Logic (Klassen-basiert)
-│   │   ├── gui/         ← PyQt6 GUI Components
-│   │   └── lib/         ← External Libraries
+│   │   ├── core/             ← Core Logic (Klassen-basiert)
+│   │   ├── gui/              ← PyQt6 GUI Components
+│   │   └── lib/              ← External Libraries
 │   ├── assets/
-│   │   ├── pictures/    ← Icons, Logos
-│   │   └── zahlen/      ← TTS Fallback MP3s
-│   ├── luts/            ← LUT Library (.cube Dateien)
-│   ├── config.json      ← User Settings
+│   │   ├── pictures/         ← Icons, Logos
+│   │   └── zahlen/           ← TTS Fallback MP3s
+│   ├── luts/                 ← LUT Library (.cube Dateien)
+│   ├── config.json           ← User Settings
 │   ├── requirements.txt
-│   ├── venv311/         ← Virtual Environment
-│   └── CLAUDE.md        ← Diese Datei
-└── README.txt           ← User Quick Start
+│   ├── venv311/              ← Virtual Environment
+│   └── CLAUDE.md             ← Diese Datei
+└── README.txt                ← User Quick Start
 ```
 
 ---
@@ -61,23 +77,23 @@ rm -rf "./3 Intern/venv311"
 
 ```
 src/
-├── main_pyqt.py              # PyQt6 Entry Point (Single-Instance Lock via fcntl)
-├── config.py                  # JSON Config Management (thread-safe, lazy-loaded)
-├── utils.py                   # Path constants + shared helpers (parse_timecode_to_ms)
+├── main_pyqt.py               # PyQt6 Entry Point (Single-Instance Lock via fcntl)
+├── config.py                   # JSON Config Management (thread-safe, lazy-loaded)
+├── utils.py                    # Path constants + shared helpers (parse_timecode_to_ms)
 ├── core/
-│   ├── project.py             # PeakCutProject - Datei-Abstraktion
-│   ├── session.py             # PeakCutSession - State Management + Qt Signals
-│   ├── peak.py                # Peak Datenmodell (position_ms, in/out points, bounds)
-│   ├── audio.py               # Peak Detection + Audio Playback + State Tracking (pydub + simpleaudio)
-│   ├── sync.py                # Video-Audio Sync (Cross-Correlation)
-│   ├── analysis_process.py    # Standalone subprocess for analysis (avoids MoviePy/Qt conflicts)
-│   └── exporters.py           # MP3/XML/TXT Exporter (ffprobe for runtime media info)
+│   ├── project.py              # PeakCutProject — Datei-Abstraktion
+│   ├── session.py              # PeakCutSession — State Management + Qt Signals
+│   ├── peak.py                 # Peak Datenmodell (position_ms, in/out points, bounds)
+│   ├── audio.py                # Peak Detection + Audio Playback + State Tracking (pydub + simpleaudio)
+│   ├── sync.py                 # Video-Audio Sync (Cross-Correlation)
+│   ├── analysis_process.py     # Standalone subprocess for analysis (avoids MoviePy/Qt conflicts)
+│   └── exporters.py            # MP3/XML/TXT Exporter (ffprobe for runtime media info)
 ├── gui/
-│   ├── main_window.py         # Hauptfenster: 3-Page UI (Welcome → Analysis → Review)
-│   ├── apple_style.py         # macOS Dark-Theme Stylesheet (COLORS dict, get_stylesheet())
-│   └── video_preview_peak.py  # Video-Player: QMediaPlayer + LUT + Async Screenshots
+│   ├── main_window.py          # Hauptfenster: 3-Page UI (Welcome → Analysis → Review)
+│   ├── apple_style.py          # macOS Dark-Theme Stylesheet (COLORS dict, get_stylesheet())
+│   └── video_preview_peak.py   # Video-Player: QMediaPlayer + LUT + Async Screenshots
 └── lib/
-    └── lut_processor.py       # LUT Trilinear Interpolation + Pre-computed 256³ Lookup (numpy)
+    └── lut_processor.py        # LUT Trilinear Interpolation + Pre-computed 256³ Lookup (numpy)
 ```
 
 ### Core Classes
@@ -122,8 +138,8 @@ utils.py
 ```
 main_pyqt.py
   └── gui/main_window.py
-        ├── gui/apple_style.py        (COLORS dict, get_stylesheet())
-        ├── gui/video_preview_peak.py  (PeakVideoPreview — Player + LUT + Screenshots)
+        ├── gui/apple_style.py          (COLORS dict, get_stylesheet())
+        ├── gui/video_preview_peak.py   (PeakVideoPreview — Player + LUT + Screenshots)
         │     └── lib/lut_processor.py
         ├── core/project.py
         ├── core/session.py
@@ -179,14 +195,14 @@ Status-Updates laufen über `session.status_update` Signal + stderr vom Subproce
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│ Kamera:[▼ name]  LUT:[▼]                            │ ← Top-Bar
+│ Kamera:[▼ name]   LUT:[▼]                           │ ← Top-Bar
 │ ┌──────────────────────────────────────────────────┐ │
 │ │                                                  │ │
-│ │              VIDEO PLAYER                        │ │
+│ │                VIDEO PLAYER                      │ │
 │ │                                                  │ │
 │ └──────────────────────────────────────────────────┘ │
 │ [◀][Play/Stop][▶] | [Ignore] [Mode] Peak 3/47 [Screenshot] [Export] │
-│                Statusbar                             │ ← Statusbar
+│                     Statusbar                        │ ← Statusbar
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -272,62 +288,136 @@ develop  ← Aktive Entwicklung (hier arbeiten)
 
 ---
 
-## TODO
+## V3 Vision — Modulare Production Suite
 
-### V3 Vision — Modulare Production Suite
+### Architektur-Prinzip
 
-PeakCut entwickelt sich von einem Peak-Detection-Tool zu einer modularen Production Suite.
-Die Welcome-Page wird zum **Hub**, von dem aus einzelne Module gestartet werden.
-Alle Module teilen sich ein gemeinsames Projekt (Dateien, Offsets, Config).
+Module kommunizieren über **Dateien**, nicht über Code. Jedes Modul ist einzeln testbar und änderbar. Keine Race Conditions, keine geteilten RAM-Daten zwischen Modulen.
 
 ```
-┌─────────────────────────────────────┐
-│           PEAKCUT HUB               │
-│                                     │
-│  [Smart Scan]  → Projekt erstellen  │
-│  [Create Mix]  → Mix aus Spuren     │
-│  [Peaks]       → Peak Detection     │
-│  [Screenshots] → Frame Export       │
-└─────────────────────────────────────┘
-         ↑ alle teilen sich ↑
-      ein gemeinsames Projekt
-      (Dateien, Offsets, Config)
+┌─────────────────────────────────────────────────────────┐
+│                      PEAKCUT HUB                        │
+│                                                         │
+│  [Smart Scan] → [Create Mix] → [Peaks] → [Screenshots] │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+                   Material-Ordner/
+                     .peakcut/         ← Versteckter Ordner für PeakCut-Daten
+                       scan.json       ← Smart Scan Ergebnis
+                       peaks.json      ← Peak-Positionen
+                     MIC1.wav          ← Original-Dateien (unberührt)
+                     MIC2.wav
+                     mix.mp3           ← Generierter Mix
+                     CAM_A.mp4
 ```
 
-#### Module
+### Module
 
-| Modul | Beschreibung | Status |
-|-------|-------------|--------|
-| **Smart Scan** | Ordner analysieren, Dateien automatisch erkennen/zuordnen (Keyboard, Mics, Videos, Reference/Mix). Unabhängig von Namenskonventionen. Ersetzt den aktuellen manuellen Import-Flow. | Konzept |
-| **Create Mix** | Mix aus erkannten Spuren erstellen. Details noch offen: Einfaches Zusammenlegen? Lautstärke-Anpassung? Stereo-Mix? | Konzept |
-| **Peaks** | Peak Detection + Review + Export. Existiert bereits als Kern-Feature. | Vorhanden |
-| **Screenshots** | Eigene Page mit Video-Scrubbing (Timeline/Slider), Kamera-Benennung (editierbar), Frame-Export mit LUT. Unabhängig von Peaks navigierbar. | Teilweise (Button vorhanden, eigene Page fehlt) |
+| Modul | Input | Output | Status |
+|-------|-------|--------|--------|
+| **Smart Scan** | Material-Ordner | scan.json (Spuren kategorisiert: leer/keyboard/sprache/video) | Neu |
+| **Create Mix** | Sprach-Spuren aus Scan | mix.mp3 (ffmpeg: zusammenmischen + Limiter) | Neu |
+| **Peaks** | Keyboard-Spur + Mix | peaks.json + XML + MP3 + TXT | Existiert |
+| **Screenshots** | Videos + Mix | JPGs mit LUT | Teilweise (Button existiert, eigene Page fehlt) |
 
-#### Offene Architektur-Fragen
+### Smart Scan — Erkennung ohne Dateinamen
 
-1. **Smart Scan als Einstiegspunkt?** — Muss man immer erst scannen, bevor andere Module verfügbar sind? Oder kann man auch direkt Dateien reinwerfen (wie jetzt)?
-2. **Create Mix — Was genau?** — Alle Mic-Spuren + Keyboard zu einem Stereo-Mix? Mit Lautstärke-Kontrolle? Oder simples Zusammenlegen?
-3. **Modul-Abhängigkeiten** — Welche Module brauchen welche Vorbedingungen? (z.B. Screenshots brauchen Video-Sync, Peaks brauchen Audio-Analyse)
-4. **Shared State** — Wie teilen sich Module den Projekt-State? Erweiterte `PeakCutSession`? Oder neues `Project`-Objekt als zentrale Datenschicht?
+Statt auf Dateinamen zu vertrauen, analysiert Smart Scan das Audio:
 
-#### Umsetzungsreihenfolge (Vorschlag)
+| Spur-Typ | Erkennungsmerkmal |
+|----------|-------------------|
+| **Leer** | RMS < Threshold (Stille) → automatisch ignorieren |
+| **Keyboard** | Kurze laute Impulse, viel Stille dazwischen |
+| **Sprache** | Kontinuierliches Signal, Speech-Pattern |
 
-1. Smart Scan (Fundament für alles)
-2. Create Mix
-3. Peaks (Refactor: eigene Page statt linearer Flow)
-4. Screenshots (eigene Page mit Video-Scrubbing)
+User bestätigt die Zuordnung, dann weiter.
 
-### Offen (aktuelles Release)
-- [ ] **Multiprocessing für Video-Sync** — Sync ist langsam bei großen Dateien
-- [ ] EDL/XML in Premiere testen — Format validieren
-- [ ] Undo/Redo für Clip-Editing
+### Create Mix — Simpel mit Limiter
+
+```
+Sprach-Spuren (z.B. MIC1 + MIC2)
+     ↓
+ffmpeg: zusammenmischen + alimiter + normalisieren
+     ↓
+mix.mp3
+```
+
+Keine neue Dependency. ffmpeg ist bereits da. Auphonic-Integration optional für später.
+
+### Screenshots — Zwei Audio-Modi
+
+| Phase | Audio |
+|-------|-------|
+| Während Analyse läuft | Kamera-Ton (Video unmuten) |
+| Nach Analyse fertig | Mix (simpleaudio, synchron) |
+
+Screenshots können parallel zur Analyse gemacht werden, weil der Mix als Datei existiert (aus Create Mix) und nicht im RAM blockiert ist.
+
+### Entscheidungen (Stand 2026-02-10)
+
+| Thema | Entscheidung | Begründung |
+|-------|--------------|------------|
+| UI | Hub mit Buttons | Unabhängige Module, einzeln entwickelbar |
+| Projekt-State | Kein persistenter State | Immer frisch scannen, kein "Projekt laden" |
+| Modul-Kommunikation | Über Dateien | Kein shared RAM, keine Race Conditions |
+| Create Mix | ffmpeg + Limiter | Keine neue Dependency |
+| Descript | Manuell | Keine API-Integration fürs Erste |
+| Screenshots Audio | Kamera-Ton während Analyse | Mix erst nach Analyse verfügbar für Sync |
+
+### Geparkt (später)
+
+- Descript API Integration
+- SRT/Untertitel in XML einbetten
+- Auphonic API für Mix-Polish
+- In/Out Clip Editor
+
+---
+
+## Offen (aktuelles Release)
+
+- [ ] **V3: Smart Scan** — Ordner scannen, Audio analysieren
+- [ ] **V3: Create Mix** — Sprach-Spuren zusammenmischen
+- [ ] **V3: Screenshots Page** — Eigene Page mit Video-Scrubbing
+- [ ] Multiprocessing für Video-Sync — Sync ist langsam bei großen Dateien
 - [ ] Kamera-Namen editierbar — Camera-Combo editierbar machen
 - [ ] Test Coverage aufbauen
 
-### Langfristig (V4)
-- [ ] Electron App + Python Engine + Cloud Backend
-- [ ] Machine Learning für automatische Clip-Vorhersage
-- [ ] Hardware: Physischer Marker-Button
+## Langfristig (V4+) — Die großen Visionen
+
+**Nie aus den Augen verlieren.** Bei jeder Architektur-Entscheidung prüfen: Stellen wir hier Weichen für später?
+
+### Produkt
+
+| Vision | Was | Weichen jetzt? |
+|--------|-----|----------------|
+| **Hardware-Button** | Physischer Marker statt Keyboard (~50-69€) | Keyboard-Erkennung abstrakt halten, nicht auf Piano-Sound hardcoden |
+| **Abo-Modell** | ~10€/Monat Software, Hardware separat | Account-System vorbereiten (User-ID für ML-Daten) |
+
+### Technik
+
+| Vision | Was | Weichen jetzt? |
+|--------|-----|----------------|
+| **Electron + React** | Professionelle Installation, Auto-Updates | Python-Core als Library bauen, nicht als Script |
+| **FastAPI Cloud** | Accounts, Sync, Profile zwischen Geräten | API-first denken bei neuen Features |
+| **ML-Profile** | Lernt welche Clips gut sind, Vorhersage ohne Klick | Daten mitschreiben: peak_decisions.json, scan_corrections.json |
+
+### Integrationen
+
+| Vision | Was | Weichen jetzt? |
+|--------|-----|----------------|
+| **Descript** | Automatischer Upload, Transkript holen | Export-Ordner sauber halten für spätere Automation |
+| **Google Drive** | Automatischer Upload/Download | — |
+| **Automatische Captions** | SRT generieren, in Premiere nutzen | XML-Export erweiterbar halten |
+
+### Features
+
+| Vision | Was | Weichen jetzt? |
+|--------|-----|----------------|
+| **Smarte Clip-Grenzen** | Automatische Optimierung wo Clip anfängt/endet | Audio-Analyse-Code wiederverwendbar bauen |
+| **Clip Editor** | In/Out Points anpassen | Peak-Datenmodell hat schon in_offset/out_offset |
+| **Rückkanal von Reels** | Wissen welche Peaks veröffentlicht wurden → ML-Training | Tracking-ID pro Peak für späteren Abgleich |
 
 ---
 
@@ -384,21 +474,27 @@ Alle Module teilen sich ein gemeinsames Projekt (Dateien, Offsets, Config).
 - Status via Qt Signals
 
 ### v1.5.0-dev (2026-02-05)
+
 - 4K Video Preview, Threading für Analyse, Single-Instance Lock
 
 ### v1.4.0-dev (2026-02-05)
+
 - Screenshot mit LUT (ffmpeg + LUTProcessor), LUT Library
 
 ### v1.3.0-dev (2025-02-04)
+
 - FCP XML Export, PyQt6 GUI (Rewrite von Tkinter), Video Preview
 
 ### v1.2.0 (2025-02-02)
+
 - Config System (`config.json`)
 
 ### v1.1.0 (2025-02-01)
+
 - Screenshots Feature mit Kodak LUT
 
 ### v1.0-stable (2025-01-31)
+
 - TTS für unbegrenzte Peak-Nummern, Portable Pfade
 
 ---
@@ -412,4 +508,4 @@ Alle Module teilen sich ein gemeinsames Projekt (Dateien, Offsets, Config).
 
 ---
 
-*Zuletzt aktualisiert: 2026-02-09 (v2.3.0)*
+*Zuletzt aktualisiert: 2026-02-10 (V3 Konzept)*
