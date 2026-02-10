@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFrame, QStatusBar, QFileDialog,
     QApplication, QComboBox, QStackedWidget, QInputDialog,
+    QSlider,
 )
 from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer
 
@@ -226,8 +227,10 @@ class MainWindow(QMainWindow):
         top_bar.addWidget(cam_label)
 
         self.camera_combo = QComboBox()
+        self.camera_combo.setEditable(True)
         self.camera_combo.setMinimumWidth(180)
         self.camera_combo.currentIndexChanged.connect(self._on_camera_changed)
+        self.camera_combo.lineEdit().editingFinished.connect(self._on_camera_name_edited)
         top_bar.addWidget(self.camera_combo)
 
         top_bar.addSpacing(20)
@@ -249,6 +252,26 @@ class MainWindow(QMainWindow):
         self.video_preview = PeakVideoPreview()
         self.video_preview.setMinimumHeight(350)
         layout.addWidget(self.video_preview, stretch=1)
+
+        # Timeline slider
+        timeline_row = QHBoxLayout()
+        timeline_row.setSpacing(8)
+
+        self.position_slider = QSlider(Qt.Orientation.Horizontal)
+        self.position_slider.setRange(0, 0)
+        self.position_slider.sliderMoved.connect(self._on_slider_moved)
+        self.position_slider.sliderPressed.connect(self._on_slider_pressed)
+        timeline_row.addWidget(self.position_slider)
+
+        self.timecode_label = QLabel("0:00 / 0:00")
+        self.timecode_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        self.timecode_label.setMinimumWidth(90)
+        timeline_row.addWidget(self.timecode_label)
+
+        layout.addLayout(timeline_row)
+
+        self.video_preview.position_changed.connect(self._on_position_update)
+        self.video_preview.duration_changed.connect(self._on_duration_update)
 
         # Peak controls
         controls = QHBoxLayout()
@@ -555,11 +578,50 @@ class MainWindow(QMainWindow):
                 peak = self.session.peaks[self.session.current_peak]
                 self.video_preview.set_position(peak.position_ms)
 
+    def _on_camera_name_edited(self):
+        name = self.camera_combo.currentText().strip()
+        if name:
+            idx = self.camera_combo.currentIndex()
+            self.camera_combo.setItemText(idx, name)
+            self.video_preview.set_camera_name(name)
+
     def _on_lut_changed(self, index):
         data = self.lut_combo.currentData()
         if data is not None:
             config.set_value("lut_path", data)
             self.video_preview.refresh_lut()
+
+    # ══════════════════════════════════════════════════════════════
+    # Timeline Slider
+    # ══════════════════════════════════════════════════════════════
+
+    def _on_slider_moved(self, value):
+        self.video_preview.set_position(value)
+
+    def _on_slider_pressed(self):
+        self.video_preview.set_position(self.position_slider.value())
+
+    def _on_position_update(self, position_ms):
+        self.position_slider.blockSignals(True)
+        self.position_slider.setValue(position_ms)
+        self.position_slider.blockSignals(False)
+        duration_ms = self.position_slider.maximum()
+        self.timecode_label.setText(
+            f"{self._ms_to_mmss(position_ms)} / {self._ms_to_mmss(duration_ms)}"
+        )
+
+    def _on_duration_update(self, duration_ms):
+        self.position_slider.setMaximum(duration_ms)
+        self.timecode_label.setText(
+            f"{self._ms_to_mmss(0)} / {self._ms_to_mmss(duration_ms)}"
+        )
+
+    @staticmethod
+    def _ms_to_mmss(ms):
+        total_s = max(0, ms) // 1000
+        m = total_s // 60
+        s = total_s % 60
+        return f"{m}:{s:02d}"
 
     # ══════════════════════════════════════════════════════════════
     # Export
