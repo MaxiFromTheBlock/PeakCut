@@ -11,6 +11,7 @@ pillow==12.1.0
 proglog==0.1.12
 pycparser==3.0
 pydub==0.25.1
+PyQt6==6.10.2
 requests==2.32.5
 scipy==1.17.0
 simpleaudio==1.0.4
