@@ -62,8 +62,8 @@ START HERE <3/   ← Setup, Start, diese Anleitung
 EINSTELLUNGEN
 -------------
 Die Datei "3 Intern/config.json" enthält alle Parameter:
-- threshold_factor: Empfindlichkeit der Peak-Erkennung (0.4 = 40%)
-- min_gap_ms: Mindestabstand zwischen Peaks in ms (15000 = 15s)
+- threshold_factor: Empfindlichkeit der Peak-Erkennung (0.3 = 30%)
+- min_gap_ms: Mindestabstand zwischen Peaks in ms (12000 = 12s)
 - context_duration_ms: Kontext um jeden Peak im Export (15000 = ±15s)
 - fps: Framerate für Timecodes (25)
 - tts_voice: macOS Stimme für Nummern ("Anna" = Deutsch)
