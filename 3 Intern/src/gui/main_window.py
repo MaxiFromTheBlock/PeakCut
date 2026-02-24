@@ -20,7 +20,7 @@ from .video_preview_peak import PeakVideoPreview
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
-from utils import MATERIAL_DIR, EXPORT_DIR, LUTS_DIR, TEMP_DIR, ms_to_mmss
+from utils import APP_DIR, EXPORT_DIR, LUTS_DIR, TEMP_DIR, ms_to_mmss
 from core.project import PeakCutProject
 from core.session import PeakCutSession
 from core.audio import stop_playback, is_playing
@@ -411,9 +411,9 @@ class MainWindow(QMainWindow):
     # ══════════════════════════════════════════════════════════════
 
     def _on_import(self):
-        last_folder = self._settings.value("last_folder", MATERIAL_DIR)
+        last_folder = self._settings.value("last_folder", os.path.expanduser("~/Desktop"))
         if not os.path.exists(last_folder):
-            last_folder = MATERIAL_DIR
+            last_folder = os.path.expanduser("~/Desktop")
 
         files, _ = QFileDialog.getOpenFileNames(
             self, "Dateien auswählen", last_folder,

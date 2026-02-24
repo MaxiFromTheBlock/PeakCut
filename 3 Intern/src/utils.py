@@ -4,7 +4,6 @@ import os
 
 # Directory structure:
 # App/
-#   1 Material/
 #   2 Export/
 #   3 Intern/             <- INTERN_DIR
 #     src/                <- this file lives here
@@ -15,7 +14,6 @@ INTERN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP_DIR = os.path.dirname(INTERN_DIR)
 
 # User-facing directories
-MATERIAL_DIR = os.path.join(APP_DIR, "1 Material")
 EXPORT_DIR = os.path.join(APP_DIR, "2 Export")
 
 # Internal directories

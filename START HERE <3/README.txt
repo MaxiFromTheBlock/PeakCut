@@ -53,7 +53,6 @@ S         Screenshot
 
 ORDNERSTRUKTUR
 --------------
-1 Material/      ← Audio/Video-Dateien hier reinlegen
 2 Export/         ← Fertige Exports
 3 Intern/        ← Programm-Dateien (nicht anfassen)
 START HERE <3/   ← Setup, Start, diese Anleitung
