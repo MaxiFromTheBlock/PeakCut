@@ -20,15 +20,18 @@ from .video_preview_peak import PeakVideoPreview
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
-from utils import MATERIAL_DIR, EXPORT_DIR, LUTS_DIR, TEMP_DIR
+from utils import MATERIAL_DIR, EXPORT_DIR, LUTS_DIR, TEMP_DIR, ms_to_mmss
 from core.project import PeakCutProject
 from core.session import PeakCutSession
 from core.audio import stop_playback, is_playing
 from core.exporters import MP3Exporter, XMLExporter, TXTExporter
 
 
+_ANALYSIS_TIMEOUT_S = 600  # 10 minutes max
+
+
 class AnalysisWorker(QThread):
-    """Runs analysis in separate process."""
+    """Runs analysis in separate process with timeout protection."""
     finished = pyqtSignal(dict)
     error = pyqtSignal(str)
     progress = pyqtSignal(str)
@@ -40,6 +43,14 @@ class AnalysisWorker(QThread):
 
     def run(self):
         project = self.session.project
+
+        # Pre-flight: verify all files exist
+        all_files = project.get_all_file_paths()
+        for f in all_files:
+            if not os.path.exists(f):
+                self.error.emit(f"Datei nicht gefunden: {os.path.basename(f)}")
+                return
+
         cfg = self.session.config
 
         config_data = {
@@ -65,6 +76,14 @@ class AnalysisWorker(QThread):
                 cwd=script_dir
             )
 
+            # Watchdog: kill process if analysis takes too long
+            watchdog = threading.Timer(
+                _ANALYSIS_TIMEOUT_S,
+                lambda: self._process.kill() if self._process and self._process.poll() is None else None
+            )
+            watchdog.daemon = True
+            watchdog.start()
+
             stdout_queue = queue.Queue()
 
             def read_stdout():
@@ -84,6 +103,7 @@ class AnalysisWorker(QThread):
                 elif line.startswith("ERROR: "):
                     self.progress.emit(f"Fehler: {line[7:]}")
 
+            watchdog.cancel()
             stdout_thread.join(timeout=10)
             try:
                 stdout = stdout_queue.get(timeout=1)
@@ -91,7 +111,10 @@ class AnalysisWorker(QThread):
                 stdout = ""
 
             if self._process.returncode != 0:
-                self.error.emit(f"Analyse-Prozess beendet mit Code {self._process.returncode}")
+                if self._process.returncode == -9:
+                    self.error.emit("Analyse abgebrochen: Timeout (>10 Min)")
+                else:
+                    self.error.emit(f"Analyse-Prozess beendet mit Code {self._process.returncode}")
                 return
 
             try:
@@ -113,6 +136,30 @@ class AnalysisWorker(QThread):
             self.error.emit(f"Analyse fehlgeschlagen: {e}")
 
 
+class ExportWorker(QThread):
+    """Runs export in background thread to keep UI responsive."""
+    finished = pyqtSignal(list)   # list of exported file paths
+    error = pyqtSignal(str)
+    progress = pyqtSignal(str)
+
+    def __init__(self, session):
+        super().__init__()
+        self.session = session
+
+    def run(self):
+        try:
+            exported = []
+            exporters = [MP3Exporter(), TXTExporter(), XMLExporter()]
+            for exporter in exporters:
+                result = exporter.export(self.session)
+                if result:
+                    self.progress.emit(f"Exportiert: {os.path.basename(result)}")
+                    exported.append(result)
+            self.finished.emit(exported)
+        except Exception as e:
+            self.error.emit(str(e))
+
+
 class MainWindow(QMainWindow):
     """PeakCut Main Window — Simplified: Welcome → Analysis → Review"""
 
@@ -124,6 +171,7 @@ class MainWindow(QMainWindow):
 
         self.session = None
         self._worker = None
+        self._export_worker = None
         self._is_playing = False
 
         # Playback poll timer
@@ -419,7 +467,7 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(1)  # Show analysis page
         self.analysis_status.setText("Starte Analyse...")
 
-        project = PeakCutProject(MATERIAL_DIR, EXPORT_DIR)
+        project = PeakCutProject(EXPORT_DIR)
         project.set_files(self._keyboard_file, self._mic_files, self._video_files)
 
         self.session = PeakCutSession(project, config.load())
@@ -641,21 +689,14 @@ class MainWindow(QMainWindow):
         self.position_slider.blockSignals(False)
         duration_ms = self.position_slider.maximum()
         self.timecode_label.setText(
-            f"{self._ms_to_mmss(position_ms)} / {self._ms_to_mmss(duration_ms)}"
+            f"{ms_to_mmss(position_ms)} / {ms_to_mmss(duration_ms)}"
         )
 
     def _on_duration_update(self, duration_ms):
         self.position_slider.setMaximum(duration_ms)
         self.timecode_label.setText(
-            f"{self._ms_to_mmss(0)} / {self._ms_to_mmss(duration_ms)}"
+            f"{ms_to_mmss(0)} / {ms_to_mmss(duration_ms)}"
         )
-
-    @staticmethod
-    def _ms_to_mmss(ms):
-        total_s = max(0, ms) // 1000
-        m = total_s // 60
-        s = total_s % 60
-        return f"{m}:{s:02d}"
 
     # ══════════════════════════════════════════════════════════════
     # Export
@@ -668,21 +709,24 @@ class MainWindow(QMainWindow):
         stop_playback()
         self.export_btn.setEnabled(False)
         self.statusbar.showMessage("Export läuft...")
-        QApplication.processEvents()
 
-        try:
-            exporters = [MP3Exporter(), TXTExporter(), XMLExporter()]
-            for exporter in exporters:
-                result = exporter.export(self.session)
-                if result:
-                    self.statusbar.showMessage(f"Exportiert: {os.path.basename(result)}")
-                    QApplication.processEvents()
+        self._export_worker = ExportWorker(self.session)
+        self._export_worker.progress.connect(lambda msg: self.statusbar.showMessage(msg))
+        self._export_worker.finished.connect(self._on_export_done)
+        self._export_worker.error.connect(self._on_export_error)
+        self._export_worker.start()
 
-            self.statusbar.showMessage(f"Export fertig! → {EXPORT_DIR}")
-        except Exception as e:
-            self.statusbar.showMessage(f"Export-Fehler: {e}")
-
+    def _on_export_done(self, exported):
         self.export_btn.setEnabled(True)
+        self.statusbar.showMessage(f"Export fertig! {len(exported)} Dateien → {EXPORT_DIR}")
+        self._export_worker.deleteLater()
+        self._export_worker = None
+
+    def _on_export_error(self, msg):
+        self.export_btn.setEnabled(True)
+        self.statusbar.showMessage(f"Export-Fehler: {msg}")
+        self._export_worker.deleteLater()
+        self._export_worker = None
 
     # ══════════════════════════════════════════════════════════════
     # Keyboard Shortcuts
@@ -727,6 +771,9 @@ class MainWindow(QMainWindow):
                         self._worker._process.kill()
             if self._worker.isRunning():
                 self._worker.wait(3000)
+
+        if self._export_worker and self._export_worker.isRunning():
+            self._export_worker.wait(3000)
 
         stop_playback()
         event.accept()

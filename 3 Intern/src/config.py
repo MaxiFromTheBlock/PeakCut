@@ -35,7 +35,9 @@ def load():
                 for key, value in DEFAULTS.items():
                     if key not in _config:
                         _config[key] = value
-            except Exception:
+            except (json.JSONDecodeError, ValueError, KeyError):
+                import sys
+                print(f"Warning: config.json corrupt, using defaults", file=sys.stderr)
                 _config = DEFAULTS.copy()
         else:
             _config = DEFAULTS.copy()

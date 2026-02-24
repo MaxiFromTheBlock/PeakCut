@@ -3,10 +3,7 @@
 import os
 import subprocess
 import numpy as np
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel,
-    QSizePolicy
-)
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
 from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QTimer, QSize, QThread, QMutex, QWaitCondition
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink
@@ -173,7 +170,8 @@ class ScreenshotWorker(QThread):
                 self.screenshot_done.emit(filepath)
             else:
                 self.screenshot_done.emit("")
-        except Exception:
+        except (subprocess.TimeoutExpired, OSError) as e:
+            print(f"Screenshot error: {e}", file=__import__('sys').stderr)
             self.screenshot_done.emit("")
 
 
@@ -495,16 +493,14 @@ class PeakVideoPreview(QWidget):
             return
 
         import config
-        from utils import EXPORT_DIR, LUTS_DIR, MATERIAL_DIR
-        from core.exporters import extract_guest_name
+        from utils import EXPORT_DIR, LUTS_DIR
 
         position_ms = self.player.position()
         position_s = position_ms / 1000.0
         lut_filename = config.get("lut_path") or ""
         fps = config.get("fps") or 25
 
-        mic_tracks = self._session.project.mic_tracks if self._session else None
-        gastname = extract_guest_name(MATERIAL_DIR, mic_tracks)
+        gastname = self._session.project.guest_name if self._session else "Unknown"
         screenshots_dir = os.path.join(EXPORT_DIR, f"{gastname} - Screenshots")
 
         # Counter

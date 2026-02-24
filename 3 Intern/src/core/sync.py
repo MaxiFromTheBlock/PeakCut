@@ -1,8 +1,10 @@
 import os
+import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import numpy as np
 import soundfile as sf
-from scipy.signal import correlate
-from moviepy.editor import VideoFileClip
+from scipy.signal import fftconvolve
 
 
 def cleanup_temp(temp_dir):
@@ -18,13 +20,13 @@ def cleanup_temp(temp_dir):
 
 
 def extract_audio_from_video(video_path, output_path):
-    """Extract audio track from video file."""
-    clip = VideoFileClip(video_path)
-    try:
-        # logger=None suppresses MoviePy's stdout output that breaks JSON parsing
-        clip.audio.write_audiofile(output_path, codec='pcm_s16le', logger=None)
-    finally:
-        clip.close()  # CRITICAL: Prevent file handle leaks and zombie ffmpeg processes
+    """Extract audio track from video file using ffmpeg directly."""
+    result = subprocess.run(
+        ["ffmpeg", "-y", "-i", video_path, "-vn", "-acodec", "pcm_s16le", output_path],
+        capture_output=True, timeout=300
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed: {result.stderr.decode(errors='replace')[:200]}")
 
 
 def load_audio_as_array(path):
@@ -36,19 +38,18 @@ def load_audio_as_array(path):
 
 
 def calculate_offset(reference, target, downsample_factor=10):
-    """Calculate offset between reference and target audio via cross-correlation.
+    """Calculate offset between reference and target audio via FFT cross-correlation.
 
-    Uses downsampling to prevent memory explosion on long audio files.
-    A 1-hour file at 48kHz would otherwise need ~2.7GB RAM for correlation.
+    Uses downsampling to reduce memory, then FFT-based correlation which is
+    O((N+M)*log(N+M)) instead of O(N*M) — drastically faster for long recordings.
     """
-    # Downsample to reduce memory usage (10x = 270MB instead of 2.7GB)
     ref_ds = reference[::downsample_factor]
     target_ds = target[::downsample_factor]
 
-    corr = correlate(target_ds, ref_ds, mode='full')
+    # FFT correlation: flip reference, convolve (equivalent to correlate)
+    corr = fftconvolve(target_ds, ref_ds[::-1], mode='full')
     lag = np.argmax(corr) - len(ref_ds) + 1
 
-    # Scale back to original sample rate
     return lag * downsample_factor
 
 
@@ -66,15 +67,39 @@ def format_offset(offset_seconds, fps=25):
     return f"{sign}{hours:02d}:{minutes:02d}:{seconds:02d}:{frames:02d}"
 
 
-def sync_videos(video_files, reference_path, temp_dir, fps=25, status_fn=None):
-    """Sync videos with reference audio. Returns list of (filename, offset_timecode).
+def _sync_single_video(video_path, reference_data, ref_sr, temp_dir, fps, status_fn=None):
+    """Sync a single video against reference audio. Returns (filename, offset_timecode) or None."""
+    def status(msg):
+        if status_fn:
+            status_fn(msg)
 
-    Args:
-        video_files: List of video file paths
-        reference_path: Path to reference audio file (the 'mix' track)
-        temp_dir: Directory for temporary audio extracts
-        fps: Framerate for timecode calculation
-        status_fn: Optional callback for status messages
+    video_filename = os.path.basename(video_path)
+    video_name = os.path.splitext(video_filename)[0]
+    temp_audio_path = os.path.join(temp_dir, f"{video_name}_audio.wav")
+
+    status(f"Extracting audio: {video_filename}...")
+    extract_audio_from_video(video_path, temp_audio_path)
+
+    target_data, target_sr = load_audio_as_array(temp_audio_path)
+
+    if target_sr != ref_sr:
+        status(f"Sample rates differ ({target_sr} vs {ref_sr}), skipping {video_filename}.")
+        return None
+
+    status(f"Calculating offset: {video_filename}...")
+    offset_samples = calculate_offset(reference_data, target_data)
+    offset_seconds = offset_samples / ref_sr
+
+    formatted_offset = format_offset(offset_seconds, fps)
+    status(f"{video_filename} Offset: {formatted_offset}")
+    return (video_filename, formatted_offset)
+
+
+def sync_videos(video_files, reference_path, temp_dir, fps=25, status_fn=None):
+    """Sync videos with reference audio in parallel. Returns list of (filename, offset_timecode).
+
+    Each video is synced in its own thread. Audio extraction spawns ffmpeg subprocesses
+    and correlation uses numpy (both release the GIL), so threads give real parallelism.
     """
     if not video_files or not reference_path:
         return []
@@ -91,27 +116,31 @@ def sync_videos(video_files, reference_path, temp_dir, fps=25, status_fn=None):
 
     video_offsets = []
 
-    for video_path in video_files:
-        video_filename = os.path.basename(video_path)
-        video_name = os.path.splitext(video_filename)[0]
-        temp_audio_path = os.path.join(temp_dir, f"{video_name}_audio.wav")
-
-        status(f"Extracting audio from {video_filename}...")
-        extract_audio_from_video(video_path, temp_audio_path)
-
-        target_data, target_sr = load_audio_as_array(temp_audio_path)
-
-        if target_sr != ref_sr:
-            status(f"Sample rates differ ({target_sr} vs {ref_sr}), skipping {video_filename}.")
-            continue
-
-        status(f"Calculating offset for {video_filename}...")
-        offset_samples = calculate_offset(reference_data, target_data)
-        offset_seconds = offset_samples / ref_sr
-
-        formatted_offset = format_offset(offset_seconds, fps)
-        video_offsets.append((video_filename, formatted_offset))
-        status(f"{video_filename} Offset: {formatted_offset}")
+    if len(video_files) == 1:
+        # Single video — no thread overhead
+        result = _sync_single_video(
+            video_files[0], reference_data, ref_sr, temp_dir, fps, status_fn
+        )
+        if result:
+            video_offsets.append(result)
+    else:
+        status(f"Synchronisiere {len(video_files)} Videos parallel...")
+        with ThreadPoolExecutor(max_workers=len(video_files)) as executor:
+            futures = {
+                executor.submit(
+                    _sync_single_video, video_path,
+                    reference_data, ref_sr, temp_dir, fps, status_fn
+                ): video_path
+                for video_path in video_files
+            }
+            for future in as_completed(futures):
+                try:
+                    result = future.result()
+                    if result:
+                        video_offsets.append(result)
+                except Exception as e:
+                    video_path = futures[future]
+                    status(f"Sync failed for {os.path.basename(video_path)}: {e}")
 
     cleanup_temp(temp_dir)
 

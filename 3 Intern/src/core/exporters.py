@@ -7,46 +7,28 @@ from urllib.parse import quote
 from pydub import AudioSegment
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import TEMP_DIR, ASSETS_DIR, parse_timecode_to_ms
+from utils import TEMP_DIR, ASSETS_DIR, parse_timecode_to_ms, ms_to_timecode, ms_to_frames
 
 
 PAUSE_DURATION_MS = 500
 
 
-# --- Helper functions ---
+def extract_guest_name(file_paths: list[str]) -> str:
+    """Extract guest name from 'mix' filename among the given file paths.
 
-def ms_to_timecode(ms, fps):
-    """Convert milliseconds to SMPTE timecode HH:MM:SS:FF"""
-    total_frames = int(ms / 1000 * fps)
-    frames = total_frames % fps
-    total_seconds = total_frames // fps
-    seconds = total_seconds % 60
-    minutes = (total_seconds // 60) % 60
-    hours = total_seconds // 3600
-    return f"{hours:02d}:{minutes:02d}:{seconds:02d}:{frames:02d}"
-
-
-def extract_guest_name(material_dir, file_paths=None):
-    """Extract guest name from 'mix' filename.
-
-    Checks file_paths first (actual imported files), then falls back to scanning material_dir.
-    Files may not be in material_dir if imported from an external location.
+    Expected patterns: "Prefix - Gastname mix.wav", "Prefix - Gastname (mix).wav"
     """
-    # Collect all filenames to search
-    names = []
-    if file_paths:
-        names.extend(os.path.basename(f) for f in file_paths)
-    try:
-        names.extend(os.listdir(material_dir))
-    except OSError:
-        pass
-
-    for name in names:
+    import re
+    for f in file_paths:
+        name = os.path.basename(f)
         if "mix" in name.lower():
             base = os.path.splitext(name)[0]
             parts = base.split(" - ")
             if len(parts) > 1:
-                return parts[1].split("(")[0].strip()
+                guest = parts[1].split("(")[0].strip()
+                guest = re.sub(r'\s*mix\s*$', '', guest, flags=re.IGNORECASE).strip()
+                if guest:
+                    return guest
     return "Unknown"
 
 
@@ -95,9 +77,7 @@ def _file_url(filepath):
     return f"file://localhost{encoded}"
 
 
-def _ms_to_frames(ms, fps):
-    """Convert milliseconds to frame count."""
-    return int(ms / 1000 * fps)
+_ms_to_frames = ms_to_frames  # Local alias for readability in XML generation
 
 
 def _probe_video_info(video_path):
@@ -182,7 +162,7 @@ class MP3Exporter(BaseExporter):
         for seg in segments[1:]:
             result += seg
 
-        gastname = extract_guest_name(session.project.material_dir, session.project.mic_tracks)
+        gastname = session.project.guest_name
         mp3_path = os.path.join(session.project.export_dir,
                                 f"Keyboardstellen - {gastname}.mp3")
         result.export(mp3_path, format="mp3")
@@ -206,7 +186,7 @@ class TXTExporter(BaseExporter):
         if not active_peaks:
             return ""
 
-        gastname = extract_guest_name(session.project.material_dir, session.project.mic_tracks)
+        gastname = session.project.guest_name
         txt_path = os.path.join(session.project.export_dir,
                                 f"Keyboardstellen - {gastname}.txt")
 
@@ -281,7 +261,7 @@ class XMLExporter(BaseExporter):
         <displayformat>NDF</displayformat>
       </timecode>"""
 
-        gastname = extract_guest_name(session.project.material_dir, session.project.mic_tracks)
+        gastname = session.project.guest_name
         xml_path = os.path.join(session.project.export_dir,
                                 f"Keyboardstellen - {gastname}.xml")
 
@@ -383,7 +363,7 @@ class XMLExporter(BaseExporter):
             f.write(f'      <audio>\n')
             f.write(f'        <format>\n')
             f.write(f'          <samplecharacteristics>\n')
-            f.write(f'            <samplerate>48000</samplerate>\n')
+            f.write(f'            <samplerate>{sample_rate}</samplerate>\n')
             f.write(f'            <depth>16</depth>\n')
             f.write(f'          </samplecharacteristics>\n')
             f.write(f'        </format>\n')

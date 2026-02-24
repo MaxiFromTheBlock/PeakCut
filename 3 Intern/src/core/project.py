@@ -4,18 +4,34 @@ import os
 class PeakCutProject:
     """Knows all files in a project."""
 
-    def __init__(self, material_dir: str, export_dir: str):
-        self.material_dir = material_dir
+    def __init__(self, export_dir: str):
         self.export_dir = export_dir
         self.keyboard_track: str | None = None
         self.mic_tracks: list[str] = []
         self.videos: list[str] = []
+        self._guest_name: str | None = None
 
     def set_files(self, keyboard: str | None, mics: list[str], videos: list[str]):
         """Manual file assignment (when auto-detection doesn't work)."""
         self.keyboard_track = keyboard
         self.mic_tracks = list(mics)
         self.videos = list(videos)
+        self._guest_name = None  # Reset cache
+
+    def get_all_file_paths(self) -> list[str]:
+        """Return all known file paths in this project."""
+        paths = list(self.mic_tracks) + list(self.videos)
+        if self.keyboard_track:
+            paths.append(self.keyboard_track)
+        return paths
+
+    @property
+    def guest_name(self) -> str:
+        """Extract and cache guest name from 'mix' filename."""
+        if self._guest_name is None:
+            from core.exporters import extract_guest_name
+            self._guest_name = extract_guest_name(self.get_all_file_paths())
+        return self._guest_name
 
     def get_reference_track(self) -> str | None:
         """Find the 'mix' reference track for video sync."""

@@ -36,7 +36,7 @@ def play_audio(segment):
     try:
         sa.stop_all()
         _current_playback = sa.play_buffer(raw, 1, 2, 44100)
-    except Exception as e:
+    except (sa.SimpleaudioError, OSError) as e:
         import sys
         print(f"Audio playback error: {e}", file=sys.stderr)
 
@@ -47,7 +47,7 @@ def is_playing():
         return False
     try:
         return _current_playback.is_playing()
-    except Exception:
+    except (sa.SimpleaudioError, OSError):
         return False
 
 
@@ -56,7 +56,7 @@ def stop_playback():
     global _current_playback
     try:
         sa.stop_all()
-    except Exception as e:
+    except (sa.SimpleaudioError, OSError) as e:
         import sys
         print(f"Stop playback error: {e}", file=sys.stderr)
     _current_playback = None

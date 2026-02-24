@@ -1,5 +1,7 @@
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
+
 from PyQt6.QtCore import QObject, pyqtSignal
 from pydub import AudioSegment
 
@@ -136,11 +138,17 @@ class PeakCutSession(QObject):
         self.mode = "keyboard"
 
     def load_audio_lazy(self):
-        """Load audio segments on demand (after analysis results are loaded)."""
+        """Load audio segments on demand (after analysis results are loaded).
+
+        Loads keyboard + all mic tracks in parallel via ThreadPool.
+        """
         if self.keyboard_audio is None and self.project.keyboard_track:
             self.status_update.emit("Lade Audio...")
-            self.keyboard_audio = AudioSegment.from_file(self.project.keyboard_track)
-            self.mic_audios = [AudioSegment.from_file(f) for f in self.project.mic_tracks]
+            all_paths = [self.project.keyboard_track] + list(self.project.mic_tracks)
+            with ThreadPoolExecutor(max_workers=len(all_paths)) as executor:
+                results = list(executor.map(AudioSegment.from_file, all_paths))
+            self.keyboard_audio = results[0]
+            self.mic_audios = results[1:]
             # Set duration bounds on peaks so out_point_ms can't exceed audio length
             duration_ms = len(self.keyboard_audio)
             for peak in self.peaks:
