@@ -26,11 +26,24 @@ def ms_to_timecode(ms, fps):
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}:{frames:02d}"
 
 
-def extract_guest_name(material_dir):
-    """Extract guest name from 'mix' filename in material_dir."""
-    for f in os.listdir(material_dir):
-        if "mix" in f.lower():
-            base = os.path.splitext(f)[0]
+def extract_guest_name(material_dir, file_paths=None):
+    """Extract guest name from 'mix' filename.
+
+    Checks file_paths first (actual imported files), then falls back to scanning material_dir.
+    Files may not be in material_dir if imported from an external location.
+    """
+    # Collect all filenames to search
+    names = []
+    if file_paths:
+        names.extend(os.path.basename(f) for f in file_paths)
+    try:
+        names.extend(os.listdir(material_dir))
+    except OSError:
+        pass
+
+    for name in names:
+        if "mix" in name.lower():
+            base = os.path.splitext(name)[0]
             parts = base.split(" - ")
             if len(parts) > 1:
                 return parts[1].split("(")[0].strip()
@@ -169,7 +182,7 @@ class MP3Exporter(BaseExporter):
         for seg in segments[1:]:
             result += seg
 
-        gastname = extract_guest_name(session.project.material_dir)
+        gastname = extract_guest_name(session.project.material_dir, session.project.mic_tracks)
         mp3_path = os.path.join(session.project.export_dir,
                                 f"Keyboardstellen - {gastname}.mp3")
         result.export(mp3_path, format="mp3")
@@ -193,7 +206,7 @@ class TXTExporter(BaseExporter):
         if not active_peaks:
             return ""
 
-        gastname = extract_guest_name(session.project.material_dir)
+        gastname = extract_guest_name(session.project.material_dir, session.project.mic_tracks)
         txt_path = os.path.join(session.project.export_dir,
                                 f"Keyboardstellen - {gastname}.txt")
 
@@ -237,16 +250,9 @@ class XMLExporter(BaseExporter):
         if not active_peaks:
             return ""
 
-        # Find media files in material_dir
-        video_files = []
-        audio_files = []
-        for f in sorted(os.listdir(session.project.material_dir)):
-            fl = f.lower()
-            if fl.endswith(('.mp4', '.mov')):
-                video_files.append(f)
-            elif fl.endswith(('.wav', '.mp3')):
-                if not any(kw in fl for kw in ["keyboard", "keys", "klavier"]):
-                    audio_files.append(f)
+        # Use actual imported files (they may not be in material_dir)
+        video_paths = list(session.project.videos)
+        audio_paths = list(session.project.mic_tracks)
 
         # Build offset lookup (video filename -> offset in ms)
         offset_lookup = {}
@@ -255,14 +261,12 @@ class XMLExporter(BaseExporter):
 
         # Probe media info from first available files
         vid_w, vid_h = 3840, 2160
-        if video_files:
-            first_video = os.path.join(session.project.material_dir, video_files[0])
-            vid_w, vid_h = _probe_video_info(first_video)
+        if video_paths:
+            vid_w, vid_h = _probe_video_info(video_paths[0])
 
         sample_rate = 48000
-        if audio_files:
-            first_audio = os.path.join(session.project.material_dir, audio_files[0])
-            sample_rate = _probe_audio_info(first_audio)
+        if audio_paths:
+            sample_rate = _probe_audio_info(audio_paths[0])
 
         # Calculate total sequence duration in frames
         total_frames = 0
@@ -277,7 +281,7 @@ class XMLExporter(BaseExporter):
         <displayformat>NDF</displayformat>
       </timecode>"""
 
-        gastname = extract_guest_name(session.project.material_dir)
+        gastname = extract_guest_name(session.project.material_dir, session.project.mic_tracks)
         xml_path = os.path.join(session.project.export_dir,
                                 f"Keyboardstellen - {gastname}.xml")
 
@@ -312,9 +316,9 @@ class XMLExporter(BaseExporter):
             f.write(f'          </samplecharacteristics>\n')
             f.write(f'        </format>\n')
 
-            for track_idx, video_file in enumerate(video_files):
+            for track_idx, video_path in enumerate(video_paths):
                 file_id = f"file-video-{track_idx + 1}"
-                video_path = os.path.join(session.project.material_dir, video_file)
+                video_file = os.path.basename(video_path)
                 offset_ms = offset_lookup.get(video_file, 0)
 
                 f.write(f'        <track>\n')
@@ -384,9 +388,9 @@ class XMLExporter(BaseExporter):
             f.write(f'          </samplecharacteristics>\n')
             f.write(f'        </format>\n')
 
-            for track_idx, audio_file in enumerate(audio_files):
+            for track_idx, audio_path in enumerate(audio_paths):
                 file_id = f"file-audio-{track_idx + 1}"
-                audio_path = os.path.join(session.project.material_dir, audio_file)
+                audio_file = os.path.basename(audio_path)
 
                 f.write(f'        <track>\n')
 

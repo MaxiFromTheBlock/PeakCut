@@ -1,6 +1,6 @@
 {
-  "threshold_factor": 0.4,
-  "min_gap_ms": 15000,
+  "threshold_factor": 0.3,
+  "min_gap_ms": 12000,
   "preview_duration_ms": 1000,
   "context_duration_ms": 15000,
   "fps": 25,

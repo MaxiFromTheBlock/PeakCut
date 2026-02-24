@@ -245,6 +245,25 @@ class MainWindow(QMainWindow):
         self.lut_combo.currentIndexChanged.connect(self._on_lut_changed)
         top_bar.addWidget(self.lut_combo)
 
+        top_bar.addSpacing(20)
+
+        # Brightness slider (per camera)
+        brightness_label = QLabel("Helligkeit:")
+        brightness_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        top_bar.addWidget(brightness_label)
+
+        self.brightness_slider = QSlider(Qt.Orientation.Horizontal)
+        self.brightness_slider.setRange(-100, 100)
+        self.brightness_slider.setValue(0)
+        self.brightness_slider.setFixedWidth(120)
+        self.brightness_slider.valueChanged.connect(self._on_brightness_changed)
+        top_bar.addWidget(self.brightness_slider)
+
+        self.brightness_value_label = QLabel("0")
+        self.brightness_value_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.brightness_value_label.setMinimumWidth(30)
+        top_bar.addWidget(self.brightness_value_label)
+
         top_bar.addStretch()
         layout.addLayout(top_bar)
 
@@ -555,12 +574,10 @@ class MainWindow(QMainWindow):
             self.statusbar.showMessage("Keine Videos geladen")
             return
         camera_name = self.camera_combo.currentText()
-        self.screenshot_btn.setEnabled(False)
         self.statusbar.showMessage("Screenshot wird erstellt...")
         self.video_preview.capture_screenshot_async(camera_name)
 
     def _on_screenshot_done(self, filepath):
-        self.screenshot_btn.setEnabled(True)
         if filepath:
             self.statusbar.showMessage(f"Screenshot: {os.path.basename(filepath)}")
         else:
@@ -573,6 +590,12 @@ class MainWindow(QMainWindow):
     def _on_camera_changed(self, index):
         if 0 <= index < len(self._video_files):
             self.video_preview.load_video_at_index(index)
+            # Load brightness for this camera
+            brightness = self.video_preview.get_current_brightness()
+            self.brightness_slider.blockSignals(True)
+            self.brightness_slider.setValue(brightness)
+            self.brightness_slider.blockSignals(False)
+            self._update_brightness_label(brightness)
             # Re-show current peak position
             if self.session and self.session.peaks:
                 peak = self.session.peaks[self.session.current_peak]
@@ -590,6 +613,17 @@ class MainWindow(QMainWindow):
         if data is not None:
             config.set_value("lut_path", data)
             self.video_preview.refresh_lut()
+
+    def _on_brightness_changed(self, value):
+        self._update_brightness_label(value)
+        self.video_preview.set_brightness(value)
+        self.video_preview.refresh_lut()
+
+    def _update_brightness_label(self, value):
+        if value > 0:
+            self.brightness_value_label.setText(f"+{value}")
+        else:
+            self.brightness_value_label.setText(str(value))
 
     # ══════════════════════════════════════════════════════════════
     # Timeline Slider

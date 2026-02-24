@@ -30,14 +30,15 @@ class LUTWorker(QThread):
         self._lut_processor = None
         self._loaded_lut_path = None
 
-    def submit(self, image, target_size, dpr, lut_path):
+    def submit(self, image, target_size, dpr, lut_path, brightness=0):
         """Submit frame for processing. Drops any pending unprocessed frame.
 
         Args:
             lut_path: Full path to .cube file (worker loads its own copy)
+            brightness: Brightness offset (-100 to +100), 0 = neutral
         """
         self._mutex.lock()
-        self._pending = (image.copy(), target_size, dpr, lut_path)  # Copy image for thread safety
+        self._pending = (image.copy(), target_size, dpr, lut_path, brightness)  # Copy image for thread safety
         self._mutex.unlock()
         self._wait.wakeOne()
 
@@ -51,7 +52,7 @@ class LUTWorker(QThread):
             if self._abort:
                 self._mutex.unlock()
                 return
-            image, target_size, dpr, lut_path = self._pending
+            image, target_size, dpr, lut_path, brightness = self._pending
             self._pending = None
             self._mutex.unlock()
 
@@ -63,14 +64,14 @@ class LUTWorker(QThread):
                         self._lut_processor.load_cube(lut_path)
                     self._loaded_lut_path = lut_path
 
-                result = self._process(image, target_size, dpr)
+                result = self._process(image, target_size, dpr, brightness)
                 if result is not None:
                     self.frame_ready.emit(result, dpr)
             except Exception as e:
                 print(f"LUT processing error: {e}", file=__import__('sys').stderr)
 
-    def _process(self, image, target_size, dpr):
-        """Scale, convert to numpy, apply LUT, return QImage."""
+    def _process(self, image, target_size, dpr, brightness=0):
+        """Scale, convert to numpy, apply LUT + brightness, return QImage."""
         image = image.scaled(
             target_size,
             Qt.AspectRatioMode.KeepAspectRatio,
@@ -84,11 +85,15 @@ class LUTWorker(QThread):
         raw = np.frombuffer(ptr, dtype=np.uint8).reshape(h, bpl)
         arr = raw[:, :w * 3].reshape(h, w, 3).copy()
 
+        # Brightness BEFORE LUT (like Premiere exposure → LUT pipeline)
+        if brightness != 0:
+            factor = 2 ** (brightness / 100.0)  # -100→0.5x, 0→1.0x, +100→2.0x
+            arr = np.clip(arr.astype(np.float32) * factor, 0, 255).astype(np.uint8)
+
         if self._lut_processor and self._lut_processor.is_loaded():
-            graded = self._lut_processor.apply_fast(arr)
-            return QImage(graded.data, w, h, w * 3, QImage.Format.Format_RGB888).copy()
-        else:
-            return QImage(arr.data, w, h, w * 3, QImage.Format.Format_RGB888).copy()
+            arr = self._lut_processor.apply_fast(arr)
+
+        return QImage(arr.data, w, h, w * 3, QImage.Format.Format_RGB888).copy()
 
     def stop(self):
         self._mutex.lock()
@@ -107,7 +112,7 @@ class ScreenshotWorker(QThread):
     screenshot_done = pyqtSignal(str)  # filepath or "" on error
 
     def __init__(self, video_path, position_s, lut_filename, luts_dir,
-                 camera_name, output_dir, counter, fps):
+                 camera_name, output_dir, counter, fps, brightness=0):
         super().__init__()
         self._video_path = video_path
         self._position_s = position_s
@@ -117,6 +122,7 @@ class ScreenshotWorker(QThread):
         self._output_dir = output_dir
         self._counter = counter
         self._fps = fps
+        self._brightness = brightness
 
     def run(self):
         os.makedirs(self._output_dir, exist_ok=True)
@@ -144,11 +150,19 @@ class ScreenshotWorker(QThread):
             "-frames:v", "1",
         ]
 
-        # Add LUT filter if configured
+        # Build video filter chain (brightness BEFORE LUT, like Premiere)
+        filters = []
+        if self._brightness != 0:
+            factor = 2 ** (self._brightness / 100.0)  # -100→0.5x, 0→1.0x, +100→2.0x
+            # Linear RGB multiplication (matches live preview exactly)
+            expr = f"clip(val*{factor:.4f},0,255)"
+            filters.append(f"lutrgb=r='{expr}':g='{expr}':b='{expr}'")
         if self._lut_filename:
             lut_path = os.path.join(self._luts_dir, self._lut_filename)
             if os.path.exists(lut_path):
-                cmd.extend(["-vf", f"lut3d='{lut_path}'"])
+                filters.append(f"lut3d='{lut_path}'")
+        if filters:
+            cmd.extend(["-vf", ",".join(filters)])
 
         # Output as high-quality JPEG
         cmd.extend(["-q:v", "2", filepath])
@@ -195,6 +209,9 @@ class PeakVideoPreview(QWidget):
         self._clip_playback_active = False
         self._clip_out_ms = 0
 
+        # Brightness state (per camera)
+        self._brightness_values: dict[str, int] = {}
+
         # Camera name state
         self._camera_names = {}
         self._screenshot_counters = {}
@@ -202,8 +219,8 @@ class PeakVideoPreview(QWidget):
         # Deferred play (when video not ready yet)
         self._deferred_play = None
 
-        # Screenshot worker ref (prevent GC)
-        self._screenshot_worker = None
+        # Screenshot workers (parallel queue — each runs independently)
+        self._screenshot_workers: list[ScreenshotWorker] = []
 
         # LUT worker thread
         self._lut_worker = LUTWorker(self)
@@ -270,15 +287,16 @@ class PeakVideoPreview(QWidget):
         self._last_frame_image = image.copy()
 
         lut_path = self._get_lut_path()
+        brightness = self.get_current_brightness()
 
-        if lut_path:
-            # Send to worker thread for LUT processing (worker has its own LUTProcessor)
+        if lut_path or brightness != 0:
+            # Send to worker thread for LUT/brightness processing
             dpr = self.video_label.devicePixelRatioF()
             logical = self.video_label.size()
             target = QSize(int(logical.width() * dpr), int(logical.height() * dpr))
-            self._lut_worker.submit(image, target, dpr, lut_path)
+            self._lut_worker.submit(image, target, dpr, lut_path, brightness)
         else:
-            # No LUT - display directly
+            # No processing needed - display directly
             self.video_label.setPixmap(QPixmap.fromImage(image))
 
     def _on_lut_frame_ready(self, image, dpr):
@@ -287,16 +305,16 @@ class PeakVideoPreview(QWidget):
         self.video_label.setPixmap(pixmap)
 
     def refresh_lut(self):
-        """Re-apply LUT to current frame (call after LUT selection change)."""
-        # Re-process the stored image copy with new LUT setting
+        """Re-apply LUT/brightness to current frame (call after LUT or brightness change)."""
+        # Re-process the stored image copy with new LUT/brightness setting
         if hasattr(self, '_last_frame_image') and self._last_frame_image and not self._last_frame_image.isNull():
             lut_path = self._get_lut_path()
-            if lut_path:
+            brightness = self.get_current_brightness()
+            if lut_path or brightness != 0:
                 dpr = self.video_label.devicePixelRatioF()
                 logical = self.video_label.size()
                 target = QSize(int(logical.width() * dpr), int(logical.height() * dpr))
-                # Pass empty string to force worker to reload LUT
-                self._lut_worker.submit(self._last_frame_image.copy(), target, dpr, lut_path)
+                self._lut_worker.submit(self._last_frame_image.copy(), target, dpr, lut_path, brightness)
             else:
                 self.video_label.setPixmap(QPixmap.fromImage(self._last_frame_image))
 
@@ -363,6 +381,19 @@ class PeakVideoPreview(QWidget):
         if self._current_video:
             return self._camera_names.get(self._current_video, "")
         return ""
+
+    # --- Brightness ---
+
+    def set_brightness(self, value: int):
+        """Set brightness offset for current camera (-100 to +100)."""
+        if self._current_video:
+            self._brightness_values[self._current_video] = value
+
+    def get_current_brightness(self) -> int:
+        """Get brightness offset for current camera."""
+        if self._current_video:
+            return self._brightness_values.get(self._current_video, 0)
+        return 0
 
     # --- Playback ---
 
@@ -455,22 +486,25 @@ class PeakVideoPreview(QWidget):
     # --- Screenshot ---
 
     def capture_screenshot_async(self, camera_name: str = ""):
-        """Start async screenshot capture. Emits screenshot_done when finished."""
+        """Start async screenshot capture. Emits screenshot_done when finished.
+
+        Multiple screenshots can run in parallel — each gets its own worker.
+        """
         if not self._current_video:
             self.screenshot_done.emit("")
             return
 
         import config
-        from utils import EXPORT_DIR, LUTS_DIR
+        from utils import EXPORT_DIR, LUTS_DIR, MATERIAL_DIR
         from core.exporters import extract_guest_name
-        from utils import MATERIAL_DIR
 
         position_ms = self.player.position()
         position_s = position_ms / 1000.0
         lut_filename = config.get("lut_path") or ""
         fps = config.get("fps") or 25
 
-        gastname = extract_guest_name(MATERIAL_DIR)
+        mic_tracks = self._session.project.mic_tracks if self._session else None
+        gastname = extract_guest_name(MATERIAL_DIR, mic_tracks)
         screenshots_dir = os.path.join(EXPORT_DIR, f"{gastname} - Screenshots")
 
         # Counter
@@ -480,23 +514,31 @@ class PeakVideoPreview(QWidget):
         else:
             counter = 0
 
-        self._screenshot_worker = ScreenshotWorker(
+        brightness = self.get_current_brightness()
+
+        worker = ScreenshotWorker(
             self._current_video, position_s, lut_filename, LUTS_DIR,
-            camera_name, screenshots_dir, counter, fps
+            camera_name, screenshots_dir, counter, fps, brightness
         )
-        self._screenshot_worker.screenshot_done.connect(self._on_screenshot_done)
-        self._screenshot_worker.start()
+        worker.screenshot_done.connect(self._on_screenshot_done)
+        worker.screenshot_done.connect(lambda _, w=worker: self._cleanup_screenshot_worker(w))
+        self._screenshot_workers.append(worker)
+        worker.start()
 
     def _on_screenshot_done(self, filepath):
         self.screenshot_done.emit(filepath)
-        # Use deleteLater for proper QThread cleanup
-        if self._screenshot_worker:
-            self._screenshot_worker.deleteLater()
-            self._screenshot_worker = None
+
+    def _cleanup_screenshot_worker(self, worker):
+        """Remove finished worker from list and schedule deletion."""
+        if worker in self._screenshot_workers:
+            self._screenshot_workers.remove(worker)
+        worker.deleteLater()
 
     # --- Cleanup ---
 
     def cleanup(self):
         self._lut_worker.stop()
-        if self._screenshot_worker and self._screenshot_worker.isRunning():
-            self._screenshot_worker.wait(3000)
+        for worker in self._screenshot_workers:
+            if worker.isRunning():
+                worker.wait(3000)
+        self._screenshot_workers.clear()
