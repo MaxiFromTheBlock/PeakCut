@@ -8,6 +8,9 @@ from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QTimer, QSize, QThread, QMutex, Q
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink
 
+_SCREENSHOT_TIMEOUT_S = 30
+_WORKER_SHUTDOWN_WAIT_MS = 3000
+
 
 class LUTWorker(QThread):
     """Worker thread for LUT frame processing off the main thread.
@@ -165,7 +168,7 @@ class ScreenshotWorker(QThread):
         cmd.extend(["-q:v", "2", filepath])
 
         try:
-            result = subprocess.run(cmd, capture_output=True, timeout=30)
+            result = subprocess.run(cmd, capture_output=True, timeout=_SCREENSHOT_TIMEOUT_S)
             if result.returncode == 0 and os.path.exists(filepath):
                 self.screenshot_done.emit(filepath)
             else:
@@ -536,5 +539,5 @@ class PeakVideoPreview(QWidget):
         self._lut_worker.stop()
         for worker in self._screenshot_workers:
             if worker.isRunning():
-                worker.wait(3000)
+                worker.wait(_WORKER_SHUTDOWN_WAIT_MS)
         self._screenshot_workers.clear()

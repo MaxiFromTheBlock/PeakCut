@@ -1,5 +1,8 @@
 """
 Apple Style - macOS-inspired stylesheet for the application
+
+Structured into logical sections by UI component.
+Public API: COLORS dict + get_stylesheet() function.
 """
 
 # Apple-inspired color palette
@@ -32,9 +35,11 @@ COLORS = {
     'shadow_hover': 'rgba(0, 0, 0, 0.08)',
 }
 
-def get_stylesheet():
-    """Return the complete Apple-style stylesheet."""
-    return f'''
+
+# ---------------------------------------------------------------------------
+# Section: Global defaults (QMainWindow, QWidget)
+# ---------------------------------------------------------------------------
+_GLOBAL_STYLES = f'''
     /* ===== GLOBAL ===== */
     QMainWindow {{
         background-color: {COLORS['bg_secondary']};
@@ -45,7 +50,12 @@ def get_stylesheet():
         font-size: 13px;
         color: {COLORS['text_primary']};
     }}
+'''
 
+# ---------------------------------------------------------------------------
+# Section: Labels (QLabel)
+# ---------------------------------------------------------------------------
+_LABEL_STYLES = f'''
     /* ===== LABELS ===== */
     QLabel {{
         color: {COLORS['text_primary']};
@@ -61,7 +71,12 @@ def get_stylesheet():
         font-size: 15px;
         font-weight: 600;
     }}
+'''
 
+# ---------------------------------------------------------------------------
+# Section: Buttons (QPushButton — default, primary, small, icon)
+# ---------------------------------------------------------------------------
+_BUTTON_STYLES = f'''
     /* ===== BUTTONS ===== */
     QPushButton {{
         background-color: {COLORS['bg_primary']};
@@ -127,7 +142,12 @@ def get_stylesheet():
         max-height: 28px;
         border-radius: 6px;
     }}
+'''
 
+# ---------------------------------------------------------------------------
+# Section: Input fields (QLineEdit)
+# ---------------------------------------------------------------------------
+_INPUT_STYLES = f'''
     /* ===== INPUT FIELDS ===== */
     QLineEdit {{
         background-color: {COLORS['bg_primary']};
@@ -153,7 +173,12 @@ def get_stylesheet():
         background-color: {COLORS['bg_tertiary']};
         color: {COLORS['text_secondary']};
     }}
+'''
 
+# ---------------------------------------------------------------------------
+# Section: Spinbox (QSpinBox)
+# ---------------------------------------------------------------------------
+_SPINBOX_STYLES = f'''
     /* ===== SPINBOX ===== */
     QSpinBox {{
         background-color: {COLORS['bg_primary']};
@@ -192,7 +217,12 @@ def get_stylesheet():
         width: 0;
         height: 0;
     }}
+'''
 
+# ---------------------------------------------------------------------------
+# Section: Combobox (QComboBox + dropdown items)
+# ---------------------------------------------------------------------------
+_COMBOBOX_STYLES = f'''
     /* ===== COMBOBOX ===== */
     QComboBox {{
         background-color: {COLORS['bg_primary']};
@@ -246,7 +276,12 @@ def get_stylesheet():
     QComboBox QAbstractItemView::item:hover {{
         background-color: {COLORS['bg_tertiary']};
     }}
+'''
 
+# ---------------------------------------------------------------------------
+# Section: Checkbox (QCheckBox)
+# ---------------------------------------------------------------------------
+_CHECKBOX_STYLES = f'''
     /* ===== CHECKBOX ===== */
     QCheckBox {{
         spacing: 8px;
@@ -275,7 +310,12 @@ def get_stylesheet():
         background-color: {COLORS['bg_tertiary']};
         border-color: {COLORS['border_light']};
     }}
+'''
 
+# ---------------------------------------------------------------------------
+# Section: Slider (QSlider)
+# ---------------------------------------------------------------------------
+_SLIDER_STYLES = f'''
     /* ===== SLIDER ===== */
     QSlider::groove:horizontal {{
         height: 4px;
@@ -305,7 +345,12 @@ def get_stylesheet():
     QSlider:disabled {{
         opacity: 0.5;
     }}
+'''
 
+# ---------------------------------------------------------------------------
+# Section: Group box (QGroupBox)
+# ---------------------------------------------------------------------------
+_GROUPBOX_STYLES = f'''
     /* ===== GROUP BOX ===== */
     QGroupBox {{
         background-color: {COLORS['bg_primary']};
@@ -326,7 +371,12 @@ def get_stylesheet():
         font-size: 13px;
         font-weight: 600;
     }}
+'''
 
+# ---------------------------------------------------------------------------
+# Section: Scroll area + scrollbars (QScrollArea, QScrollBar)
+# ---------------------------------------------------------------------------
+_SCROLLBAR_STYLES = f'''
     /* ===== SCROLL AREA ===== */
     QScrollArea {{
         background-color: transparent;
@@ -376,7 +426,12 @@ def get_stylesheet():
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
         height: 0;
     }}
+'''
 
+# ---------------------------------------------------------------------------
+# Section: Progress bar (QProgressBar)
+# ---------------------------------------------------------------------------
+_PROGRESSBAR_STYLES = f'''
     /* ===== PROGRESS BAR ===== */
     QProgressBar {{
         background-color: {COLORS['bg_tertiary']};
@@ -390,7 +445,12 @@ def get_stylesheet():
         background-color: {COLORS['accent_blue']};
         border-radius: 4px;
     }}
+'''
 
+# ---------------------------------------------------------------------------
+# Section: Status bar (QStatusBar)
+# ---------------------------------------------------------------------------
+_STATUSBAR_STYLES = f'''
     /* ===== STATUS BAR ===== */
     QStatusBar {{
         background-color: {COLORS['bg_secondary']};
@@ -399,7 +459,12 @@ def get_stylesheet():
         font-size: 12px;
         color: {COLORS['text_secondary']};
     }}
+'''
 
+# ---------------------------------------------------------------------------
+# Section: Frame cards (QFrame)
+# ---------------------------------------------------------------------------
+_FRAME_STYLES = f'''
     /* ===== FRAME (for cards) ===== */
     QFrame[class="card"] {{
         background-color: {COLORS['bg_primary']};
@@ -410,7 +475,12 @@ def get_stylesheet():
     QFrame[class="card"]:hover {{
         border-color: {COLORS['accent_blue']};
     }}
+'''
 
+# ---------------------------------------------------------------------------
+# Section: Tooltip (QToolTip)
+# ---------------------------------------------------------------------------
+_TOOLTIP_STYLES = f'''
     /* ===== TOOLTIP ===== */
     QToolTip {{
         background-color: {COLORS['text_primary']};
@@ -420,7 +490,12 @@ def get_stylesheet():
         padding: 6px 10px;
         font-size: 12px;
     }}
+'''
 
+# ---------------------------------------------------------------------------
+# Section: Dialogs and message boxes (QDialog, QMessageBox)
+# ---------------------------------------------------------------------------
+_DIALOG_STYLES = f'''
     /* ===== DIALOG ===== */
     QDialog {{
         background-color: {COLORS['bg_secondary']};
@@ -435,4 +510,31 @@ def get_stylesheet():
         font-size: 13px;
         color: {COLORS['text_primary']};
     }}
-    '''
+'''
+
+
+# ---------------------------------------------------------------------------
+# All sections in display order
+# ---------------------------------------------------------------------------
+_ALL_SECTIONS = (
+    _GLOBAL_STYLES,
+    _LABEL_STYLES,
+    _BUTTON_STYLES,
+    _INPUT_STYLES,
+    _SPINBOX_STYLES,
+    _COMBOBOX_STYLES,
+    _CHECKBOX_STYLES,
+    _SLIDER_STYLES,
+    _GROUPBOX_STYLES,
+    _SCROLLBAR_STYLES,
+    _PROGRESSBAR_STYLES,
+    _STATUSBAR_STYLES,
+    _FRAME_STYLES,
+    _TOOLTIP_STYLES,
+    _DIALOG_STYLES,
+)
+
+
+def get_stylesheet():
+    """Return the complete Apple-style stylesheet."""
+    return ''.join(_ALL_SECTIONS)

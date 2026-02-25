@@ -11,6 +11,9 @@ from utils import TEMP_DIR, ASSETS_DIR, parse_timecode_to_ms, ms_to_timecode, ms
 
 
 PAUSE_DURATION_MS = 500
+_TTS_TIMEOUT_S = 5
+_TTS_FALLBACK_SILENCE_MS = 300
+_TTS_NUMBER_GAP_MS = 100
 
 
 def extract_guest_name(file_paths: list[str]) -> str:
@@ -41,7 +44,7 @@ def generate_tts_number(n, temp_dir, voice):
         result = subprocess.run(
             ["say", "-v", voice, "-o", aiff_path, str(n)],
             capture_output=True,
-            timeout=5
+            timeout=_TTS_TIMEOUT_S
         )
         if result.returncode == 0 and os.path.exists(aiff_path):
             audio = AudioSegment.from_file(aiff_path)
@@ -67,7 +70,7 @@ def load_spoken_number(n, temp_dir, assets_dir, voice):
             return AudioSegment.from_file(path)
 
     # 3. Last fallback: silence
-    return AudioSegment.silent(duration=300)
+    return AudioSegment.silent(duration=_TTS_FALLBACK_SILENCE_MS)
 
 
 def _file_url(filepath):
@@ -152,7 +155,7 @@ class MP3Exporter(BaseExporter):
             segment = mic_audios[0][start:end]
             for m in mic_audios[1:]:
                 segment = segment.overlay(m[start:end])
-            segments.append(number_audio + AudioSegment.silent(duration=100) + segment)
+            segments.append(number_audio + AudioSegment.silent(duration=_TTS_NUMBER_GAP_MS) + segment)
             segments.append(AudioSegment.silent(duration=PAUSE_DURATION_MS))
 
         if not segments:
@@ -251,7 +254,9 @@ class XMLExporter(BaseExporter):
         # Calculate total sequence duration in frames
         total_frames = 0
         for _, peak in active_peaks:
-            total_frames += _ms_to_frames(peak.clip_duration_ms, fps)
+            in_f = _ms_to_frames(peak.in_point_ms, fps)
+            out_f = _ms_to_frames(peak.out_point_ms, fps)
+            total_frames += out_f - in_f
 
         rate_block = f"""<rate><timebase>{fps}</timebase><ntsc>FALSE</ntsc></rate>"""
         tc_block = f"""<timecode>
@@ -307,12 +312,11 @@ class XMLExporter(BaseExporter):
                 for clip_idx, (peak_num, peak) in enumerate(active_peaks):
                     clip_id = f"clipitem-v{track_idx + 1}-{clip_idx + 1}"
                     source_in = max(0, peak.in_point_ms + offset_ms)
-                    source_out = peak.out_point_ms + offset_ms
-                    clip_duration = source_out - source_in
+                    source_out = max(0, peak.out_point_ms + offset_ms)
 
                     source_in_f = _ms_to_frames(source_in, fps)
                     source_out_f = _ms_to_frames(source_out, fps)
-                    clip_dur_f = _ms_to_frames(clip_duration, fps)
+                    clip_dur_f = source_out_f - source_in_f
                     rec_start_f = record_pos
                     rec_end_f = record_pos + clip_dur_f
 
@@ -377,13 +381,9 @@ class XMLExporter(BaseExporter):
                 record_pos = 0
                 for clip_idx, (peak_num, peak) in enumerate(active_peaks):
                     clip_id = f"clipitem-a{track_idx + 1}-{clip_idx + 1}"
-                    source_in = peak.in_point_ms
-                    source_out = peak.out_point_ms
-                    clip_duration = source_out - source_in
-
-                    source_in_f = _ms_to_frames(source_in, fps)
-                    source_out_f = _ms_to_frames(source_out, fps)
-                    clip_dur_f = _ms_to_frames(clip_duration, fps)
+                    source_in_f = _ms_to_frames(peak.in_point_ms, fps)
+                    source_out_f = _ms_to_frames(peak.out_point_ms, fps)
+                    clip_dur_f = source_out_f - source_in_f
                     rec_start_f = record_pos
                     rec_end_f = record_pos + clip_dur_f
 

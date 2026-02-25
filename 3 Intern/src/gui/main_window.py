@@ -28,6 +28,8 @@ from core.exporters import MP3Exporter, XMLExporter, TXTExporter
 
 
 _ANALYSIS_TIMEOUT_S = 600  # 10 minutes max
+_PLAYBACK_POLL_MS = 200
+_WORKER_SHUTDOWN_WAIT_MS = 3000
 
 
 class AnalysisWorker(QThread):
@@ -176,7 +178,7 @@ class MainWindow(QMainWindow):
 
         # Playback poll timer
         self._play_timer = QTimer()
-        self._play_timer.setInterval(200)
+        self._play_timer.setInterval(_PLAYBACK_POLL_MS)
         self._play_timer.timeout.connect(self._poll_playback)
 
         # File state
@@ -770,10 +772,10 @@ class MainWindow(QMainWindow):
                     except Exception:
                         self._worker._process.kill()
             if self._worker.isRunning():
-                self._worker.wait(3000)
+                self._worker.wait(_WORKER_SHUTDOWN_WAIT_MS)
 
         if self._export_worker and self._export_worker.isRunning():
-            self._export_worker.wait(3000)
+            self._export_worker.wait(_WORKER_SHUTDOWN_WAIT_MS)
 
         stop_playback()
         event.accept()

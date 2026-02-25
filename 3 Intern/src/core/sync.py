@@ -6,6 +6,8 @@ import numpy as np
 import soundfile as sf
 from scipy.signal import fftconvolve
 
+_FFMPEG_EXTRACT_TIMEOUT_S = 300
+
 
 def cleanup_temp(temp_dir):
     """Delete all files in temp folder."""
@@ -19,12 +21,16 @@ def cleanup_temp(temp_dir):
                 pass
 
 
-def extract_audio_from_video(video_path, output_path):
-    """Extract audio track from video file using ffmpeg directly."""
-    result = subprocess.run(
-        ["ffmpeg", "-y", "-i", video_path, "-vn", "-acodec", "pcm_s16le", output_path],
-        capture_output=True, timeout=300
-    )
+def extract_audio_from_video(video_path, output_path, target_sr=None):
+    """Extract audio track from video file using ffmpeg directly.
+
+    If target_sr is given, resample to that rate (ensures matching sample rates for correlation).
+    """
+    cmd = ["ffmpeg", "-y", "-i", video_path, "-vn", "-acodec", "pcm_s16le"]
+    if target_sr:
+        cmd.extend(["-ar", str(target_sr)])
+    cmd.append(output_path)
+    result = subprocess.run(cmd, capture_output=True, timeout=_FFMPEG_EXTRACT_TIMEOUT_S)
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg failed: {result.stderr.decode(errors='replace')[:200]}")
 
@@ -78,13 +84,9 @@ def _sync_single_video(video_path, reference_data, ref_sr, temp_dir, fps, status
     temp_audio_path = os.path.join(temp_dir, f"{video_name}_audio.wav")
 
     status(f"Extracting audio: {video_filename}...")
-    extract_audio_from_video(video_path, temp_audio_path)
+    extract_audio_from_video(video_path, temp_audio_path, target_sr=ref_sr)
 
     target_data, target_sr = load_audio_as_array(temp_audio_path)
-
-    if target_sr != ref_sr:
-        status(f"Sample rates differ ({target_sr} vs {ref_sr}), skipping {video_filename}.")
-        return None
 
     status(f"Calculating offset: {video_filename}...")
     offset_samples = calculate_offset(reference_data, target_data)
