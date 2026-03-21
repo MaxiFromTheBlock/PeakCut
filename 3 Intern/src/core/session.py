@@ -1,11 +1,9 @@
 import os
-import sys
 from concurrent.futures import ThreadPoolExecutor
 
 from PyQt6.QtCore import QObject, pyqtSignal
 from pydub import AudioSegment
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import parse_timecode_to_ms
 
 from .project import PeakCutProject

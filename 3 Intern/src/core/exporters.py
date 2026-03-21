@@ -1,12 +1,10 @@
 import os
-import sys
 import subprocess
 from abc import ABC, abstractmethod
 from urllib.parse import quote
 
 from pydub import AudioSegment
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import TEMP_DIR, ASSETS_DIR, parse_timecode_to_ms, ms_to_timecode, ms_to_frames, get_logger
 
 _log = get_logger("peakcut.export")
