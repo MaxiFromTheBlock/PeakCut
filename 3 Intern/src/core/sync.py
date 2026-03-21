@@ -6,6 +6,9 @@ import numpy as np
 import soundfile as sf
 from scipy.signal import fftconvolve
 
+from utils import get_logger
+
+_log = get_logger("peakcut.sync")
 _FFMPEG_EXTRACT_TIMEOUT_S = 300
 
 
@@ -30,9 +33,12 @@ def extract_audio_from_video(video_path, output_path, target_sr=None):
     if target_sr:
         cmd.extend(["-ar", str(target_sr)])
     cmd.append(output_path)
+    _log.debug("ffmpeg cmd: %s", " ".join(cmd))
     result = subprocess.run(cmd, capture_output=True, timeout=_FFMPEG_EXTRACT_TIMEOUT_S)
     if result.returncode != 0:
-        raise RuntimeError(f"ffmpeg failed: {result.stderr.decode(errors='replace')[:200]}")
+        err_msg = result.stderr.decode(errors='replace')[:200]
+        _log.error("ffmpeg failed for %s: %s", video_path, err_msg)
+        raise RuntimeError(f"ffmpeg failed: {err_msg}")
 
 
 def load_audio_as_array(path):
@@ -84,7 +90,11 @@ def _sync_single_video(video_path, reference_data, ref_sr, temp_dir, fps, status
     temp_audio_path = os.path.join(temp_dir, f"{video_name}_audio.wav")
 
     status(f"Extracting audio: {video_filename}...")
-    extract_audio_from_video(video_path, temp_audio_path, target_sr=ref_sr)
+    try:
+        extract_audio_from_video(video_path, temp_audio_path, target_sr=ref_sr)
+    except (RuntimeError, subprocess.TimeoutExpired) as e:
+        _log.error("Audio extraction failed for %s: %s", video_filename, e)
+        raise RuntimeError(f"Audio-Extraktion fehlgeschlagen für {video_filename}") from e
 
     target_data, target_sr = load_audio_as_array(temp_audio_path)
 
@@ -93,6 +103,7 @@ def _sync_single_video(video_path, reference_data, ref_sr, temp_dir, fps, status
     offset_seconds = offset_samples / ref_sr
 
     formatted_offset = format_offset(offset_seconds, fps)
+    _log.info("Sync %s: offset=%s (%.3fs, %d samples)", video_filename, formatted_offset, offset_seconds, offset_samples)
     status(f"{video_filename} Offset: {formatted_offset}")
     return (video_filename, formatted_offset)
 
@@ -142,6 +153,7 @@ def sync_videos(video_files, reference_path, temp_dir, fps=25, status_fn=None):
                         video_offsets.append(result)
                 except Exception as e:
                     video_path = futures[future]
+                    _log.error("Sync failed for %s: %s", os.path.basename(video_path), e, exc_info=True)
                     status(f"Sync failed for {os.path.basename(video_path)}: {e}")
 
     cleanup_temp(temp_dir)

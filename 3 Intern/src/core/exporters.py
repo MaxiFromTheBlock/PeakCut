@@ -7,8 +7,9 @@ from urllib.parse import quote
 from pydub import AudioSegment
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import TEMP_DIR, ASSETS_DIR, parse_timecode_to_ms, ms_to_timecode, ms_to_frames
+from utils import TEMP_DIR, ASSETS_DIR, parse_timecode_to_ms, ms_to_timecode, ms_to_frames, get_logger
 
+_log = get_logger("peakcut.export")
 
 PAUSE_DURATION_MS = 500
 _TTS_TIMEOUT_S = 5
@@ -134,6 +135,7 @@ class MP3Exporter(BaseExporter):
     """Export numbered MP3 clips with TTS."""
 
     def export(self, session) -> str:
+        _log.info("MP3 export starting (%d peaks)", len(session.peaks))
         os.makedirs(session.project.export_dir, exist_ok=True)
 
         # Ensure audio is loaded (lazy loading after subprocess analysis)
@@ -170,6 +172,7 @@ class MP3Exporter(BaseExporter):
                                 f"Keyboardstellen - {gastname}.mp3")
         result.export(mp3_path, format="mp3")
 
+        _log.info("MP3 export done: %s (%d active peaks)", mp3_path, len(active_peaks))
         session.status_update.emit(f"MP3 exported: {os.path.basename(mp3_path)}")
         return mp3_path
 

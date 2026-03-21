@@ -20,13 +20,14 @@ from .video_preview_peak import PeakVideoPreview
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
-from utils import APP_DIR, EXPORT_DIR, LUTS_DIR, TEMP_DIR, ms_to_mmss
+from utils import APP_DIR, EXPORT_DIR, LUTS_DIR, TEMP_DIR, ms_to_mmss, get_logger, validate_media_file
 from core.project import PeakCutProject
 from core.session import PeakCutSession
 from core.audio import stop_playback, is_playing
 from core.exporters import MP3Exporter, XMLExporter, TXTExporter
 
 
+_log = get_logger("peakcut.gui")
 _ANALYSIS_TIMEOUT_S = 600  # 10 minutes max
 _PLAYBACK_POLL_MS = 200
 _WORKER_SHUTDOWN_WAIT_MS = 3000
@@ -425,6 +426,7 @@ class MainWindow(QMainWindow):
             return
 
         self._settings.setValue("last_folder", os.path.dirname(files[0]))
+        _log.info("Import: %d files selected", len(files))
         self._categorize_files(files)
 
         if not self._keyboard_file:
@@ -443,6 +445,15 @@ class MainWindow(QMainWindow):
             idx = items.index(item)
             self._keyboard_file = audio_files[idx]
             self._mic_files = [f for f in audio_files if f != self._keyboard_file]
+
+        # Validate all files before starting analysis
+        all_files = [self._keyboard_file] + self._mic_files + self._video_files
+        for f in all_files:
+            error = validate_media_file(f)
+            if error:
+                _log.error("File validation failed: %s", error)
+                self.statusbar.showMessage(error)
+                return
 
         self._start_analysis()
 
@@ -466,6 +477,8 @@ class MainWindow(QMainWindow):
                 self._mic_files.append(f)
 
     def _start_analysis(self):
+        _log.info("Analysis starting: keyboard=%s, %d mics, %d videos",
+                  self._keyboard_file, len(self._mic_files), len(self._video_files))
         self.stack.setCurrentIndex(1)  # Show analysis page
         self.analysis_status.setText("Starte Analyse...")
 
@@ -487,6 +500,8 @@ class MainWindow(QMainWindow):
         self.session.load_analysis_results(results)
 
         num_peaks = len(self.session.peaks)
+        _log.info("Analysis done: %d peaks, %d video offsets",
+                  num_peaks, len(results.get("video_offsets", [])))
         if num_peaks == 0:
             self.analysis_label.setText("Keine Peaks gefunden")
             self.analysis_status.setText("Bitte andere Dateien importieren")
@@ -499,6 +514,7 @@ class MainWindow(QMainWindow):
         self.statusbar.showMessage(f"{num_peaks} Peaks gefunden")
 
     def _on_analysis_error(self, msg):
+        _log.error("Analysis error: %s", msg)
         self.analysis_label.setText("Fehler")
         self.analysis_status.setText(msg)
 
@@ -719,12 +735,14 @@ class MainWindow(QMainWindow):
         self._export_worker.start()
 
     def _on_export_done(self, exported):
+        _log.info("Export done: %d files -> %s", len(exported), EXPORT_DIR)
         self.export_btn.setEnabled(True)
         self.statusbar.showMessage(f"Export fertig! {len(exported)} Dateien → {EXPORT_DIR}")
         self._export_worker.deleteLater()
         self._export_worker = None
 
     def _on_export_error(self, msg):
+        _log.error("Export error: %s", msg)
         self.export_btn.setEnabled(True)
         self.statusbar.showMessage(f"Export-Fehler: {msg}")
         self._export_worker.deleteLater()
