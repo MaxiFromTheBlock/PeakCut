@@ -531,6 +531,11 @@ class PeakVideoPreview(QWidget):
         """Remove finished worker from list and schedule deletion."""
         if worker in self._screenshot_workers:
             self._screenshot_workers.remove(worker)
+        # Wait for thread to fully finish before allowing Qt to delete it.
+        # Without this, QThread::~QThread() can fire while the thread is still
+        # running, which triggers SIGABRT.
+        if worker.isRunning():
+            worker.wait(_WORKER_SHUTDOWN_WAIT_MS)
         worker.deleteLater()
 
     # --- Cleanup ---
