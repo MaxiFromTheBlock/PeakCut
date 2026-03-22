@@ -17,7 +17,7 @@ import config
 from utils import EXPORT_DIR, get_logger, validate_media_file
 from core.project import PeakCutProject
 from core.session import PeakCutSession
-from core.audio import stop_playback
+from core.playback import stop_playback
 
 _log = get_logger("peakcut.gui")
 _WORKER_SHUTDOWN_WAIT_MS = 3000
@@ -39,6 +39,7 @@ class MainWindow(QMainWindow):
         self._keyboard_file = None
         self._mic_files = []
         self._video_files = []
+        self._guest_name = None
 
         self._settings = QSettings("PeakCut", "PeakCut")
 
@@ -162,6 +163,18 @@ class MainWindow(QMainWindow):
                 self.statusbar.showMessage(error)
                 return
 
+        # Auto-detect guest name, let user confirm/edit
+        from core.exporters import extract_guest_name
+        detected_name = extract_guest_name(all_files)
+        guest_name, ok = QInputDialog.getText(
+            self, "Gastname",
+            "Gastname für Exports:",
+            text=detected_name,
+        )
+        if not ok:
+            return
+        self._guest_name = guest_name.strip() or detected_name
+
         self._start_analysis()
 
     def _categorize_files(self, files):
@@ -191,6 +204,8 @@ class MainWindow(QMainWindow):
 
         project = PeakCutProject(EXPORT_DIR)
         project.set_files(self._keyboard_file, self._mic_files, self._video_files)
+        if self._guest_name:
+            project.guest_name = self._guest_name
 
         self.session = PeakCutSession(project, config.load())
 

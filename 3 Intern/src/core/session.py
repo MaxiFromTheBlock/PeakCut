@@ -7,7 +7,7 @@ from utils import parse_timecode_to_ms
 
 from .project import PeakCutProject
 from .peak import Peak
-from .audio import play_audio
+from .playback import play_audio
 
 
 class StatusUpdate:

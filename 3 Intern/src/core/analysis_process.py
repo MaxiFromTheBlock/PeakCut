@@ -58,7 +58,7 @@ def run_analysis(config_data):
         sys.path.insert(0, src_dir)
 
     from pydub import AudioSegment
-    from core.audio import detect_peaks
+    from core.detection import detect_peaks
     from core.sync import sync_videos
 
     keyboard_track = config_data["keyboard_track"]

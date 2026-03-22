@@ -14,7 +14,7 @@ from .workers import ExportWorker
 
 import config
 from utils import EXPORT_DIR, LUTS_DIR, ms_to_mmss, get_logger
-from core.audio import stop_playback, is_playing
+from core.playback import stop_playback, is_playing
 
 _log = get_logger("peakcut.review")
 _PLAYBACK_POLL_MS = 200
