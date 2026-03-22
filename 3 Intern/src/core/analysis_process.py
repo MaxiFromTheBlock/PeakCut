@@ -22,8 +22,8 @@ Where config_json contains:
     "temp_dir": "/path/to/temp",
     "export_dir": "/path/to/export",
     "config": {
-        "threshold_factor": 0.4,
-        "min_gap_ms": 15000,
+        "threshold_factor": 0.3,
+        "min_gap_ms": 12000,
         "context_duration_ms": 15000,
         "fps": 25
     }
@@ -104,8 +104,8 @@ def run_analysis(config_data):
     try:
         raw_peaks = detect_peaks(
             keyboard_track,
-            cfg.get("threshold_factor", 0.4),
-            cfg.get("min_gap_ms", 15000)
+            cfg.get("threshold_factor", 0.3),
+            cfg.get("min_gap_ms", 12000)
         )
 
         ctx = cfg.get("context_duration_ms", 15000)
