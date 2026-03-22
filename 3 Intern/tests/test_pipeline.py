@@ -21,8 +21,9 @@ from pydub import AudioSegment
 from core.session import PeakCutSession
 from core.project import PeakCutProject
 from core.audio import detect_peaks
+from core.sync import calculate_offset, load_audio_as_array, format_offset
 from core.exporters import MP3Exporter, TXTExporter, XMLExporter
-from utils import ms_to_timecode, parse_timecode_to_ms
+from utils import ms_to_timecode, parse_timecode_to_ms, validate_media_file
 
 
 # ---------------------------------------------------------------------------
@@ -338,3 +339,148 @@ class TestExportPipeline:
 
         export_files = os.listdir(test_material["export_dir"])
         assert len(export_files) == 3
+
+
+# ---------------------------------------------------------------------------
+# Validate media file
+# ---------------------------------------------------------------------------
+
+class TestValidateMediaFile:
+    """Test ffprobe-based file validation."""
+
+    def test_valid_wav(self, test_material):
+        assert validate_media_file(test_material["keyboard"]) is None
+
+    def test_valid_video(self, test_material):
+        assert validate_media_file(test_material["video"]) is None
+
+    def test_nonexistent_file(self):
+        result = validate_media_file("/does/not/exist.wav")
+        assert result is not None
+        assert "nicht gefunden" in result
+
+    def test_not_a_media_file(self, tmp_path):
+        txt = tmp_path / "fake.wav"
+        txt.write_text("this is not audio")
+        result = validate_media_file(str(txt))
+        assert result is not None
+
+    def test_file_without_audio_stream(self, tmp_path):
+        # Create a video-only file (no audio)
+        video_path = str(tmp_path / "no_audio.mp4")
+        subprocess.run(
+            ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=black:s=16x16:d=0.1:r=25",
+             "-an", "-c:v", "libx264", "-preset", "ultrafast", video_path],
+            capture_output=True, timeout=10,
+        )
+        result = validate_media_file(video_path)
+        assert result is not None
+        assert "Kein Audio" in result
+
+
+# ---------------------------------------------------------------------------
+# Edge cases
+# ---------------------------------------------------------------------------
+
+class TestEdgeCases:
+    """Edge cases that could break the pipeline."""
+
+    def test_no_peaks_found(self, test_material):
+        """Threshold at 100% means nothing exceeds max*1.0, so zero peaks."""
+        peaks = detect_peaks(test_material["keyboard"], threshold_factor=1.0, min_gap_ms=200)
+        assert len(peaks) == 0
+
+    def test_all_peaks_ignored_export(self, test_material, test_config):
+        """Export with all peaks ignored should return empty string."""
+        project = PeakCutProject(test_material["export_dir"])
+        project.set_files(test_material["keyboard"], [test_material["mic"]], [])
+        session = PeakCutSession(project, test_config)
+        session.load_analysis_results({
+            "peaks": [
+                {"index": 0, "position_ms": 400, "context_ms": 300, "ignored": True},
+                {"index": 1, "position_ms": 1000, "context_ms": 300, "ignored": True},
+            ],
+            "video_offsets": [],
+        })
+        assert TXTExporter().export(session) == ""
+        assert MP3Exporter().export(session) == ""
+
+    def test_audio_only_workflow(self, test_material, test_config):
+        """Full pipeline without videos (audio-only)."""
+        config_data = {
+            "keyboard_track": test_material["keyboard"],
+            "mic_tracks": [test_material["mic"]],
+            "videos": [],
+            "reference_track": test_material["mic"],
+            "temp_dir": test_material["temp_dir"],
+            "export_dir": test_material["export_dir"],
+            "config": test_config,
+        }
+
+        script_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"
+        )
+        script_path = os.path.join(script_dir, "core", "analysis_process.py")
+
+        result = subprocess.run(
+            [sys.executable, script_path, json.dumps(config_data)],
+            capture_output=True, text=True, cwd=script_dir, timeout=60,
+        )
+
+        assert result.returncode == 0
+        results = json.loads(result.stdout)
+        assert results["error"] is None
+        assert len(results["peaks"]) == 3
+        assert results["video_offsets"] == []
+
+    def test_single_peak_export(self, test_material, test_config):
+        """Export with just one peak."""
+        project = PeakCutProject(test_material["export_dir"])
+        project.set_files(test_material["keyboard"], [test_material["mic"]], [])
+        session = PeakCutSession(project, test_config)
+        session.load_analysis_results({
+            "peaks": [
+                {"index": 0, "position_ms": 400, "in_point_ms": 100, "out_point_ms": 700, "context_ms": 300, "ignored": False},
+            ],
+            "video_offsets": [],
+        })
+
+        mp3 = MP3Exporter().export(session)
+        txt = TXTExporter().export(session)
+        assert os.path.exists(mp3)
+        assert os.path.exists(txt)
+        content = open(txt).read()
+        assert "[PEAK 1]" in content
+
+
+# ---------------------------------------------------------------------------
+# Sync unit tests
+# ---------------------------------------------------------------------------
+
+class TestSyncUnits:
+    """Unit tests for sync.py functions."""
+
+    def test_load_audio_mono(self, test_material):
+        data, sr = load_audio_as_array(test_material["mic"])
+        assert len(data.shape) == 1  # mono
+        assert sr == SAMPLE_RATE
+        assert len(data) > 0
+
+    def test_calculate_offset_identical(self, test_material):
+        """Identical signals should have zero offset."""
+        data, sr = load_audio_as_array(test_material["mic"])
+        offset = calculate_offset(data, data)
+        # Allow small tolerance due to downsampling
+        assert abs(offset) < 100
+
+    def test_format_offset_zero(self):
+        assert format_offset(0.0, 25) == "00:00:00:00"
+
+    def test_format_offset_positive(self):
+        result = format_offset(1.5, 25)
+        assert result == "00:00:01:12"  # 1.5s * 25fps = 37.5 → 37 frames → 1s 12f
+
+    def test_format_offset_negative(self):
+        result = format_offset(-2.0, 25)
+        assert result.startswith("-")
+        assert "00:00:02:00" in result
