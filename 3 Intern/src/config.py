@@ -1,11 +1,11 @@
 # config.py - Configuration management
 
-import os
 import json
+import os
 import threading
 
-# Config file path
-INTERN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from utils import INTERN_DIR
+
 CONFIG_PATH = os.path.join(INTERN_DIR, "config.json")
 
 # Default values

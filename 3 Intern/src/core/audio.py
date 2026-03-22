@@ -25,7 +25,7 @@ def detect_peaks(audio_path, threshold_factor, min_gap_ms):
     except Exception as e:
         _log.error("Failed to load audio file %s: %s", audio_path, e)
         raise RuntimeError(f"Audio-Datei nicht lesbar: {os.path.basename(audio_path)}") from e
-    samples = np.array(audio.get_array_of_samples())
+    samples = np.abs(np.array(audio.get_array_of_samples()))
     if len(samples) == 0:
         _log.warning("Audio file is empty: %s", audio_path)
         return []

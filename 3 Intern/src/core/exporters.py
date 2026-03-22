@@ -101,19 +101,31 @@ def _probe_video_info(video_path):
 
 
 def _probe_audio_info(audio_path):
-    """Probe audio file for sample rate using ffprobe. Returns sample_rate or 48000 as fallback."""
+    """Probe audio file for sample rate, bit depth, and channels using ffprobe.
+
+    Returns (sample_rate, bit_depth, channels) with fallbacks (48000, 16, 2).
+    """
+    sample_rate, bit_depth, channels = 48000, 16, 2
     try:
         result = subprocess.run(
             ["ffprobe", "-v", "quiet", "-select_streams", "a:0",
-             "-show_entries", "stream=sample_rate",
-             "-of", "csv=p=0", audio_path],
+             "-show_entries", "stream=sample_rate,bits_per_sample,channels",
+             "-of", "flat", audio_path],
             capture_output=True, text=True, timeout=10
         )
-        if result.returncode == 0 and result.stdout.strip():
-            return int(result.stdout.strip())
+        if result.returncode == 0:
+            for line in result.stdout.strip().splitlines():
+                key, _, val = line.partition("=")
+                val = val.strip('"')
+                if key.endswith("sample_rate") and val.isdigit():
+                    sample_rate = int(val)
+                elif key.endswith("bits_per_sample") and val.isdigit() and int(val) > 0:
+                    bit_depth = int(val)
+                elif key.endswith("channels") and val.isdigit():
+                    channels = int(val)
     except Exception:
         pass
-    return 48000
+    return sample_rate, bit_depth, channels
 
 
 # --- Exporter base class ---
@@ -168,7 +180,7 @@ class MP3Exporter(BaseExporter):
         gastname = session.project.guest_name
         mp3_path = os.path.join(session.project.export_dir,
                                 f"Keyboardstellen - {gastname}.mp3")
-        result.export(mp3_path, format="mp3")
+        result.export(mp3_path, format="mp3", bitrate="192k")
 
         _log.info("MP3 export done: %s (%d active peaks)", mp3_path, len(active_peaks))
         session.status_update.emit(f"MP3 exported: {os.path.basename(mp3_path)}")
@@ -248,9 +260,9 @@ class XMLExporter(BaseExporter):
         if video_paths:
             vid_w, vid_h = _probe_video_info(video_paths[0])
 
-        sample_rate = 48000
+        sample_rate, bit_depth, channels = 48000, 16, 2
         if audio_paths:
-            sample_rate = _probe_audio_info(audio_paths[0])
+            sample_rate, bit_depth, channels = _probe_audio_info(audio_paths[0])
 
         # Calculate total sequence duration in frames
         total_frames = 0
@@ -348,9 +360,9 @@ class XMLExporter(BaseExporter):
                         f.write(f'                <audio>\n')
                         f.write(f'                  <samplecharacteristics>\n')
                         f.write(f'                    <samplerate>{sample_rate}</samplerate>\n')
-                        f.write(f'                    <depth>16</depth>\n')
+                        f.write(f'                    <depth>{bit_depth}</depth>\n')
                         f.write(f'                  </samplecharacteristics>\n')
-                        f.write(f'                  <channelcount>2</channelcount>\n')
+                        f.write(f'                  <channelcount>{channels}</channelcount>\n')
                         f.write(f'                </audio>\n')
                         f.write(f'              </media>\n')
                         f.write(f'            </file>\n')
@@ -369,7 +381,7 @@ class XMLExporter(BaseExporter):
             f.write(f'        <format>\n')
             f.write(f'          <samplecharacteristics>\n')
             f.write(f'            <samplerate>{sample_rate}</samplerate>\n')
-            f.write(f'            <depth>16</depth>\n')
+            f.write(f'            <depth>{bit_depth}</depth>\n')
             f.write(f'          </samplecharacteristics>\n')
             f.write(f'        </format>\n')
 
@@ -408,9 +420,9 @@ class XMLExporter(BaseExporter):
                         f.write(f'                <audio>\n')
                         f.write(f'                  <samplecharacteristics>\n')
                         f.write(f'                    <samplerate>{sample_rate}</samplerate>\n')
-                        f.write(f'                    <depth>16</depth>\n')
+                        f.write(f'                    <depth>{bit_depth}</depth>\n')
                         f.write(f'                  </samplecharacteristics>\n')
-                        f.write(f'                  <channelcount>2</channelcount>\n')
+                        f.write(f'                  <channelcount>{channels}</channelcount>\n')
                         f.write(f'                </audio>\n')
                         f.write(f'              </media>\n')
                         f.write(f'            </file>\n')

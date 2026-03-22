@@ -10,6 +10,8 @@ from utils import get_logger
 
 _log = get_logger("peakcut.sync")
 _FFMPEG_EXTRACT_TIMEOUT_S = 300
+_SYNC_WINDOW_S = 600  # First 10 minutes for fast sync
+_CORRELATION_THRESHOLD = 0.1  # Minimum normalized correlation for a valid sync
 
 
 def cleanup_temp(temp_dir):
@@ -41,11 +43,17 @@ def extract_audio_from_video(video_path, output_path, target_sr=None):
         raise RuntimeError(f"ffmpeg failed: {err_msg}")
 
 
-def load_audio_as_array(path):
-    """Load audio file as numpy array. Converts stereo to mono."""
+def load_audio_as_array(path, max_seconds=None):
+    """Load audio file as numpy array. Converts stereo to mono.
+
+    If max_seconds is given, only load that many seconds from the start.
+    """
     data, samplerate = sf.read(path)
     if len(data.shape) > 1:
         data = np.mean(data, axis=1)
+    if max_seconds is not None:
+        max_samples = int(samplerate * max_seconds)
+        data = data[:max_samples]
     return data, samplerate
 
 
@@ -54,15 +62,23 @@ def calculate_offset(reference, target, downsample_factor=10):
 
     Uses downsampling to reduce memory, then FFT-based correlation which is
     O((N+M)*log(N+M)) instead of O(N*M) — drastically faster for long recordings.
+
+    Returns (offset_samples, confidence) where confidence is 0.0-1.0.
     """
     ref_ds = reference[::downsample_factor]
     target_ds = target[::downsample_factor]
 
     # FFT correlation: flip reference, convolve (equivalent to correlate)
     corr = fftconvolve(target_ds, ref_ds[::-1], mode='full')
-    lag = np.argmax(corr) - len(ref_ds) + 1
+    peak_idx = np.argmax(corr)
+    lag = peak_idx - len(ref_ds) + 1
 
-    return lag * downsample_factor
+    # Normalized confidence: peak correlation vs. energy of inputs
+    peak_val = corr[peak_idx]
+    energy = np.sqrt(np.sum(ref_ds ** 2) * np.sum(target_ds ** 2))
+    confidence = float(peak_val / energy) if energy > 0 else 0.0
+
+    return lag * downsample_factor, confidence
 
 
 def format_offset(offset_seconds, fps=25):
@@ -96,14 +112,25 @@ def _sync_single_video(video_path, reference_data, ref_sr, temp_dir, fps, status
         _log.error("Audio extraction failed for %s: %s", video_filename, e)
         raise RuntimeError(f"Audio-Extraktion fehlgeschlagen für {video_filename}") from e
 
-    target_data, target_sr = load_audio_as_array(temp_audio_path)
+    target_data_full, target_sr = load_audio_as_array(temp_audio_path)
 
+    # Try fast sync with first 10 minutes
     status(f"Calculating offset: {video_filename}...")
-    offset_samples = calculate_offset(reference_data, target_data)
+    ref_window = reference_data[:int(ref_sr * _SYNC_WINDOW_S)]
+    target_window = target_data_full[:int(ref_sr * _SYNC_WINDOW_S)]
+    offset_samples, confidence = calculate_offset(ref_window, target_window)
+
+    if confidence < _CORRELATION_THRESHOLD:
+        _log.info("Sync %s: weak correlation (%.4f) with %ds window, retrying with full audio",
+                  video_filename, confidence, _SYNC_WINDOW_S)
+        status(f"Retrying full sync: {video_filename}...")
+        offset_samples, confidence = calculate_offset(reference_data, target_data_full)
+
     offset_seconds = offset_samples / ref_sr
 
     formatted_offset = format_offset(offset_seconds, fps)
-    _log.info("Sync %s: offset=%s (%.3fs, %d samples)", video_filename, formatted_offset, offset_seconds, offset_samples)
+    _log.info("Sync %s: offset=%s (%.3fs, %d samples, confidence=%.4f)",
+              video_filename, formatted_offset, offset_seconds, offset_samples, confidence)
     status(f"{video_filename} Offset: {formatted_offset}")
     return (video_filename, formatted_offset)
 

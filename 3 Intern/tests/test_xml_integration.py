@@ -41,7 +41,7 @@ def _make_session(peaks, video_offsets, videos, mics, export_dir, fps=25):
 def _export_and_parse(session):
     """Run XMLExporter and return parsed ElementTree root."""
     with patch("core.exporters._probe_video_info", return_value=(1920, 1080)), \
-         patch("core.exporters._probe_audio_info", return_value=48000):
+         patch("core.exporters._probe_audio_info", return_value=(48000, 16, 2)):
         xml_path = XMLExporter().export(session)
     assert xml_path, "Export returned empty path"
     return ET.parse(xml_path).getroot()

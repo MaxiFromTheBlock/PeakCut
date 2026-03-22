@@ -1,7 +1,6 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-from PyQt6.QtCore import QObject, pyqtSignal
 from pydub import AudioSegment
 
 from utils import parse_timecode_to_ms
@@ -11,7 +10,23 @@ from .peak import Peak
 from .audio import play_audio
 
 
-class PeakCutSession(QObject):
+class StatusUpdate:
+    """Simple callback-based status update mechanism (no Qt dependency)."""
+
+    def __init__(self):
+        self._callbacks = []
+
+    def connect(self, callback):
+        """Register a callback function."""
+        self._callbacks.append(callback)
+
+    def emit(self, message: str):
+        """Notify all registered callbacks."""
+        for cb in self._callbacks:
+            cb(message)
+
+
+class PeakCutSession:
     """Holds the complete state of an analysis session.
 
     Analysis runs in a separate subprocess (analysis_process.py).
@@ -19,11 +34,8 @@ class PeakCutSession(QObject):
     Audio is loaded lazily on first playback/export via load_audio_lazy().
     """
 
-    # Signals
-    status_update = pyqtSignal(str)
-
     def __init__(self, project: PeakCutProject, config: dict):
-        super().__init__()
+        self.status_update = StatusUpdate()
         self.project = project
         self.config = config
 

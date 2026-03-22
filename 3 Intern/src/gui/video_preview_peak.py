@@ -1,5 +1,6 @@
 # video_preview_peak.py - PeakCut Video Preview (video only, muted)
 
+import logging
 import os
 import subprocess
 import numpy as np
@@ -8,8 +9,11 @@ from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QTimer, QSize, QThread, QMutex, Q
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink
 
+_log = logging.getLogger(__name__)
+
 _SCREENSHOT_TIMEOUT_S = 30
 _WORKER_SHUTDOWN_WAIT_MS = 3000
+_FIRST_FRAME_DELAY_MS = 100
 
 
 class LUTWorker(QThread):
@@ -68,7 +72,7 @@ class LUTWorker(QThread):
                 if result is not None:
                     self.frame_ready.emit(result, dpr)
             except Exception as e:
-                print(f"LUT processing error: {e}", file=__import__('sys').stderr)
+                _log.error("LUT processing error: %s", e)
 
     def _process(self, image, target_size, dpr, brightness=0):
         """Scale, convert to numpy, apply LUT + brightness, return QImage."""
@@ -174,7 +178,7 @@ class ScreenshotWorker(QThread):
             else:
                 self.screenshot_done.emit("")
         except (subprocess.TimeoutExpired, OSError) as e:
-            print(f"Screenshot error: {e}", file=__import__('sys').stderr)
+            _log.error("Screenshot error: %s", e)
             self.screenshot_done.emit("")
 
 
@@ -363,8 +367,6 @@ class PeakVideoPreview(QWidget):
         self._update_video_offset()
         self.player.setSource(QUrl.fromLocalFile(filepath))
         self.player.play()
-        # Delay before pausing to allow first frame to render
-        _FIRST_FRAME_DELAY_MS = 100
         QTimer.singleShot(_FIRST_FRAME_DELAY_MS, self._show_first_frame)
         self.video_changed.emit(filepath)
 
@@ -482,7 +484,7 @@ class PeakVideoPreview(QWidget):
                 self.player.setPosition(video_out)
 
     def _on_error(self, error):
-        print(f"Video error: {error}, {self.player.errorString()}")
+        _log.error("Video error: %s, %s", error, self.player.errorString())
 
     # --- Screenshot ---
 

@@ -48,7 +48,7 @@ class TestXMLExporter:
     """XML export needs no real files — only ffprobe calls need mocking."""
 
     @patch("core.exporters._probe_video_info", return_value=(1920, 1080))
-    @patch("core.exporters._probe_audio_info", return_value=48000)
+    @patch("core.exporters._probe_audio_info", return_value=(48000, 16, 2))
     def test_export_creates_xml_with_guest_name(self, _mock_audio, _mock_video,
                                                  sample_project, sample_config, sample_peaks):
         session = MagicMock()
@@ -64,7 +64,7 @@ class TestXMLExporter:
         assert os.path.exists(result)
 
     @patch("core.exporters._probe_video_info", return_value=(1920, 1080))
-    @patch("core.exporters._probe_audio_info", return_value=48000)
+    @patch("core.exporters._probe_audio_info", return_value=(48000, 16, 2))
     def test_xml_contains_video_tracks(self, _mock_audio, _mock_video,
                                         sample_project, sample_config, sample_peaks):
         session = MagicMock()
@@ -82,7 +82,7 @@ class TestXMLExporter:
         assert "/external/recordings/CAM_A.mp4" in content
 
     @patch("core.exporters._probe_video_info", return_value=(1920, 1080))
-    @patch("core.exporters._probe_audio_info", return_value=48000)
+    @patch("core.exporters._probe_audio_info", return_value=(48000, 16, 2))
     def test_xml_contains_audio_tracks(self, _mock_audio, _mock_video,
                                         sample_project, sample_config, sample_peaks):
         session = MagicMock()
@@ -100,7 +100,7 @@ class TestXMLExporter:
         assert "Podcast - Max Mustermann mic1" in content
 
     @patch("core.exporters._probe_video_info", return_value=(1920, 1080))
-    @patch("core.exporters._probe_audio_info", return_value=48000)
+    @patch("core.exporters._probe_audio_info", return_value=(48000, 16, 2))
     def test_export_empty_peaks_returns_empty(self, _mock_audio, _mock_video,
                                               sample_project, sample_config):
         session = MagicMock()
