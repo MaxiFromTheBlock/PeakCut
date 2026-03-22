@@ -10,8 +10,8 @@ CONFIG_PATH = os.path.join(INTERN_DIR, "config.json")
 
 # Default values
 DEFAULTS = {
-    "threshold_factor": 0.4,
-    "min_gap_ms": 15000,
+    "threshold_factor": 0.3,
+    "min_gap_ms": 12000,
     "preview_duration_ms": 1000,
     "context_duration_ms": 15000,
     "fps": 25,
@@ -65,9 +65,9 @@ def _save_unlocked():
 def get(key):
     """Get a config value (thread-safe)."""
     global _config
+    if _config is None:
+        load()
     with _lock:
-        if _config is None:
-            load()
         return _config.get(key, DEFAULTS.get(key))
 
 
