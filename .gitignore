@@ -8,9 +8,13 @@ __pycache__/
 *.pyc
 
 # Working directories (contain user data)
-1 Material/
-2 Export/
 3 Intern/temp/
 3 Intern/logs/
 3 Intern/luts/
 3 Intern/venv311/
+
+# Build artifacts
+build/
+dist/
+*.spec
+*.icns

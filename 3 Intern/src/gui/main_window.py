@@ -14,7 +14,7 @@ from .workers import AnalysisWorker
 from .review_page import ReviewPage
 
 import config
-from utils import EXPORT_DIR, get_logger, validate_media_file
+from utils import get_logger, validate_media_file
 from core.project import PeakCutProject
 from core.session import PeakCutSession
 from core.playback import stop_playback
@@ -202,7 +202,7 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(1)  # Show analysis page
         self.analysis_status.setText("Starte Analyse...")
 
-        project = PeakCutProject(EXPORT_DIR)
+        project = PeakCutProject()
         project.set_files(self._keyboard_file, self._mic_files, self._video_files)
         if self._guest_name:
             project.guest_name = self._guest_name

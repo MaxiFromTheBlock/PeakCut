@@ -4,15 +4,32 @@ import os
 import sys
 import json
 import subprocess
+import multiprocessing
 import queue
 import threading
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from utils import TEMP_DIR
+from utils import FROZEN, TEMP_DIR
 from core.exporters import MP3Exporter, XMLExporter, TXTExporter
 
 _ANALYSIS_TIMEOUT_S = 600  # 10 minutes max
+
+
+def _analysis_worker_target(config_data, result_queue, progress_queue):
+    """Target function for multiprocessing.Process (must be top-level for pickling)."""
+    from core.analysis_process import run_analysis, progress as _orig_progress
+
+    # Monkey-patch progress function to use queue instead of stderr
+    import core.analysis_process as ap
+    ap.progress = lambda msg: progress_queue.put(msg)
+    ap.error = lambda msg: progress_queue.put(f"Fehler: {msg}")
+
+    try:
+        results = run_analysis(config_data)
+        result_queue.put(results)
+    except Exception as e:
+        result_queue.put({"error": str(e), "peaks": [], "video_offsets": []})
 
 
 class AnalysisWorker(QThread):
@@ -48,6 +65,53 @@ class AnalysisWorker(QThread):
             "config": cfg
         }
 
+        if FROZEN:
+            self._run_multiprocess(config_data)
+        else:
+            self._run_subprocess(config_data)
+
+    def _run_multiprocess(self, config_data):
+        """Run analysis via multiprocessing (for bundled .app)."""
+        result_queue = multiprocessing.Queue()
+        progress_queue = multiprocessing.Queue()
+
+        proc = multiprocessing.Process(
+            target=_analysis_worker_target,
+            args=(config_data, result_queue, progress_queue),
+        )
+        proc.start()
+
+        # Poll progress until process finishes
+        while proc.is_alive():
+            try:
+                msg = progress_queue.get(timeout=0.2)
+                self.progress.emit(msg)
+            except queue.Empty:
+                pass
+
+        # Drain remaining progress messages
+        while not progress_queue.empty():
+            try:
+                self.progress.emit(progress_queue.get_nowait())
+            except queue.Empty:
+                break
+
+        proc.join(timeout=_ANALYSIS_TIMEOUT_S)
+        if proc.exitcode != 0:
+            self.error.emit("Analyse fehlgeschlagen")
+            return
+
+        try:
+            results = result_queue.get(timeout=5)
+            if results.get("error"):
+                self.error.emit(results["error"])
+            else:
+                self.finished.emit(results)
+        except queue.Empty:
+            self.error.emit("Keine Analyse-Ergebnisse erhalten")
+
+    def _run_subprocess(self, config_data):
+        """Run analysis via subprocess (development mode)."""
         script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         script_path = os.path.join(script_dir, "core", "analysis_process.py")
         python_exe = sys.executable

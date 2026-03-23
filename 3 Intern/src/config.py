@@ -4,9 +4,9 @@ import json
 import os
 import threading
 
-from utils import INTERN_DIR
+from utils import DATA_DIR
 
-CONFIG_PATH = os.path.join(INTERN_DIR, "config.json")
+CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 
 # Default values
 DEFAULTS = {

@@ -13,7 +13,7 @@ from .video_preview_peak import PeakVideoPreview
 from .workers import ExportWorker
 
 import config
-from utils import EXPORT_DIR, LUTS_DIR, ms_to_mmss, get_logger
+from utils import LUTS_DIR, ms_to_mmss, get_logger
 from core.playback import stop_playback, is_playing
 
 _log = get_logger("peakcut.review")
@@ -204,10 +204,14 @@ class ReviewPage(QWidget):
         self.lut_combo.clear()
         self.lut_combo.addItem("Kein LUT", "")
 
-        os.makedirs(LUTS_DIR, exist_ok=True)
+        try:
+            os.makedirs(LUTS_DIR, exist_ok=True)
+        except (OSError, PermissionError):
+            pass  # Read-only in bundled .app
+
         current_lut = config.get("lut_path") or ""
 
-        lut_files = sorted(f for f in os.listdir(LUTS_DIR) if f.lower().endswith('.cube'))
+        lut_files = sorted(f for f in os.listdir(LUTS_DIR) if f.lower().endswith('.cube')) if os.path.isdir(LUTS_DIR) else []
         selected = 0
         for i, filename in enumerate(lut_files):
             name = os.path.splitext(filename)[0]
@@ -391,9 +395,10 @@ class ReviewPage(QWidget):
         self._export_worker.start()
 
     def _on_export_done(self, exported):
-        _log.info("Export done: %d files -> %s", len(exported), EXPORT_DIR)
+        export_dir = self.session.project.export_dir
+        _log.info("Export done: %d files -> %s", len(exported), export_dir)
         self.export_btn.setEnabled(True)
-        self.status_message.emit(f"Export fertig! {len(exported)} Dateien → {EXPORT_DIR}")
+        self.status_message.emit(f"Export fertig! {len(exported)} Dateien → {export_dir}")
         self._export_worker.deleteLater()
         self._export_worker = None
 

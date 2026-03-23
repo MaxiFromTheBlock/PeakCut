@@ -15,7 +15,8 @@ def tmp_export_dir(tmp_path):
 @pytest.fixture
 def sample_project(tmp_export_dir):
     """Project with fake file paths (files don't need to exist for name extraction)."""
-    project = PeakCutProject(tmp_export_dir)
+    project = PeakCutProject()
+    project.export_dir = tmp_export_dir
     project.set_files(
         keyboard="/external/recordings/keys.wav",
         mics=[

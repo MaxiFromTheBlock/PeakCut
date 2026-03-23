@@ -4,12 +4,12 @@ import os
 class PeakCutProject:
     """Knows all files in a project."""
 
-    def __init__(self, export_dir: str):
-        self.export_dir = export_dir
+    def __init__(self):
         self.keyboard_track: str | None = None
         self.mic_tracks: list[str] = []
         self.videos: list[str] = []
         self._guest_name: str | None = None
+        self._export_dir: str | None = None
 
     def set_files(self, keyboard: str | None, mics: list[str], videos: list[str]):
         """Manual file assignment (when auto-detection doesn't work)."""
@@ -24,6 +24,19 @@ class PeakCutProject:
         if self.keyboard_track:
             paths.append(self.keyboard_track)
         return paths
+
+    @property
+    def export_dir(self) -> str:
+        """Export directory: ~/Downloads/{guest_name} - PeakCut Export/"""
+        if self._export_dir is not None:
+            return self._export_dir
+        downloads = os.path.join(os.path.expanduser("~"), "Downloads")
+        return os.path.join(downloads, f"{self.guest_name} - PeakCut Export")
+
+    @export_dir.setter
+    def export_dir(self, value: str):
+        """Override default export directory (used in tests)."""
+        self._export_dir = value
 
     @property
     def guest_name(self) -> str:

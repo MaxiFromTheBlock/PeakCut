@@ -294,15 +294,19 @@ class PeakVideoPreview(QWidget):
         lut_path = self._get_lut_path()
         brightness = self.get_current_brightness()
 
+        dpr = self.video_label.devicePixelRatioF()
+        logical = self.video_label.size()
+        target = QSize(int(logical.width() * dpr), int(logical.height() * dpr))
+
         if lut_path or brightness != 0:
             # Send to worker thread for LUT/brightness processing
-            dpr = self.video_label.devicePixelRatioF()
-            logical = self.video_label.size()
-            target = QSize(int(logical.width() * dpr), int(logical.height() * dpr))
             self._lut_worker.submit(image, target, dpr, lut_path, brightness)
         else:
-            # No processing needed - display directly
-            self.video_label.setPixmap(QPixmap.fromImage(image))
+            # No LUT/brightness — scale and display directly
+            scaled = image.scaled(target, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            pixmap = QPixmap.fromImage(scaled)
+            pixmap.setDevicePixelRatio(dpr)
+            self.video_label.setPixmap(pixmap)
 
     def _on_lut_frame_ready(self, image, dpr):
         pixmap = QPixmap.fromImage(image)
@@ -311,17 +315,19 @@ class PeakVideoPreview(QWidget):
 
     def refresh_lut(self):
         """Re-apply LUT/brightness to current frame (call after LUT or brightness change)."""
-        # Re-process the stored image copy with new LUT/brightness setting
         if hasattr(self, '_last_frame_image') and self._last_frame_image and not self._last_frame_image.isNull():
             lut_path = self._get_lut_path()
             brightness = self.get_current_brightness()
+            dpr = self.video_label.devicePixelRatioF()
+            logical = self.video_label.size()
+            target = QSize(int(logical.width() * dpr), int(logical.height() * dpr))
             if lut_path or brightness != 0:
-                dpr = self.video_label.devicePixelRatioF()
-                logical = self.video_label.size()
-                target = QSize(int(logical.width() * dpr), int(logical.height() * dpr))
                 self._lut_worker.submit(self._last_frame_image.copy(), target, dpr, lut_path, brightness)
             else:
-                self.video_label.setPixmap(QPixmap.fromImage(self._last_frame_image))
+                scaled = self._last_frame_image.scaled(target, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                pixmap = QPixmap.fromImage(scaled)
+                pixmap.setDevicePixelRatio(dpr)
+                self.video_label.setPixmap(pixmap)
 
     # --- Session & Offset ---
 
@@ -498,15 +504,18 @@ class PeakVideoPreview(QWidget):
             return
 
         import config
-        from utils import EXPORT_DIR, LUTS_DIR
+        from utils import LUTS_DIR
 
         position_ms = self.player.position()
         position_s = position_ms / 1000.0
         lut_filename = config.get("lut_path") or ""
         fps = config.get("fps") or 25
 
-        gastname = self._session.project.guest_name if self._session else "Unknown"
-        screenshots_dir = os.path.join(EXPORT_DIR, f"{gastname} - Screenshots")
+        if self._session:
+            gastname = self._session.project.guest_name
+            screenshots_dir = os.path.join(self._session.project.export_dir, f"{gastname} - Screenshots")
+        else:
+            screenshots_dir = os.path.join(os.path.expanduser("~"), "Downloads", "PeakCut Export", "Screenshots")
 
         # Counter
         if camera_name:

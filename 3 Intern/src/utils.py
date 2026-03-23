@@ -1,28 +1,29 @@
 # utils.py - shared helpers and path constants
 
 import os
+import sys
 import logging
 from logging.handlers import RotatingFileHandler
 
-# Directory structure:
-# App/
-#   2 Export/
-#   3 Intern/             <- INTERN_DIR
-#     src/                <- this file lives here
-#     assets/
-#     temp/
+# Detect PyInstaller bundle
+FROZEN = getattr(sys, 'frozen', False)
 
-INTERN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-APP_DIR = os.path.dirname(INTERN_DIR)
+if FROZEN:
+    # Running as .app bundle — assets are in sys._MEIPASS
+    _BUNDLE_DIR = sys._MEIPASS
+    ASSETS_DIR = os.path.join(_BUNDLE_DIR, "assets")
+    LUTS_DIR = os.path.join(_BUNDLE_DIR, "luts")
+    # Writable data goes to ~/Library/Application Support/PeakCut/
+    DATA_DIR = os.path.join(os.path.expanduser("~"), "Library", "Application Support", "PeakCut")
+else:
+    # Development mode — everything relative to 3 Intern/
+    INTERN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ASSETS_DIR = os.path.join(INTERN_DIR, "assets")
+    LUTS_DIR = os.path.join(INTERN_DIR, "luts")
+    DATA_DIR = INTERN_DIR
 
-# User-facing directories
-EXPORT_DIR = os.path.join(APP_DIR, "2 Export")
-
-# Internal directories
-TEMP_DIR = os.path.join(INTERN_DIR, "temp")
-ASSETS_DIR = os.path.join(INTERN_DIR, "assets")
-LUTS_DIR = os.path.join(INTERN_DIR, "luts")
-LOGS_DIR = os.path.join(INTERN_DIR, "logs")
+TEMP_DIR = os.path.join(DATA_DIR, "temp")
+LOGS_DIR = os.path.join(DATA_DIR, "logs")
 
 
 def get_logger(name: str = "peakcut") -> logging.Logger:

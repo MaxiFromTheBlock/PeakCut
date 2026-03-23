@@ -327,7 +327,8 @@ class TestSessionLoading:
     """Test loading analysis results into a session."""
 
     def _make_session(self, test_material, test_config):
-        project = PeakCutProject(test_material["export_dir"])
+        project = PeakCutProject()
+        project.export_dir = test_material["export_dir"]
         project.set_files(
             test_material["keyboard"],
             [test_material["mic"]],
@@ -387,7 +388,8 @@ class TestExportPipeline:
     """Test all exporters with synthetic audio files."""
 
     def _make_session_with_audio(self, test_material, test_config):
-        project = PeakCutProject(test_material["export_dir"])
+        project = PeakCutProject()
+        project.export_dir = test_material["export_dir"]
         project.set_files(
             test_material["keyboard"],
             [test_material["mic"]],
@@ -475,7 +477,8 @@ class TestExportPipeline:
 
     def test_all_peaks_ignored_export(self, test_material, test_config):
         """Export with all peaks ignored should return empty string."""
-        project = PeakCutProject(test_material["export_dir"])
+        project = PeakCutProject()
+        project.export_dir = test_material["export_dir"]
         project.set_files(test_material["keyboard"], [test_material["mic"]], [])
         session = PeakCutSession(project, test_config)
         session.load_analysis_results({
@@ -490,7 +493,8 @@ class TestExportPipeline:
 
     def test_single_peak_export(self, test_material, test_config):
         """Export with just one peak."""
-        project = PeakCutProject(test_material["export_dir"])
+        project = PeakCutProject()
+        project.export_dir = test_material["export_dir"]
         project.set_files(test_material["keyboard"], [test_material["mic"]], [])
         session = PeakCutSession(project, test_config)
         session.load_analysis_results({

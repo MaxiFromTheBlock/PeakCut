@@ -3,20 +3,38 @@
 import sys
 import os
 import fcntl
+import multiprocessing
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from gui.main_window import MainWindow
 from gui.apple_style import get_stylesheet
+from utils import TEMP_DIR
 
-LOCK_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "temp", "peakcut.lock")
+LOCK_FILE = os.path.join(TEMP_DIR, "peakcut.lock")
 
 # Module-level reference prevents GC from closing the file and releasing the lock
 _lock_fp = None
 
 
+def _setup_environment():
+    """Set up environment for macOS .app bundles."""
+    # Homebrew paths (macOS .app bundles don't inherit shell PATH)
+    extra_paths = ["/opt/homebrew/bin", "/usr/local/bin"]
+    current = os.environ.get("PATH", "")
+    missing = [p for p in extra_paths if p not in current]
+    if missing:
+        os.environ["PATH"] = current + ":" + ":".join(missing)
+
+    # Force ffmpeg multimedia backend — AVFoundation creates native video
+    # rendering layers that show through even when using QVideoSink
+    os.environ["QT_MULTIMEDIA_BACKEND"] = "ffmpeg"
+
+
 def main():
     global _lock_fp
+
+    _setup_environment()
 
     # Ensure temp dir exists
     os.makedirs(os.path.dirname(LOCK_FILE), exist_ok=True)
@@ -40,4 +58,5 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()
