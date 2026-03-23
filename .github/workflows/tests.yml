@@ -5,6 +5,8 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
 
@@ -16,7 +18,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg libasound2-dev
 
       - name: Install dependencies
-        run: pip install -r "3 Intern/requirements.txt"
+        run: pip install -r "3 Intern/requirements.txt" pytest
 
       - name: Run tests
         working-directory: "3 Intern"
