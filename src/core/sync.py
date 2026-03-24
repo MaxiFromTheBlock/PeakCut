@@ -6,7 +6,7 @@ import numpy as np
 import soundfile as sf
 from scipy.signal import fftconvolve
 
-from utils import get_logger
+from utils import get_logger, FFMPEG_BIN
 
 _log = get_logger("peakcut.sync")
 _FFMPEG_EXTRACT_TIMEOUT_S = 300
@@ -31,7 +31,7 @@ def extract_audio_from_video(video_path, output_path, target_sr=None):
 
     If target_sr is given, resample to that rate (ensures matching sample rates for correlation).
     """
-    cmd = ["ffmpeg", "-y", "-i", video_path, "-vn", "-acodec", "pcm_s16le"]
+    cmd = [FFMPEG_BIN, "-y", "-i", video_path, "-vn", "-acodec", "pcm_s16le"]
     if target_sr:
         cmd.extend(["-ar", str(target_sr)])
     cmd.append(output_path)

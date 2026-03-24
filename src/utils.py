@@ -16,18 +16,27 @@ if FROZEN:
     # Writable data goes to ~/Library/Application Support/PeakCut/
     DATA_DIR = os.path.join(os.path.expanduser("~"), "Library", "Application Support", "PeakCut")
 else:
-    # Development mode — everything relative to 3 Intern/
-    INTERN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    ASSETS_DIR = os.path.join(INTERN_DIR, "assets")
-    LUTS_DIR = os.path.join(INTERN_DIR, "luts")
-    DATA_DIR = INTERN_DIR
+    # Development mode — everything relative to App/
+    APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ASSETS_DIR = os.path.join(APP_ROOT, "assets")
+    LUTS_DIR = os.path.join(APP_ROOT, "luts")
+    DATA_DIR = APP_ROOT
 
 TEMP_DIR = os.path.join(DATA_DIR, "temp")
 LOGS_DIR = os.path.join(DATA_DIR, "logs")
 
+# Bundled ffmpeg/ffprobe paths
+if FROZEN:
+    _FFMPEG_DIR = os.path.join(_BUNDLE_DIR, "ffmpeg_bin", "bin")
+    FFMPEG_BIN = os.path.join(_FFMPEG_DIR, "ffmpeg")
+    FFPROBE_BIN = os.path.join(_FFMPEG_DIR, "ffprobe")
+else:
+    FFMPEG_BIN = "ffmpeg"
+    FFPROBE_BIN = "ffprobe"
+
 
 def get_logger(name: str = "peakcut") -> logging.Logger:
-    """Get a configured logger that writes to 3 Intern/logs/peakcut.log.
+    """Get a configured logger that writes to logs/peakcut.log.
 
     Uses RotatingFileHandler: max 5 MB per file, 2 backups.
     Also logs to stderr for development visibility.
@@ -74,7 +83,7 @@ def validate_media_file(filepath: str) -> str | None:
 
     try:
         result = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type",
+            [FFPROBE_BIN, "-v", "error", "-show_entries", "stream=codec_type",
              "-of", "csv=p=0", filepath],
             capture_output=True, text=True, timeout=10
         )

@@ -4,6 +4,7 @@ import logging
 import os
 import subprocess
 import numpy as np
+from utils import FFMPEG_BIN
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
 from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QTimer, QSize, QThread, QMutex, QWaitCondition
 from PyQt6.QtGui import QImage, QPixmap
@@ -148,7 +149,7 @@ class ScreenshotWorker(QThread):
 
         # Build ffmpeg command
         cmd = [
-            "ffmpeg", "-y",  # Overwrite output
+            FFMPEG_BIN, "-y",  # Overwrite output
             "-ss", str(self._position_s),  # Seek before input (fast)
             "-i", self._video_path,
             "-frames:v", "1",

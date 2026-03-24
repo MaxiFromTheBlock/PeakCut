@@ -5,7 +5,7 @@ from urllib.parse import quote
 
 from pydub import AudioSegment
 
-from utils import TEMP_DIR, ASSETS_DIR, parse_timecode_to_ms, ms_to_timecode, ms_to_frames, get_logger
+from utils import TEMP_DIR, ASSETS_DIR, FFPROBE_BIN, parse_timecode_to_ms, ms_to_timecode, ms_to_frames, get_logger
 
 _log = get_logger("peakcut.export")
 
@@ -86,7 +86,7 @@ def _probe_video_info(video_path):
     """Probe video file for resolution using ffprobe. Returns (width, height) or (3840, 2160) as fallback."""
     try:
         result = subprocess.run(
-            ["ffprobe", "-v", "quiet", "-select_streams", "v:0",
+            [FFPROBE_BIN, "-v", "quiet", "-select_streams", "v:0",
              "-show_entries", "stream=width,height",
              "-of", "csv=p=0", video_path],
             capture_output=True, text=True, timeout=10
@@ -108,7 +108,7 @@ def _probe_audio_info(audio_path):
     sample_rate, bit_depth, channels = 48000, 16, 2
     try:
         result = subprocess.run(
-            ["ffprobe", "-v", "quiet", "-select_streams", "a:0",
+            [FFPROBE_BIN, "-v", "quiet", "-select_streams", "a:0",
              "-show_entries", "stream=sample_rate,bits_per_sample,channels",
              "-of", "flat", audio_path],
             capture_output=True, text=True, timeout=10

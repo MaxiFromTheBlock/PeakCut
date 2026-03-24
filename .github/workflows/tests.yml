@@ -18,8 +18,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg libasound2-dev
 
       - name: Install dependencies
-        run: pip install -r "3 Intern/requirements.txt" pytest
+        run: pip install -r requirements.txt pytest
 
       - name: Run tests
-        working-directory: "3 Intern"
         run: python -m pytest tests/ -v
