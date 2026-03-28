@@ -26,7 +26,7 @@ _WORKER_SHUTDOWN_WAIT_MS = 3000
 class MainWindow(QMainWindow):
     """PeakCut Main Window — Welcome → Analysis → Review"""
 
-    def __init__(self):
+    def __init__(self, cli_guest: str = None, cli_export_dir: str = None):
         super().__init__()
         self.setWindowTitle("PeakCut")
         self.setMinimumSize(900, 600)
@@ -35,11 +35,15 @@ class MainWindow(QMainWindow):
         self.session = None
         self._worker = None
 
+        # CLI arguments from CheckIn
+        self._cli_guest = cli_guest
+        self._cli_export_dir = cli_export_dir
+
         # File state
         self._keyboard_file = None
         self._mic_files = []
         self._video_files = []
-        self._guest_name = None
+        self._guest_name = cli_guest  # Pre-fill from CLI if provided
 
         self._settings = QSettings("PeakCut", "PeakCut")
 
@@ -206,6 +210,8 @@ class MainWindow(QMainWindow):
         project.set_files(self._keyboard_file, self._mic_files, self._video_files)
         if self._guest_name:
             project.guest_name = self._guest_name
+        if self._cli_export_dir:
+            project.export_dir = self._cli_export_dir
 
         self.session = PeakCutSession(project, config.load())
 

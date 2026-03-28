@@ -3,6 +3,7 @@
 import sys
 import os
 import fcntl
+import argparse
 import multiprocessing
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
@@ -31,10 +32,19 @@ def _setup_environment():
     os.environ["QT_MULTIMEDIA_BACKEND"] = "ffmpeg"
 
 
+def _parse_args():
+    """Parse CLI arguments for CheckIn integration."""
+    parser = argparse.ArgumentParser(description="PeakCut — Podcast Post-Production")
+    parser.add_argument("--guest", type=str, help="Guest name (pre-fills the guest name dialog)")
+    parser.add_argument("--export-dir", type=str, help="Export directory (overrides ~/Downloads/)")
+    return parser.parse_args()
+
+
 def main():
     global _lock_fp
 
     _setup_environment()
+    args = _parse_args()
 
     # Ensure temp dir exists
     os.makedirs(os.path.dirname(LOCK_FILE), exist_ok=True)
@@ -51,7 +61,10 @@ def main():
     app = QApplication(sys.argv)
     app.setStyleSheet(get_stylesheet())
 
-    window = MainWindow()
+    window = MainWindow(
+        cli_guest=args.guest,
+        cli_export_dir=args.export_dir,
+    )
     window.show()
 
     sys.exit(app.exec())
