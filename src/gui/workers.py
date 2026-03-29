@@ -204,6 +204,15 @@ class ExportWorker(QThread):
                 if result:
                     self.progress.emit(f"Exportiert: {os.path.basename(result)}")
                     exported.append(result)
+
+            if exported:
+                import datetime
+                done_path = os.path.join(
+                    self.session.project.export_dir, ".peakcut_done"
+                )
+                with open(done_path, "w") as f:
+                    f.write(datetime.datetime.now().isoformat() + "\n")
+
             self.finished.emit(exported)
         except Exception as e:
             self.error.emit(str(e))
