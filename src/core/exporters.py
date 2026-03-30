@@ -334,7 +334,7 @@ class XMLExporter(BaseExporter):
                     rec_end_f = record_pos + clip_dur_f
 
                     f.write(f'          <clipitem id="{clip_id}">\n')
-                    f.write(f'            <name>Peak {peak_num}</name>\n')
+                    f.write(f'            <name>{os.path.splitext(video_file)[0]}</name>\n')
                     f.write(f'            <duration>{clip_dur_f}</duration>\n')
                     f.write(f'            {rate_block}\n')
                     f.write(f'            <start>{rec_start_f}</start>\n')
