@@ -194,14 +194,73 @@ FolgenschnittXMLExporter   schreibt nur noch diese Entscheidungen als
   Resolve* importieren. Zickt eine der beiden → dann (und nur dann) ein
   zweiter, programmspezifischer Exporter.
 
-## Empfohlenes MVP-Vorgehen (klein & messbar, vor XML)
+## Start-Parameter (interne Konstanten / Preset — NICHT im UI)
 
-1. Sprecheraktivität aus den 2 echten Sprecher-Mics berechnen.
-2. **Debug-Output** (CSV/JSON: Zeit, Pegel je Spur, Dominanz, erkannter
-   Sprecher) — Erkennung prüfbar machen *ohne* jedes Mal in der NLE zu testen.
-3. Cut-Decision-Logik **rein unit-testen**, ohne XML.
-4. Erst dann flache FCP7-XML schreiben.
-5. Mit echter kurzer Folge in Premiere + Resolve importieren und prüfen.
+Default-Profil, an echten Ausschnitten zu kalibrieren. Bewusst **nicht** als
+UI-Regler — PeakCut soll sich nicht wie ein Mischpult bedienen lassen, sondern
+"vernünftig genug" out-of-the-box sein. Liegt als interne Konstanten / kleines
+Preset im Code.
+
+| Parameter | Startwert |
+|-----------|-----------|
+| Fenstergröße | 200 ms |
+| Hop / Schrittweite | 100 ms |
+| Noise-Floor | 10. Perzentil pro Spur |
+| Aktiv über Noise-Floor | ~ +10 dB |
+| Dominanz zum Wechseln | +6 dB |
+| Dominanz zum Halten | +3 dB |
+| Glättung | 300–500 ms |
+| Lücken mergen | bis 500–700 ms |
+| Sprecherwechsel relevant | ≥ 5 s |
+| Mindest-Shot | 2 s |
+| echte Pause | > 0,7 s |
+| Anticipation | 1,5 s (max. 2 s) |
+
+Zwei getrennte Dominanz-Schwellen (Wechsel +6 dB / Halten +3 dB) = Hysterese.
+
+## Debug-Output (zwei Rollen)
+
+- `speaker_activity.csv` — pro Fenster: Zeit, Pegel je Spur, Noise-Floor,
+  Dominanz, roher Sprecher, geglätteter Sprecher, Confidence. Zum schnellen
+  Draufschauen in Numbers/Excel ("hier denkt er 12 s Gast, obwohl Matze redet").
+- `speaker_turns.json` — geglättete Turns.
+- `edit_decisions.json` — finale Kameraentscheidungen (Tests, Regression,
+  perspektivisch `.peakcut/`).
+- Wenn nur eins für den ersten Wurf: **CSV**.
+
+## MVP-Reihenfolge (Risiko zuerst entkoppeln)
+
+1. **Datenmodelle/Contracts** festlegen: `ActivityFrame`, `SpeakerTurn`,
+   `EditDecision`, Mic-Rollen, Kamera-Rollen. (Definiert die Schnittstellen
+   zwischen den Pipeline-Stufen, bevor Logik gebaut wird.)
+2. **`speaker_activity.py`** bauen + `speaker_activity.csv`-Debug.
+3. **`FolgenschnittXMLExporter` früh** mit *handgebauten Fake-edit_decisions*
+   testen und in Premiere + Resolve importieren. → Beweist das XML-Risiko mit
+   einer Mini-Timeline, *bevor* viel Aufwand in die Erkennung fließt.
+4. **`speaker_turns` + `edit_decisions`** bauen, stark unit-testen.
+5. **End-to-end** mit realen Ausschnitten, Parameter kalibrieren, *dann erst*
+   automatischen Export aktivieren.
+
+Begründung (Reviewer): Wer erst die Sprechererkennung perfektioniert und dann
+merkt, dass Premiere/Resolve an der XML-Struktur zickt, hat Sicherheit an der
+falschen Stelle aufgebaut. XML-Import einmal früh beweisen, dann entspannt
+weiter.
+
+## Test-Strategie
+
+Härtester Fall für Stufe 1 ist **nicht** der lange Monolog (Kamera steht ja
+einfach), sondern die **lebendige Gesprächsphase**: schneller Schlagabtausch,
+kurze Einwürfe ("ja", "mhm", Lachen), leichter Overlap, ein lauter Sprecher der
+stark ins andere Mic blutet, ein leiserer der trotzdem erkannt werden muss,
+ein paar echte Denkpausen (für Anticipation).
+
+Nicht mit ganzer Folge starten, sondern **3 reale Ausschnitte à ~5 Min**:
+1. "Normaler Dialog"
+2. "Stress: Overlap / schneller Wechsel"
+3. "Pausen / langer Monolog"
+
+Danach **eine ganze Folge** nur für Performance, Premiere/Resolve-Import und
+Gesamteindruck ("zappelt es oder spart es Arbeit?").
 
 ---
 
@@ -222,20 +281,31 @@ Die ursprünglich offenen Punkte wurden durch das Review entschieden:
    Analyse-Subprozess aufgerufen; fensterweises Lesen → geringe
    Zusatz-Wartezeit.
 
-## Noch offen — für die nächste Reviewer-Runde (Kollaboration)
+## Durch zweite Reviewer-Runde geklärt (2026-05-15)
 
-Bewusst noch nicht final, mit dem Reviewer abzustimmen, **bevor** implementiert
-wird:
+- **Parameter:** Default-Profil + empirische Kalibrierung an echten
+  Ausschnitten (nicht theoretisch tot-tunen, nicht ohne Profil starten). Werte
+  als interne Konstanten, *nicht* ins UI. → Sektion "Start-Parameter".
+- **Debug:** CSV *und* JSON mit unterschiedlicher Rolle; CSV zuerst. → Sektion
+  "Debug-Output".
+- **Test:** Härtester Fall = lebhafter Schlagabtausch, nicht Monolog. 3 reale
+  Ausschnitte à 5 Min + danach ganze Folge für Performance/Import. → Sektion
+  "Test-Strategie".
+- **Reihenfolge:** XML-Import-Risiko früh entkoppeln (Contracts → activity+CSV
+  → XML früh mit Fake-Decisions in Premiere/Resolve → turns/decisions →
+  e2e+kalibrieren). → Sektion "MVP-Reihenfolge".
 
-- **Parameter-Kalibrierung:** Fenstergröße (100–250 ms), Dominanz-Schwelle
-  (6–10 dB), Noise-Floor-Perzentil, Hysterese-Werte, Mindest-Shot (~2 s),
-  Anticipation (1,5–2 s), Echt-Pause-Schwelle (~0,7 s) sind Richtwerte. Vorab
-  festlegen oder an einer echten Folge empirisch einstellen?
-- **Debug-Output-Format:** CSV oder JSON für die Iterationsschleife?
-- **Test-Folge:** Welche Art Folge taugt als Härtetest (viel Overlap? lange
-  Monologe? schneller Schlagabtausch?) — gibt es eine geeignete Bestandsfolge?
-- **Schnitt der ersten Umsetzung:** Passt die 5-Schritt-MVP-Reihenfolge, oder
-  würde er anders schneiden?
+Reviewer-Fazit: Spec ist in gutem Zustand zum Bauen; erste Umsetzung bewusst
+als **Messinstrument** behandeln, nicht als "Feature fertig" — erst sehen, was
+echte Folgen sagen, dann Parameter festziehen.
+
+## Was Max beisteuern muss
+
+- **3 reale Ausschnitte à ~5 Min** aus echten Folgen: (1) normaler Dialog,
+  (2) Overlap/schneller Wechsel, (3) Pausen/Monolog. Plus eine ganze Folge für
+  den abschließenden Performance-/Import-Test.
+- **Schnitt-Auge bei der Kalibrierung:** das Erfolgsurteil ("zappelt es oder
+  spart es Arbeit?") ist eine Cutter-Einschätzung, keine Metrik.
 
 ---
 
@@ -262,3 +332,11 @@ Rohschnitt ist eine konservative Logik besser als eine clevere, die zappelt.
   (FCP7-XML flach, Premiere+Resolve). MVP-Vorgehen festgelegt. Verbleibende
   Punkte für nächste Reviewer-Runde markiert. Noch **nicht** in Umsetzung —
   Kollaboration mit Reviewer läuft.
+- **2026-05-15 (zweite Reviewer-Runde):** Start-Parameter-Profil festgelegt
+  (interne Konstanten, nicht UI). Debug-Output differenziert (CSV + JSON).
+  Test-Strategie (3×5-Min-Ausschnitte, härtester Fall = Schlagabtausch nicht
+  Monolog). MVP-Reihenfolge umgestellt: XML-Import-Risiko zuerst entkoppeln
+  (Contracts → activity → XML früh mit Fake → turns/decisions → e2e). Spec
+  laut Reviewer "in gutem Zustand zum Bauen". Erste Umsetzung als
+  Messinstrument behandeln. Weiterhin **nicht** in Umsetzung — wartet auf
+  Max' Freigabe + Test-Ausschnitte.
