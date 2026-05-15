@@ -52,6 +52,12 @@ class PeakCutSession:
         self.video_offsets: list[tuple[str, str]] = []
         self._offset_lookup_ms: dict[str, int] = {}  # video filename -> offset in ms
 
+        # Folgenschnitt data (Stage 1 auto camera cut)
+        self.speaker_activity = []
+        self.speaker_turns = []
+        self.folgenschnitt_edit_decisions = []
+        self.speaker_activity_csv: str | None = None
+
     def play_current(self, index=None):
         """Play the current peak (keyboard or mic mode)."""
         if not self.peaks:
@@ -143,6 +149,22 @@ class PeakCutSession:
             if p.get("ignored"):
                 peak.ignored = True
             self.peaks.append(peak)
+
+        from .folgenschnitt_models import ActivityFrame, EditDecision, SpeakerTurn
+
+        self.speaker_activity = [
+            ActivityFrame.from_dict(item)
+            for item in results.get("speaker_activity", [])
+        ]
+        self.speaker_turns = [
+            SpeakerTurn.from_dict(item)
+            for item in results.get("speaker_turns", [])
+        ]
+        self.folgenschnitt_edit_decisions = [
+            EditDecision.from_dict(item)
+            for item in results.get("folgenschnitt_edit_decisions", [])
+        ]
+        self.speaker_activity_csv = results.get("speaker_activity_csv")
 
         self.current_peak = 0
         self.mode = "keyboard"

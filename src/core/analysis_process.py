@@ -74,6 +74,10 @@ def run_analysis(config_data):
     results = {
         "peaks": [],
         "video_offsets": [],
+        "speaker_activity": [],
+        "speaker_activity_csv": None,
+        "speaker_turns": [],
+        "folgenschnitt_edit_decisions": [],
         "error": None
     }
 
@@ -94,7 +98,27 @@ def run_analysis(config_data):
             error(f"Sync fehlgeschlagen: {e}")
             results["video_offsets"] = []
 
-    # Step 2: Peak detection
+    # Step 2: Speaker activity analysis (Folgenschnitt Stage 1)
+    try:
+        from core.speaker_activity import analyze_speaker_activity, build_default_mic_assignments
+
+        mic_assignments = build_default_mic_assignments(mic_tracks)
+        if len(mic_assignments) >= 2:
+            progress("Analysiere Sprecher-Aktivitaet...")
+            speaker_activity_csv = os.path.join(export_dir, "speaker_activity.csv")
+            speaker_activity = analyze_speaker_activity(
+                mic_assignments,
+                csv_path=speaker_activity_csv,
+            )
+            results["speaker_activity"] = [frame.to_dict() for frame in speaker_activity]
+            results["speaker_activity_csv"] = speaker_activity_csv
+            progress(f"Sprecher-Aktivitaet: {len(speaker_activity)} Fenster")
+    except Exception as e:
+        error(f"Sprecher-Analyse fehlgeschlagen: {e}")
+        results["speaker_activity"] = []
+        results["speaker_activity_csv"] = None
+
+    # Step 3: Peak detection
     if not keyboard_track or not os.path.exists(keyboard_track):
         error("Keine Keyboard-Datei gefunden")
         results["error"] = "No keyboard file"
