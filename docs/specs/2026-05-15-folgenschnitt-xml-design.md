@@ -177,6 +177,29 @@ FolgenschnittXMLExporter   schreibt nur noch diese Entscheidungen als
   gebaut. Folgenschnitt bekommt einen eigenen Exporter (PeakCut hat dafür schon
   die `BaseExporter`-Struktur).
 
+## Contracts — Grundprinzipien (Reviewer-Checkliste, Stand 2026-05-15)
+
+Die Datenmodelle (`ActivityFrame`, `SpeakerTurn`, `EditDecision`, Mic-Rollen,
+Kamera-Rollen) werden zuerst festgelegt. Verbindliche Prinzipien:
+
+- **Zeitbasis: intern konsequent Millisekunden.** Frame-Umrechnung **nur ganz
+  am Rand im Exporter**. Hält die Audioseite lesbar und begrenzt
+  Rundungsfehler auf den Exporter. (Konsistent mit bestehendem PeakCut-Muster:
+  `position_ms` etc. intern, `ms_to_frames(ms, fps)` erst im Export.)
+- **Einheiten explizit im Feldnamen** (`*_ms`), keine nackten Zahlen.
+- **Rollen-Mapping** (Mic→Sprecher, Kamera→Rolle) als eigene klare Struktur,
+  nicht implizit über Dateinamen/Reihenfolge.
+- **Serialisierbar** (JSON-rund), damit `speaker_turns.json` /
+  `edit_decisions.json` und spätere `.peakcut/`-Ablage trivial sind.
+- **Unit-testbar ohne Audio/XML**: `edit_decisions` aus `speaker_turns`
+  ableitbar als reine Funktion.
+- **Stufe-2-andockbar**: Modelle so schneiden, dass die spätere Auflockerung
+  bei langen Monologen (zusätzliche Wechsel innerhalb eines Turns) additiv
+  andocken kann, ohne die Stufe-1-Strukturen umzubauen.
+
+Genau diese Punkte prüft der externe Reviewer gegen, sobald die Contracts
+stehen.
+
 ## XML-Format-Entscheidung
 
 - **Ein Format: FCP7-XML, flache lineare Timeline** (harte Schnitte,
@@ -340,3 +363,8 @@ Rohschnitt ist eine konservative Logik besser als eine clevere, die zappelt.
   laut Reviewer "in gutem Zustand zum Bauen". Erste Umsetzung als
   Messinstrument behandeln. Weiterhin **nicht** in Umsetzung — wartet auf
   Max' Freigabe + Test-Ausschnitte.
+- **2026-05-15 (Reviewer-Zusatz):** Contracts-Grundprinzipien festgehalten
+  (Zeitbasis intern ms, Frame-Umrechnung nur im Exporter; Rollen-Mapping
+  explizit; serialisierbar; unit-testbar; Stufe-2-andockbar) — entspricht
+  Reviewer-Checkliste fuer (a). Testmaterial fixiert: Folge "Hartmut Rosa"
+  (MIC1/MIC2 getrennt vorhanden), 3 Ausschnitte daraus.
