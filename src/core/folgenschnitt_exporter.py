@@ -93,11 +93,11 @@ class FolgenschnittXMLExporter(BaseExporter):
 
                 rec_start_f = ms_to_frames(decision.start_ms, fps)
                 rec_end_f = ms_to_frames(decision.end_ms, fps)
-                source_in_ms = max(0, decision.start_ms + offset_ms)
-                source_out_ms = max(0, decision.end_ms + offset_ms)
-                source_in_f = ms_to_frames(source_in_ms, fps)
-                source_out_f = ms_to_frames(source_out_ms, fps)
                 clip_dur_f = rec_end_f - rec_start_f
+
+                source_in_ms = max(0, decision.start_ms + offset_ms)
+                source_in_f = ms_to_frames(source_in_ms, fps)
+                source_out_f = source_in_f + clip_dur_f
 
                 f.write(f'          <clipitem id="clipitem-folgenschnitt-v{idx + 1}">\n')
                 f.write(f'            <name>{escape(video_name)}</name>\n')

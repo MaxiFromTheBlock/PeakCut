@@ -368,6 +368,14 @@ Rohschnitt ist eine konservative Logik besser als eine clevere, die zappelt.
   explizit; serialisierbar; unit-testbar; Stufe-2-andockbar) — entspricht
   Reviewer-Checkliste fuer (a). Testmaterial fixiert: Folge "Hartmut Rosa"
   (MIC1/MIC2 getrennt vorhanden), 3 Ausschnitte daraus.
+- **2026-05-15 (Bau, Task 2 + 2.1):** Task 2 (FolgenschnittXMLExporter)
+  gebaut. Carl fand an Gate B einen echten Bug (negativer Video-Offset am
+  Sequenzanfang → duration ≠ out−in). Carl spezifizierte Task 2.1
+  (MVP-Policy: source-underflow clampen, lückenlose Timeline-Dauer
+  erhalten, source_out = source_in + clip_dur); Claude umgesetzt + gegen
+  bestehende Tests verifiziert. Bewusste Vereinfachung: bei negativem
+  Offset erste Frames minimal versetzt (Rohschnitt-ok); Datei-Ende-Overflow
+  out of scope. 5 Exporter-Tests grün, Suite 106, Mini-XML real konsistent.
 - **2026-05-15 (Bau, Gate A grün):** Task 1 (Contracts,
   `core/folgenschnitt_models.py`) gebaut + von Carl gegen Gate-A-Checkliste
   freigegeben (Commit a445661). Offener Zukunftshinweis (blockiert Stufe 1

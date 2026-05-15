@@ -115,3 +115,31 @@ def test_empty_decisions_return_empty_string(tmp_export_dir):
     session.folgenschnitt_edit_decisions = []
 
     assert FolgenschnittXMLExporter().export(session) == ""
+
+
+def test_negative_video_offset_at_sequence_start_preserves_gapless_timeline_and_clip_duration(tmp_export_dir):
+    session = _make_session(tmp_export_dir)
+    session.video_offsets = [("CAM_NEG.mp4", "-00:00:02:00")]
+    session.project.videos = ["/material/CAM_NEG.mp4"]
+    session.folgenschnitt_edit_decisions = [
+        EditDecision(
+            start_ms=0,
+            end_ms=60_000,
+            camera_path="/material/CAM_NEG.mp4",
+            speaker=SpeakerId.MATZE,
+            reason="first_speaker",
+        )
+    ]
+
+    root = _parse_export(session)
+    video_clips = _clipitems(root, "video")
+
+    assert len(video_clips) == 1
+    clip = video_clips[0]
+    assert clip.find("start").text == "0"
+    assert clip.find("end").text == str(ms_to_frames(60_000, 25))
+    assert clip.find("duration").text == str(ms_to_frames(60_000, 25))
+    assert clip.find("in").text == "0"
+    assert clip.find("out").text == str(ms_to_frames(60_000, 25))
+    assert int(clip.find("end").text) - int(clip.find("start").text) == int(clip.find("duration").text)
+    assert int(clip.find("out").text) - int(clip.find("in").text) == int(clip.find("duration").text)
