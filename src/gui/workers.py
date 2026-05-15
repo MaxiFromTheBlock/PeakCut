@@ -12,6 +12,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from utils import FROZEN, TEMP_DIR
 from core.exporters import MP3Exporter, XMLExporter, TXTExporter
+from core.folgenschnitt_exporter import FolgenschnittXMLExporter
 
 _ANALYSIS_TIMEOUT_S = 600  # 10 minutes max
 
@@ -185,6 +186,13 @@ class AnalysisWorker(QThread):
             self.error.emit(f"Analyse fehlgeschlagen: {e}")
 
 
+def _build_exporters(session):
+    exporters = [MP3Exporter(), TXTExporter(), XMLExporter()]
+    if getattr(session, "folgenschnitt_edit_decisions", None):
+        exporters.append(FolgenschnittXMLExporter())
+    return exporters
+
+
 class ExportWorker(QThread):
     """Runs export in background thread to keep UI responsive."""
     finished = pyqtSignal(list)   # list of exported file paths
@@ -198,7 +206,7 @@ class ExportWorker(QThread):
     def run(self):
         try:
             exported = []
-            exporters = [MP3Exporter(), TXTExporter(), XMLExporter()]
+            exporters = _build_exporters(self.session)
             for exporter in exporters:
                 result = exporter.export(self.session)
                 if result:
