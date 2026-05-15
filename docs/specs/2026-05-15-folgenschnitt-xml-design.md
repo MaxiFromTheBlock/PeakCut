@@ -368,3 +368,9 @@ Rohschnitt ist eine konservative Logik besser als eine clevere, die zappelt.
   explizit; serialisierbar; unit-testbar; Stufe-2-andockbar) — entspricht
   Reviewer-Checkliste fuer (a). Testmaterial fixiert: Folge "Hartmut Rosa"
   (MIC1/MIC2 getrennt vorhanden), 3 Ausschnitte daraus.
+- **2026-05-15 (Bau, Gate A grün):** Task 1 (Contracts,
+  `core/folgenschnitt_models.py`) gebaut + von Carl gegen Gate-A-Checkliste
+  freigegeben (Commit a445661). Offener Zukunftshinweis (blockiert Stufe 1
+  NICHT): falls künftig `MATZE_CLOSE` als UI-Kamerarolle gebraucht wird,
+  muss `CameraRole` erweitert werden; `EditDecision` selbst hängt nicht an
+  Wide/Close, bleibt also stabil.
