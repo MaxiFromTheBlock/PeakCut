@@ -409,3 +409,18 @@ Rohschnitt ist eine konservative Logik besser als eine clevere, die zappelt.
   manuelle Zuordnung im UI muss "diese Cam ist kein Schnittmaterial"
   erlauben. CSV (speaker_activity) ist kamera-unabhängig (nur MIC1/MIC2) —
   bei Kamera-Korrektur unverändert gültig, nur die XML wird neu gebaut.
+- **2026-05-16 (Cutter-Urteil + Design-Richtungswechsel, Max-Entscheidung):**
+  Cutter zur korrigierten Vollfolge-XML: "Schnitt ist jetzt sehr gut"
+  (= Spec-Erfolgskriterium im Kern erfüllt, Kamera-Zuordnung bestätigt).
+  Drei Befunde: (A) fehlende Close = bewusste Stufe-1-Grenze, validiert
+  Stufe-2-Roadmap, kein Fix. (B/C) Schnitt zu träge ("Delay"), sensibler
+  gewünscht, auch kurze Einwürfe schneiden. **Max-Entscheidung: Cutter-
+  Linie — reaktiver schneiden.** Das ist eine bewusste Abkehr vom
+  ursprünglichen "konservativ vor nervös / ruhig"-Erfolgskriterium hin zu
+  "lebendiger/reaktiver, Cutter-kalibriert". Umsetzung = Paket-8-Feintuning
+  (Parameter/Logik), KEIN Neubau. Konkrete Parameter-/Logik-Spezifikation
+  (5-Sek-Regel runter + Einwürfe vs. Mindest-Shot ↔ Anticipation-
+  Wechselwirkung) liegt bei Carl als Plan-Autor; Claude setzt TDD um;
+  Cutter validiert dieselbe Vollfolge erneut. "Individuell einstellbar"
+  bleibt out of scope (kein UI-Mischpult) — Mittelweg = interne Konstanten
+  einmal gut kalibrieren.
