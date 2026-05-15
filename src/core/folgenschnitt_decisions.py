@@ -12,11 +12,11 @@ from .folgenschnitt_models import (
 
 @dataclass(frozen=True)
 class DecisionParams:
-    min_speaker_turn_ms: int = 5_000
-    min_shot_ms: int = 2_000
+    min_speaker_turn_ms: int = 1_000
+    min_shot_ms: int = 1_000
     merge_gap_ms: int = 700
-    true_pause_ms: int = 700
-    anticipation_ms: int = 1_500
+    true_pause_ms: int = 500
+    anticipation_ms: int = 500
 
 
 DECISION_DEFAULTS = DecisionParams()
