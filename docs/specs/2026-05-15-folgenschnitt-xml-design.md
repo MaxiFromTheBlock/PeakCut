@@ -387,6 +387,13 @@ Rohschnitt ist eine konservative Logik besser als eine clevere, die zappelt.
   source underflow reporting / valid camera ranges" — Exporter soll bei
   Underflow warnen ("Cam01: ~103 s Source-Underflow am Sequenzanfang");
   später Decisions erst ab gültigem Kamerabereich oder Fallback-Kamera.
+- **2026-05-15 (Gate B grün, vollständig):** Cutter-Sync-Spotcheck auf
+  Real-Offset-XML (Timeline 240 s, deckt Underflow + echten Sync-Bereich):
+  "ab ca. Minute 2 synchron" — passt exakt zum Underflow-Ende (~1:43–1:53).
+  Offset-Formel in der Folgenschnitt-Timeline praktisch korrekt. Alle
+  Gate-B-Bedingungen erfüllt: Premiere-Import/Relink ✓, Resolve geparkt
+  (Max-Entscheidung A), Negativ-Underflow kein Blocker (Carl), Sync nach
+  Underflow ✓. → Bau von Task 3 freigegeben.
 - **2026-05-15 (Bau, Gate A grün):** Task 1 (Contracts,
   `core/folgenschnitt_models.py`) gebaut + von Carl gegen Gate-A-Checkliste
   freigegeben (Commit a445661). Offener Zukunftshinweis (blockiert Stufe 1
