@@ -36,15 +36,12 @@ def test_build_speaker_turns_filters_short_interruptions():
 
     turns = build_speaker_turns(frames, DECISION_DEFAULTS)
 
-    assert turns == [
-        SpeakerTurn(
-            start_ms=5_000,
-            end_ms=12_100,
-            speaker=SpeakerId.MATZE,
-            confidence=0.9,
-            source="speaker_activity",
-        )
-    ]
+    assert len(turns) == 1
+    assert turns[0].start_ms == 5_000
+    assert turns[0].end_ms == 12_100
+    assert turns[0].speaker is SpeakerId.MATZE
+    assert turns[0].confidence == pytest.approx(0.9)
+    assert turns[0].source == "speaker_activity"
 
 
 def test_build_speaker_turns_merges_short_gaps_for_same_speaker():
