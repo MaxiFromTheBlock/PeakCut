@@ -400,3 +400,12 @@ Rohschnitt ist eine konservative Logik besser als eine clevere, die zappelt.
   NICHT): falls künftig `MATZE_CLOSE` als UI-Kamerarolle gebraucht wird,
   muss `CameraRole` erweitert werden; `EditDecision` selbst hängt nicht an
   Wide/Close, bleibt also stabil.
+- **2026-05-15 (Paket 8, Kamera-Zuordnung Hartmut Rosa, von Max bestätigt):**
+  Cam01=Gast-Close, Cam02=Gast-Weite, Cam03=**Nachdreh nach dem Interview
+  (KEIN Schnittmaterial)**, Cam04=Matze-Weite. Stufe-1-Schnitt nutzt nur
+  Cam04 (matze_wide) + Cam02 (guest_wide). **Wichtiger Hinweis fürs spätere
+  UI-Zuordnungs-Feature:** Cam-Nummern korrelieren NICHT mit Rollen, und
+  nicht jede Cam-Datei ist Interview-Material (Nachdrehs möglich). Die
+  manuelle Zuordnung im UI muss "diese Cam ist kein Schnittmaterial"
+  erlauben. CSV (speaker_activity) ist kamera-unabhängig (nur MIC1/MIC2) —
+  bei Kamera-Korrektur unverändert gültig, nur die XML wird neu gebaut.
