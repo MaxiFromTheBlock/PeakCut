@@ -5,7 +5,7 @@ set -e
 cd "$(dirname "$0")"
 
 VENV="./venv311"
-VERSION="2.8.1"
+VERSION="2.9.0"
 
 echo "=== PeakCut Build v${VERSION} ==="
 
