@@ -42,7 +42,7 @@ class PeakCutProject:
     def guest_name(self) -> str:
         """Guest name: user-set or auto-detected from 'mix' filename."""
         if self._guest_name is None:
-            from core.exporters import extract_guest_name
+            from core.guest_name import extract_guest_name
             self._guest_name = extract_guest_name(self.get_all_file_paths())
         return self._guest_name
 

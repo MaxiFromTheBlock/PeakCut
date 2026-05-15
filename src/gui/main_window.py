@@ -168,7 +168,7 @@ class MainWindow(QMainWindow):
                 return
 
         # Auto-detect guest name, let user confirm/edit
-        from core.exporters import extract_guest_name
+        from core.guest_name import extract_guest_name
         detected_name = extract_guest_name(all_files)
         guest_name, ok = QInputDialog.getText(
             self, "Gastname",

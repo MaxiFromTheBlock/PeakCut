@@ -1,4 +1,4 @@
-from core.exporters import extract_guest_name
+from core.guest_name import extract_guest_name
 
 
 class TestExtractGuestName:
