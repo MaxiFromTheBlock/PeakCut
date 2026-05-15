@@ -19,3 +19,4 @@ dist/
 bundled_ffmpeg/
 *.spec
 *.icns
+.superpowers/
