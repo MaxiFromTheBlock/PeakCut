@@ -373,9 +373,20 @@ Rohschnitt ist eine konservative Logik besser als eine clevere, die zappelt.
   Sequenzanfang → duration ≠ out−in). Carl spezifizierte Task 2.1
   (MVP-Policy: source-underflow clampen, lückenlose Timeline-Dauer
   erhalten, source_out = source_in + clip_dur); Claude umgesetzt + gegen
-  bestehende Tests verifiziert. Bewusste Vereinfachung: bei negativem
-  Offset erste Frames minimal versetzt (Rohschnitt-ok); Datei-Ende-Overflow
-  out of scope. 5 Exporter-Tests grün, Suite 106, Mini-XML real konsistent.
+  bestehende Tests verifiziert. 5 Exporter-Tests grün, Suite 106,
+  Mini-XML real konsistent.
+  **Begründungs-Korrektur (Carl, nach Real-Offset-Test):** Echte
+  HM-Sync-Offsets sind massiv negativ (Cam01 −01:43:14, Cam02 −01:53:23).
+  Bei diesen Werten ist der geklemmte Bereich am Sequenzanfang NICHT
+  "minimal versetzt", sondern ein **echter Source-Underflow von ~100 s**.
+  Bewusst als MVP akzeptiert (Timeline lückenlos + importierbar +
+  duration==end-start==out-in; Cutter korrigiert Anfang ggf. manuell) —
+  ehrlich benannt, nicht als "minimal" verharmlost. Datei-Ende-Overflow
+  weiterhin out of scope.
+- **Backlog (späterer eigener Task, NICHT MVP, Carls Vorgabe):** "Video
+  source underflow reporting / valid camera ranges" — Exporter soll bei
+  Underflow warnen ("Cam01: ~103 s Source-Underflow am Sequenzanfang");
+  später Decisions erst ab gültigem Kamerabereich oder Fallback-Kamera.
 - **2026-05-15 (Bau, Gate A grün):** Task 1 (Contracts,
   `core/folgenschnitt_models.py`) gebaut + von Carl gegen Gate-A-Checkliste
   freigegeben (Commit a445661). Offener Zukunftshinweis (blockiert Stufe 1
