@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QStatusBar, QFileDialog,
     QStackedWidget, QInputDialog,
 )
-from PyQt6.QtCore import Qt, QSettings
+from PyQt6.QtCore import Qt
 
 from .apple_style import COLORS, get_stylesheet
 from .workers import AnalysisWorker
@@ -22,6 +22,13 @@ from core.playback import stop_playback
 
 _log = get_logger("peakcut.gui")
 _WORKER_SHUTDOWN_WAIT_MS = 3000
+
+
+def default_import_folder() -> str:
+    """Import dialog always starts at the Desktop. Each episode is its own
+    folder, so remembering the last one was unhelpful (it stuck deep in the
+    P8 mic subfolder); Desktop is predictable and fast."""
+    return os.path.expanduser("~/Desktop")
 
 
 class MainWindow(QMainWindow):
@@ -45,8 +52,6 @@ class MainWindow(QMainWindow):
         self._mic_files = []
         self._video_files = []
         self._guest_name = cli_guest  # Pre-fill from CLI if provided
-
-        self._settings = QSettings("PeakCut", "PeakCut")
 
         self._setup_ui()
         self.setStyleSheet(get_stylesheet())
@@ -132,18 +137,13 @@ class MainWindow(QMainWindow):
     # ══════════════════════════════════════════════════════════════
 
     def _on_import(self):
-        last_folder = self._settings.value("last_folder", os.path.expanduser("~/Desktop"))
-        if not os.path.exists(last_folder):
-            last_folder = os.path.expanduser("~/Desktop")
-
         files, _ = QFileDialog.getOpenFileNames(
-            self, "Dateien auswählen", last_folder,
+            self, "Dateien auswählen", default_import_folder(),
             "Media Files (*.wav *.mp3 *.mp4 *.mov);;All Files (*)"
         )
         if not files:
             return
 
-        self._settings.setValue("last_folder", os.path.dirname(files[0]))
         _log.info("Import: %d files selected", len(files))
         self._categorize_files(files)
 
