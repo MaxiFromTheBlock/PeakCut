@@ -1,3 +1,11 @@
+import os
+
+# Must be set before PyQt6 is imported anywhere (conftest loads before test
+# modules). Without this the documented `pytest tests/` command segfaults on
+# headless/CI machines because Qt picks the native platform. setdefault keeps
+# an explicit override (e.g. a dev wanting a visible run) intact.
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 import sys
 
 import pytest
