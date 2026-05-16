@@ -483,6 +483,26 @@ Screenshots können parallel zur Analyse gemacht werden, weil der Mix als Datei 
 
 ## Offen (aktuelles Release)
 
+### PeakCut-Backlog — abgegrenzt 2026-05-16 (NICHT mehr Folgenschnitt-Feature)
+
+Folgenschnitt (generisches Modell + Zuordnungs-Schritt) wurde 2026-05-16 von
+Max für **fertig erklärt** (validiert: 304-Schnitt-Export = cutter-gelobte
+Zahl, Leitplanke greift, 153 Tests grün). Folgendes ist bewusst *getrennter*
+Backlog, kein offenes Feature mehr:
+- [ ] **10.2 Shot-Combo-Kontrast (echter Bug, wiederöffnen bei Carl):** auf
+  macOS rendert das *native* QComboBox-Popup die markierte Zeile weiß-auf-
+  hellgrau (teils unlesbar). `QAbstractItemView`-Stylesheet greift nicht.
+  Braucht Non-Native-View + explizite Item-Farben. Screenshot-Belege bei Max.
+- [ ] **„LUT hinzufügen" (Max-Wunsch, eigenes Mini-Feature):** Datei-Dialog →
+  LUT in `luts/` kopieren → bleibt künftig auswählbar. Eigene Mini-Spec.
+- [ ] **Cutter-Qualitäts-Sign-off:** braucht 1 aufbewahrten sauberen Export
+  (vollständige Zuordnung). XML ist regression-locked frame-identisch zur
+  bereits gelobten reaktiven Version — Bestätigung, kein Blocker.
+- [ ] **Fremdmaterial-Test (Max):** echte Fremdproduktion durchspielen.
+  Produktionsunabhängigkeit ist testbewiesen — reale Bestätigung.
+- [ ] Competitor-Recherche (autocut.com, Resolve Scene-Cut, GitHub-Repos) —
+  Inspiration, geparkt.
+
 ### Quick Fixes (vor V3)
 - [x] ~~`extract_guest_name` aus exporters.py in eigenes Modul~~ — erledigt (v2.9.0, → `core/guest_name.py`)
 - [ ] Code Signing (Apple Developer Account) für Gatekeeper-freie Installation (geparkt — siehe Distribution)
