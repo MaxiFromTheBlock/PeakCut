@@ -11,6 +11,7 @@ from PyQt6.QtCore import Qt, QSettings
 
 from .apple_style import COLORS, get_stylesheet
 from .workers import AnalysisWorker
+from .assignment_page import AssignmentPage
 from .review_page import ReviewPage
 
 import config
@@ -62,10 +63,15 @@ class MainWindow(QMainWindow):
         self._setup_welcome_page()    # 0
         self._setup_analysis_page()   # 1
 
+        # Assignment step (own encapsulated widget)
+        self.assignment_page = AssignmentPage()
+        self.assignment_page.continue_clicked.connect(self._on_assignment_continue)
+        self.stack.addWidget(self.assignment_page)  # 2
+
         # Review page (own widget)
         self.review_page = ReviewPage()
         self.review_page.status_message.connect(self._on_status_message)
-        self.stack.addWidget(self.review_page)  # 2
+        self.stack.addWidget(self.review_page)  # 3
 
         self.stack.setCurrentIndex(0)
 
@@ -235,11 +241,17 @@ class MainWindow(QMainWindow):
             self.analysis_status.setText("Bitte andere Dateien importieren")
             return
 
-        # Hand off to review page
-        self.review_page.set_session(self.session, self._video_files)
+        # Hand off to the encapsulated assignment step (not directly Review)
+        self.assignment_page.set_session(self.session, self._video_files)
         self.stack.setCurrentIndex(2)
+        self.statusbar.showMessage("Zuordnung prüfen")
+
+    def _on_assignment_continue(self):
+        self.assignment_page.apply_to_session()
+        self.review_page.set_session(self.session, self._video_files)
+        self.stack.setCurrentIndex(3)
         self.review_page.navigate_to_peak(0)
-        self.statusbar.showMessage(f"{num_peaks} Peaks gefunden")
+        self.statusbar.showMessage(f"{len(self.session.peaks)} Peaks gefunden")
 
     def _on_analysis_error(self, msg):
         _log.error("Analysis error: %s", msg)
@@ -254,7 +266,7 @@ class MainWindow(QMainWindow):
     # ══════════════════════════════════════════════════════════════
 
     def keyPressEvent(self, event):
-        if self.stack.currentIndex() != 2:
+        if self.stack.currentIndex() != 3:
             super().keyPressEvent(event)
             return
 
