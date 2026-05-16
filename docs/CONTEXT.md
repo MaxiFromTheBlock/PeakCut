@@ -10,7 +10,7 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 ## Tech-Stack
 
 - Python 3.11 + PyQt6
-- 140 Tests, CI via GitHub Action
+- 147 Tests, CI via GitHub Action
 - Distribution: Launcher-App in /Applications, ruft Repo-Code direkt auf
   (PyInstaller-Bundle-Strategie geparkt — siehe Distribution-Sektion in CLAUDE.md)
 
@@ -27,8 +27,12 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 - Generisches Datenmodell (freie Person × Shot-Typ) — produktionsunabhängig,
   nicht mehr Hotel-Matze-fest verdrahtet.
 - Eigener gekapselter Zuordnungs-Schritt zwischen Analyse und Review.
+  Masken starten komplett leer (kein geratener Default); Namen einmal
+  tippen → überall wählbar. Hörprobe pro Mic. Review-Dropdown zeigt die
+  Zuordnung, Screenshots erben das Label.
 - Harte Leitplanke: Keyboardstellen-Export bricht NIE wegen Folgenschnitt;
-  unvollständige Zuordnung → nur Hinweis, Folgenschnitt-XML entfällt.
+  unvollständige Zuordnung → nur Hinweis, Folgenschnitt-XML entfällt. Eine
+  bewusst leere Zuordnung wird NICHT heimlich durch Defaults ersetzt.
 
 ## Bekannte Einschraenkungen
 

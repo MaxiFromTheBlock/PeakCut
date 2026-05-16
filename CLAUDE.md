@@ -321,10 +321,11 @@ Status-Updates laufen über `session.status_update` Callbacks + stderr vom Subpr
 
 ### Kamera-Namen
 
-- `camera_combo` — Kamera-Wähler (Dropdown, editierbar)
-- Default-Name: Dateiname ohne Extension (z.B. "MV_20260126_7798" für "MV_20260126_7798.MP4")
-- Name kann direkt im Dropdown umbenannt werden
-- Screenshots nutzen den Kamera-Namen: "{name} 1.jpg", "{name} 2.jpg"
+- `camera_combo` — Kamera-Wähler (Dropdown, **nicht editierbar**, nur durchklicken)
+- Label kommt aus der Zuordnung: `camera_display_label()` → `"{Person} {Shot}"`
+  (z.B. „Matze weit", „Hartmut Close"), Fallback Shot-Label bzw. Dateiname
+- Umbenennen passiert nur im Zuordnungs-Schritt davor, nicht hier
+- Screenshots erben das Label: "Matze weit 1.jpg", "Hartmut Close 2.jpg"
 
 ---
 
@@ -595,6 +596,22 @@ Hotel-Matze-fest auf produktionsunabhängig generalisiert. 4-Augen mit Carl
   Resolves Auto-Cut".
 - **Tests**: 123 → 140 grün.
 
+**Abnahme-Revisionen (2 Runden manuelle Abnahme durch Max):**
+- Zuordnungs-Masken starten **komplett leer** (Kamera *und* Mic, keine
+  vorgefüllte Namensliste). Getippte Namen wachsen in eine gemeinsame,
+  überall auswählbare Liste. Grund: ein geratener Default, der „ausgefüllt"
+  aussieht, ist gefährlicher als ein leeres Feld.
+- `session.folgenschnitt_assignment_applied`: sobald der Zuordnungs-Schritt
+  durchlaufen ist, fällt `prepare_folgenschnitt_for_export` **nicht** mehr
+  auf Analyse-/Default-Mics zurück — eine bewusst leere Zuordnung bleibt
+  leer (kein „hilfreicher" Automatismus).
+- Hörprobe pro Mic-Zeile (`mic_preview_worker.py`): ffmpeg fast-seek,
+  kurzer Ausschnitt off-main-thread, Start am **längsten** zusammenhängenden
+  aktiven Block des Mics (nicht erstem Fenster), `play_audio`.
+- Review-Kamera-Dropdown nicht mehr editierbar, zeigt die Zuordnung
+  (`review_camera_labels.camera_display_label`); Screenshots nach Label.
+- **Tests**: 140 → 147 grün.
+
 ### v2.9.0 (2026-05-15) — CheckIn-Integration, Distribution-Pivot, Refactor
 
 Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestanden") auf `main` gemergt. Neue Versionsnummer reflektiert die neue CLI-Schnittstelle.
@@ -849,4 +866,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-16 (v2.10.0 — generischer Zuordnungs-Schritt, Folgenschnitt produktiv-fähig)*
+*Zuletzt aktualisiert: 2026-05-16 (v2.10.0 + Abnahme-Revisionen — leere Masken, applied-Flag, Hörprobe, Review-Labels; 147 Tests)*
