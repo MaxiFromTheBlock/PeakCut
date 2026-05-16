@@ -612,6 +612,18 @@ Hotel-Matze-fest auf produktionsunabhängig generalisiert. 4-Augen mit Carl
   (`review_camera_labels.camera_display_label`); Screenshots nach Label.
 - **Tests**: 140 → 147 grün.
 
+**Task 10 — Abnahme-Politur (5 Mini-Pakete, kein Modell/Decision/Leitplanke):**
+- 10.1 Bug: getippter Name füllt andere leere Felder nicht mehr
+  (`_commit_person_name` sichert/restauriert currentText, blockt Signale).
+- 10.2 Shot-Combo lesbarer Kontrast (`SHOT_COMBO_STYLESHEET`, lokal).
+- 10.3 Review-LUT startet immer „Kein LUT" (+ `config lut_path=""`).
+- 10.4 `ResettableBrightnessSlider`: Doppelklick → 0.
+- 10.5 Import-Dialog immer Desktop (`default_import_folder()`, QSettings raus).
+- Test-Harness: session-weite autouse QApplication-Fixture in
+  `conftest.py` (PyQt6 GC-Sicherheit für Qt-Tests); ReviewPage-Tests
+  rufen `cleanup()` (LUTWorker-QThread).
+- **Tests**: 147 → 153 grün.
+
 ### v2.9.0 (2026-05-15) — CheckIn-Integration, Distribution-Pivot, Refactor
 
 Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestanden") auf `main` gemergt. Neue Versionsnummer reflektiert die neue CLI-Schnittstelle.
@@ -866,4 +878,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-16 (v2.10.0 + Abnahme-Revisionen — leere Masken, applied-Flag, Hörprobe, Review-Labels; 147 Tests)*
+*Zuletzt aktualisiert: 2026-05-16 (v2.10.0 + Abnahme-Revisionen + Task 10 Politur — 153 Tests)*
