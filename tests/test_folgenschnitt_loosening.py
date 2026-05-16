@@ -47,3 +47,50 @@ def test_noop_returns_decisions_unchanged_and_gapless():
     assert result[-1].end_ms == decisions[-1].end_ms
     for prev, cur in zip(result, result[1:]):
         assert prev.end_ms == cur.start_ms
+
+
+def test_base_camera_prefers_wide_then_close_then_medium():
+    from core.folgenschnitt_models import (
+        SHOT_CLOSE, SHOT_MEDIUM, MicAssignment, CameraAssignment,
+    )
+    from core.folgenschnitt_loosening import build_stage1_base_camera_assignments
+
+    mics = [
+        MicAssignment(0, "/m/MIC1.wav", "Matze", "mic_1"),
+        MicAssignment(1, "/m/MIC2.wav", "Gast", "mic_2"),
+    ]
+    cams = [
+        CameraAssignment("/m/MATZE_WIDE.mp4", SHOT_WIDE, "Matze"),
+        CameraAssignment("/m/MATZE_CLOSE.mp4", SHOT_CLOSE, "Matze"),
+        CameraAssignment("/m/GAST_CLOSE.mp4", SHOT_CLOSE, "Gast"),
+    ]
+
+    base = build_stage1_base_camera_assignments(mics, cams)
+    by_person = {c.person: c for c in base}
+
+    assert by_person["Matze"].path == "/m/MATZE_WIDE.mp4"   # wide wins
+    assert by_person["Gast"].path == "/m/GAST_CLOSE.mp4"     # close (no wide)
+    assert all(c.shot_type == SHOT_WIDE for c in base)        # synthetic wide
+    assert {c.person for c in base} == {"Matze", "Gast"}
+
+
+def test_base_camera_totale_fallback_and_unresolvable_excluded():
+    from core.folgenschnitt_models import (
+        SHOT_TOTAL, MicAssignment, CameraAssignment,
+    )
+    from core.folgenschnitt_loosening import build_stage1_base_camera_assignments
+
+    mics = [
+        MicAssignment(0, "/m/MIC1.wav", "Anna", "mic_1"),
+        MicAssignment(1, "/m/MIC2.wav", "Tom", "mic_2"),
+    ]
+    cams = [CameraAssignment("/m/TOTALE.mov", SHOT_TOTAL, None)]
+
+    base = build_stage1_base_camera_assignments(mics, cams)
+
+    # both persons fall back to the totale as their base (synthetic wide)
+    assert {c.person for c in base} == {"Anna", "Tom"}
+    assert all(c.path == "/m/TOTALE.mov" and c.shot_type == SHOT_WIDE for c in base)
+
+    # no camera at all -> nobody resolvable
+    assert build_stage1_base_camera_assignments(mics, []) == []

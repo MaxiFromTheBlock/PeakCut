@@ -17,10 +17,52 @@ from typing import Protocol
 from .folgenschnitt_models import (
     SHOT_CLOSE,
     SHOT_MEDIUM,
+    SHOT_TOTAL,
     SHOT_WIDE,
     CameraAssignment,
     EditDecision,
 )
+
+_BASE_CAMERA_PRIORITY = (SHOT_WIDE, SHOT_CLOSE, SHOT_MEDIUM)
+
+
+def build_stage1_base_camera_assignments(mic_assignments, camera_assignments):
+    """Generality adapter: pick one base camera per speaking person
+    (weit > nah_close > halbnah > totale-fallback) and expose it to the
+    UNCHANGED Stage-1 decision function as a synthetic SHOT_WIDE
+    assignment. Persons with no resolvable camera are omitted — the
+    pipeline guardrail then skips Folgenschnitt cleanly.
+    """
+    totale = next(
+        (c for c in camera_assignments if c.shot_type == SHOT_TOTAL), None
+    )
+    persons: list[str] = []
+    seen: set[str] = set()
+    for m in mic_assignments:
+        if m.person and m.person not in seen:
+            seen.add(m.person)
+            persons.append(m.person)
+
+    result: list[CameraAssignment] = []
+    for person in persons:
+        base_path = None
+        for shot in _BASE_CAMERA_PRIORITY:
+            cam = next(
+                (
+                    c
+                    for c in camera_assignments
+                    if c.person == person and c.shot_type == shot
+                ),
+                None,
+            )
+            if cam is not None:
+                base_path = cam.path
+                break
+        if base_path is None and totale is not None:
+            base_path = totale.path
+        if base_path is not None:
+            result.append(CameraAssignment(base_path, SHOT_WIDE, person))
+    return result
 
 
 @dataclass(frozen=True)

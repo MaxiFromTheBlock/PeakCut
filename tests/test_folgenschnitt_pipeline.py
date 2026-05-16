@@ -147,3 +147,39 @@ def test_folgenschnitt_pipeline_from_turns_to_xml(tmp_export_dir, sample_config)
 
     assert os.path.exists(xml_path)
     assert os.path.basename(xml_path) == "Folgenschnitt - Hartmut Rosa.xml"
+
+
+def test_has_minimum_generalized_close_only_is_valid():
+    from core.folgenschnitt_models import SHOT_CLOSE, MicAssignment, CameraAssignment
+    from core.folgenschnitt_pipeline import has_minimum_folgenschnitt_assignment
+    mics = [MicAssignment(0, "/m/MIC1.wav", "Anna", "mic_1"),
+            MicAssignment(1, "/m/MIC2.wav", "Tom", "mic_2")]
+    cams = [CameraAssignment("/m/A_CLOSE.mp4", SHOT_CLOSE, "Anna"),
+            CameraAssignment("/m/T_CLOSE.mp4", SHOT_CLOSE, "Tom")]
+    assert has_minimum_folgenschnitt_assignment(mics, cams) == (True, None)
+
+
+def test_has_minimum_generalized_totale_only_two_mics_is_valid():
+    from core.folgenschnitt_models import SHOT_TOTAL, MicAssignment, CameraAssignment
+    from core.folgenschnitt_pipeline import has_minimum_folgenschnitt_assignment
+    mics = [MicAssignment(0, "/m/MIC1.wav", "Anna", "mic_1"),
+            MicAssignment(1, "/m/MIC2.wav", "Tom", "mic_2")]
+    cams = [CameraAssignment("/m/TOT.mov", SHOT_TOTAL, None)]
+    assert has_minimum_folgenschnitt_assignment(mics, cams) == (True, None)
+
+
+def test_has_minimum_skips_when_a_person_is_unresolvable():
+    from core.folgenschnitt_models import SHOT_WIDE, MicAssignment, CameraAssignment
+    from core.folgenschnitt_pipeline import has_minimum_folgenschnitt_assignment, SKIP_REASON
+    mics = [MicAssignment(0, "/m/MIC1.wav", "Matze", "mic_1"),
+            MicAssignment(1, "/m/MIC2.wav", "Gast", "mic_2")]
+    cams = [CameraAssignment("/m/M_WIDE.mp4", SHOT_WIDE, "Matze")]  # Gast unresolvable, no totale
+    assert has_minimum_folgenschnitt_assignment(mics, cams) == (False, SKIP_REASON)
+
+
+def test_has_minimum_skips_with_no_cameras():
+    from core.folgenschnitt_models import MicAssignment
+    from core.folgenschnitt_pipeline import has_minimum_folgenschnitt_assignment, SKIP_REASON
+    mics = [MicAssignment(0, "/m/MIC1.wav", "Matze", "mic_1"),
+            MicAssignment(1, "/m/MIC2.wav", "Gast", "mic_2")]
+    assert has_minimum_folgenschnitt_assignment(mics, []) == (False, SKIP_REASON)

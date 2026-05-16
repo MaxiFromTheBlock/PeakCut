@@ -7,7 +7,7 @@ reason, never an exception that propagates to the export worker.
 """
 
 from .folgenschnitt_decisions import build_edit_decisions, build_speaker_turns
-from .folgenschnitt_models import SHOT_WIDE
+from .folgenschnitt_loosening import build_stage1_base_camera_assignments
 from .speaker_activity import build_default_mic_assignments
 
 SKIP_REASON = "Zuordnung unvollstaendig"
@@ -24,12 +24,11 @@ def has_minimum_folgenschnitt_assignment(mic_assignments, camera_assignments):
     persons = {m.person for m in mic_assignments if m.person}
     if len(persons) < 2:
         return False, SKIP_REASON
-    wide_persons = {
-        c.person
-        for c in camera_assignments
-        if c.shot_type == SHOT_WIDE and c.person
-    }
-    if len(wide_persons) < 2:
+    # Generalized: each speaking person must resolve to a base camera
+    # (weit > close > halbnah > totale-fallback). Guardrail unchanged:
+    # if not, Folgenschnitt is skipped cleanly.
+    base = build_stage1_base_camera_assignments(mic_assignments, camera_assignments)
+    if len({c.person for c in base if c.person}) < 2:
         return False, SKIP_REASON
     return True, None
 
