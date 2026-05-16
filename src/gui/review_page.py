@@ -209,17 +209,14 @@ class ReviewPage(QWidget):
         except (OSError, PermissionError):
             pass  # Read-only in bundled .app
 
-        current_lut = config.get("lut_path") or ""
-
         lut_files = sorted(f for f in os.listdir(LUTS_DIR) if f.lower().endswith('.cube')) if os.path.isdir(LUTS_DIR) else []
-        selected = 0
-        for i, filename in enumerate(lut_files):
-            name = os.path.splitext(filename)[0]
-            self.lut_combo.addItem(name, filename)
-            if filename == current_lut:
-                selected = i + 1
+        for filename in lut_files:
+            self.lut_combo.addItem(os.path.splitext(filename)[0], filename)
 
-        self.lut_combo.setCurrentIndex(selected)
+        # Always start with "Kein LUT". video_preview reads the LUT directly
+        # from config, so the stored path must be cleared too.
+        self.lut_combo.setCurrentIndex(0)
+        config.set_value("lut_path", "")
         self.lut_combo.blockSignals(False)
 
     # ══════════════════════════════════════════════════════════════
