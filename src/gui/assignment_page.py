@@ -193,8 +193,13 @@ class AssignmentPage(QWidget):
             return
         self._person_pool.append(name)
         for other in self._person_combos:
-            if other.findText(name) < 0:
-                other.addItem(name)
+            if other.findText(name) >= 0:
+                continue
+            current = other.currentText()
+            was_blocked = other.blockSignals(True)
+            other.addItem(name)
+            other.setCurrentText(current)
+            other.blockSignals(was_blocked)
 
     def _build_ui(self):
         layout = QVBoxLayout(self)

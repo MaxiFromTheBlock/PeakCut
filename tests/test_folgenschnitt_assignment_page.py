@@ -1,4 +1,7 @@
+import sys
 from types import SimpleNamespace
+
+from PyQt6.QtWidgets import QApplication, QComboBox
 
 from core.folgenschnitt_models import (
     ActivityFrame,
@@ -6,7 +9,18 @@ from core.folgenschnitt_models import (
     SHOT_UNUSED,
     MicAssignment,
 )
-from gui.assignment_page import build_assignment_state, preview_start_s_for_mic
+from gui.assignment_page import (
+    AssignmentPage,
+    build_assignment_state,
+    preview_start_s_for_mic,
+)
+
+
+def _app():
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+    return app
 
 
 def _session(mic_assignments=None, guest_name="Hartmut Rosa", mic_tracks=None,
@@ -99,3 +113,28 @@ def test_preview_start_falls_back_to_zero_without_activity():
     session = _session(speaker_activity=[])
 
     assert preview_start_s_for_mic(session, "mic_1") == 0.0
+
+
+def test_committed_person_name_becomes_option_without_prefilling_other_empty_fields():
+    _app()
+    page = AssignmentPage()
+
+    source = QComboBox()
+    source.setEditable(True)
+    target = QComboBox()
+    target.setEditable(True)
+    untouched = QComboBox()
+    untouched.setEditable(True)
+
+    page._register_person_combo(source)
+    page._register_person_combo(target)
+    page._register_person_combo(untouched)
+
+    source.setCurrentText("Matze")
+    page._commit_person_name(source)
+
+    assert source.currentText() == "Matze"
+    assert target.findText("Matze") >= 0
+    assert untouched.findText("Matze") >= 0
+    assert target.currentText() == ""
+    assert untouched.currentText() == ""

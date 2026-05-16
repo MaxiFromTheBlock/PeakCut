@@ -1,7 +1,24 @@
+import sys
+
 import pytest
 
 from core.project import PeakCutProject
 from core.peak import Peak
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _qt_app():
+    """One QApplication, held for the whole session.
+
+    PyQt6 garbage-collects a discarded QApplication wrapper, which destroys
+    the C++ app and aborts the next QWidget ("Must construct a QApplication
+    before a QWidget"). A session-scoped fixture keeps a live reference so
+    the per-test ``_app()`` helpers just find this instance.
+    """
+    from PyQt6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    yield app
 
 
 @pytest.fixture
