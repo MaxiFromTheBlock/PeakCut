@@ -13,6 +13,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from utils import FROZEN, TEMP_DIR
 from core.exporters import MP3Exporter, XMLExporter, TXTExporter
 from core.folgenschnitt_exporter import FolgenschnittXMLExporter
+from core.folgenschnitt_pipeline import SKIP_REASON, prepare_folgenschnitt_for_export
 
 _ANALYSIS_TIMEOUT_S = 600  # 10 minutes max
 
@@ -209,6 +210,18 @@ class ExportWorker(QThread):
 
     def run(self):
         try:
+            # Hard guardrail: Folgenschnitt prep must never break the base
+            # (Keyboardstellen) export. Any failure becomes a skip notice.
+            try:
+                reason = prepare_folgenschnitt_for_export(self.session)
+            except Exception:
+                self.session.speaker_turns = []
+                self.session.folgenschnitt_edit_decisions = []
+                self.session.folgenschnitt_skip_reason = SKIP_REASON
+                reason = SKIP_REASON
+            if reason:
+                self.progress.emit(f"Folgenschnitt-XML uebersprungen - {reason}")
+
             exported = []
             exporters = _build_exporters(self.session)
             for exporter in exporters:

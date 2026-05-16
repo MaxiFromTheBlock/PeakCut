@@ -2,7 +2,7 @@ import xml.etree.ElementTree as ET
 from unittest.mock import MagicMock, patch
 
 from core.folgenschnitt_exporter import FolgenschnittXMLExporter
-from core.folgenschnitt_models import EditDecision, SpeakerId
+from core.folgenschnitt_models import EditDecision
 from utils import ms_to_frames, parse_timecode_to_ms
 
 
@@ -18,21 +18,21 @@ def _make_session(export_dir):
             start_ms=0,
             end_ms=60_000,
             camera_path="/material/CAM_A.mp4",
-            speaker=SpeakerId.MATZE,
+            speaker="Matze",
             reason="first_speaker",
         ),
         EditDecision(
             start_ms=60_000,
             end_ms=120_000,
             camera_path="/material/CAM_B.mp4",
-            speaker=SpeakerId.GUEST,
+            speaker="Hartmut Rosa",
             reason="speaker_change",
         ),
         EditDecision(
             start_ms=120_000,
             end_ms=180_000,
             camera_path="/material/CAM_A.mp4",
-            speaker=SpeakerId.MATZE,
+            speaker="Matze",
             reason="speaker_change",
         ),
     ]
@@ -126,7 +126,7 @@ def test_negative_video_offset_at_sequence_start_preserves_gapless_timeline_and_
             start_ms=0,
             end_ms=60_000,
             camera_path="/material/CAM_NEG.mp4",
-            speaker=SpeakerId.MATZE,
+            speaker="Matze",
             reason="first_speaker",
         )
     ]
