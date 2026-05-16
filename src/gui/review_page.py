@@ -10,6 +10,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 
 from .apple_style import COLORS
 from .video_preview_peak import PeakVideoPreview
+from .review_camera_labels import camera_display_label
 from .workers import ExportWorker
 
 import config
@@ -18,6 +19,18 @@ from core.playback import stop_playback, is_playing
 
 _log = get_logger("peakcut.review")
 _PLAYBACK_POLL_MS = 200
+
+
+class ResettableBrightnessSlider(QSlider):
+    """Brightness slider that resets to 0 on double-click. setValue(0)
+    triggers the existing valueChanged path, so no preview logic here."""
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.setValue(0)
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
 
 
 class ReviewPage(QWidget):
@@ -53,10 +66,9 @@ class ReviewPage(QWidget):
         top_bar.addWidget(cam_label)
 
         self.camera_combo = QComboBox()
-        self.camera_combo.setEditable(True)
+        self.camera_combo.setEditable(False)
         self.camera_combo.setMinimumWidth(180)
         self.camera_combo.currentIndexChanged.connect(self._on_camera_changed)
-        self.camera_combo.lineEdit().editingFinished.connect(self._on_camera_name_edited)
         top_bar.addWidget(self.camera_combo)
 
         top_bar.addSpacing(20)
@@ -76,7 +88,7 @@ class ReviewPage(QWidget):
         brightness_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         top_bar.addWidget(brightness_label)
 
-        self.brightness_slider = QSlider(Qt.Orientation.Horizontal)
+        self.brightness_slider = ResettableBrightnessSlider(Qt.Orientation.Horizontal)
         self.brightness_slider.setRange(-100, 100)
         self.brightness_slider.setValue(0)
         self.brightness_slider.setFixedWidth(120)
@@ -188,9 +200,9 @@ class ReviewPage(QWidget):
 
         # Populate camera combo
         self.camera_combo.clear()
+        assignments = getattr(session, "folgenschnitt_camera_assignments", []) or []
         for path in video_files:
-            name = os.path.splitext(os.path.basename(path))[0]
-            self.camera_combo.addItem(f"{name}", path)
+            self.camera_combo.addItem(camera_display_label(path, assignments), path)
 
         if video_files:
             self.video_preview.set_videos(video_files)
@@ -209,17 +221,14 @@ class ReviewPage(QWidget):
         except (OSError, PermissionError):
             pass  # Read-only in bundled .app
 
-        current_lut = config.get("lut_path") or ""
-
         lut_files = sorted(f for f in os.listdir(LUTS_DIR) if f.lower().endswith('.cube')) if os.path.isdir(LUTS_DIR) else []
-        selected = 0
-        for i, filename in enumerate(lut_files):
-            name = os.path.splitext(filename)[0]
-            self.lut_combo.addItem(name, filename)
-            if filename == current_lut:
-                selected = i + 1
+        for filename in lut_files:
+            self.lut_combo.addItem(os.path.splitext(filename)[0], filename)
 
-        self.lut_combo.setCurrentIndex(selected)
+        # Always start with "Kein LUT". video_preview reads the LUT directly
+        # from config, so the stored path must be cleared too.
+        self.lut_combo.setCurrentIndex(0)
+        config.set_value("lut_path", "")
         self.lut_combo.blockSignals(False)
 
     # ══════════════════════════════════════════════════════════════
@@ -326,13 +335,6 @@ class ReviewPage(QWidget):
             if self.session and self.session.peaks:
                 peak = self.session.peaks[self.session.current_peak]
                 self.video_preview.set_position(peak.position_ms)
-
-    def _on_camera_name_edited(self):
-        name = self.camera_combo.currentText().strip()
-        if name:
-            idx = self.camera_combo.currentIndex()
-            self.camera_combo.setItemText(idx, name)
-            self.video_preview.set_camera_name(name)
 
     def _on_lut_changed(self, index):
         data = self.lut_combo.currentData()

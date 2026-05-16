@@ -12,6 +12,8 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from utils import FROZEN, TEMP_DIR
 from core.exporters import MP3Exporter, XMLExporter, TXTExporter
+from core.folgenschnitt_exporter import FolgenschnittXMLExporter
+from core.folgenschnitt_pipeline import SKIP_REASON, prepare_folgenschnitt_for_export
 
 _ANALYSIS_TIMEOUT_S = 600  # 10 minutes max
 
@@ -55,6 +57,9 @@ class AnalysisWorker(QThread):
 
         cfg = self.session.config
 
+        guest = (project.guest_name or "").strip()
+        guest_person = guest if guest and guest.lower() != "unknown" else "Gast"
+
         config_data = {
             "keyboard_track": project.keyboard_track,
             "mic_tracks": project.mic_tracks,
@@ -62,6 +67,7 @@ class AnalysisWorker(QThread):
             "reference_track": project.get_reference_track(),
             "temp_dir": TEMP_DIR,
             "export_dir": project.export_dir,
+            "default_people": ["Matze", guest_person],
             "config": cfg
         }
 
@@ -185,6 +191,13 @@ class AnalysisWorker(QThread):
             self.error.emit(f"Analyse fehlgeschlagen: {e}")
 
 
+def _build_exporters(session):
+    exporters = [MP3Exporter(), TXTExporter(), XMLExporter()]
+    if getattr(session, "folgenschnitt_edit_decisions", None):
+        exporters.append(FolgenschnittXMLExporter())
+    return exporters
+
+
 class ExportWorker(QThread):
     """Runs export in background thread to keep UI responsive."""
     finished = pyqtSignal(list)   # list of exported file paths
@@ -197,8 +210,20 @@ class ExportWorker(QThread):
 
     def run(self):
         try:
+            # Hard guardrail: Folgenschnitt prep must never break the base
+            # (Keyboardstellen) export. Any failure becomes a skip notice.
+            try:
+                reason = prepare_folgenschnitt_for_export(self.session)
+            except Exception:
+                self.session.speaker_turns = []
+                self.session.folgenschnitt_edit_decisions = []
+                self.session.folgenschnitt_skip_reason = SKIP_REASON
+                reason = SKIP_REASON
+            if reason:
+                self.progress.emit(f"Folgenschnitt-XML uebersprungen - {reason}")
+
             exported = []
-            exporters = [MP3Exporter(), TXTExporter(), XMLExporter()]
+            exporters = _build_exporters(self.session)
             for exporter in exporters:
                 result = exporter.export(self.session)
                 if result:

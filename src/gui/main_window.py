@@ -7,10 +7,11 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QStatusBar, QFileDialog,
     QStackedWidget, QInputDialog,
 )
-from PyQt6.QtCore import Qt, QSettings
+from PyQt6.QtCore import Qt
 
 from .apple_style import COLORS, get_stylesheet
 from .workers import AnalysisWorker
+from .assignment_page import AssignmentPage
 from .review_page import ReviewPage
 
 import config
@@ -21,6 +22,13 @@ from core.playback import stop_playback
 
 _log = get_logger("peakcut.gui")
 _WORKER_SHUTDOWN_WAIT_MS = 3000
+
+
+def default_import_folder() -> str:
+    """Import dialog always starts at the Desktop. Each episode is its own
+    folder, so remembering the last one was unhelpful (it stuck deep in the
+    P8 mic subfolder); Desktop is predictable and fast."""
+    return os.path.expanduser("~/Desktop")
 
 
 class MainWindow(QMainWindow):
@@ -45,8 +53,6 @@ class MainWindow(QMainWindow):
         self._video_files = []
         self._guest_name = cli_guest  # Pre-fill from CLI if provided
 
-        self._settings = QSettings("PeakCut", "PeakCut")
-
         self._setup_ui()
         self.setStyleSheet(get_stylesheet())
 
@@ -62,10 +68,15 @@ class MainWindow(QMainWindow):
         self._setup_welcome_page()    # 0
         self._setup_analysis_page()   # 1
 
+        # Assignment step (own encapsulated widget)
+        self.assignment_page = AssignmentPage()
+        self.assignment_page.continue_clicked.connect(self._on_assignment_continue)
+        self.stack.addWidget(self.assignment_page)  # 2
+
         # Review page (own widget)
         self.review_page = ReviewPage()
         self.review_page.status_message.connect(self._on_status_message)
-        self.stack.addWidget(self.review_page)  # 2
+        self.stack.addWidget(self.review_page)  # 3
 
         self.stack.setCurrentIndex(0)
 
@@ -126,18 +137,13 @@ class MainWindow(QMainWindow):
     # ══════════════════════════════════════════════════════════════
 
     def _on_import(self):
-        last_folder = self._settings.value("last_folder", os.path.expanduser("~/Desktop"))
-        if not os.path.exists(last_folder):
-            last_folder = os.path.expanduser("~/Desktop")
-
         files, _ = QFileDialog.getOpenFileNames(
-            self, "Dateien auswählen", last_folder,
+            self, "Dateien auswählen", default_import_folder(),
             "Media Files (*.wav *.mp3 *.mp4 *.mov);;All Files (*)"
         )
         if not files:
             return
 
-        self._settings.setValue("last_folder", os.path.dirname(files[0]))
         _log.info("Import: %d files selected", len(files))
         self._categorize_files(files)
 
@@ -168,7 +174,7 @@ class MainWindow(QMainWindow):
                 return
 
         # Auto-detect guest name, let user confirm/edit
-        from core.exporters import extract_guest_name
+        from core.guest_name import extract_guest_name
         detected_name = extract_guest_name(all_files)
         guest_name, ok = QInputDialog.getText(
             self, "Gastname",
@@ -235,11 +241,17 @@ class MainWindow(QMainWindow):
             self.analysis_status.setText("Bitte andere Dateien importieren")
             return
 
-        # Hand off to review page
-        self.review_page.set_session(self.session, self._video_files)
+        # Hand off to the encapsulated assignment step (not directly Review)
+        self.assignment_page.set_session(self.session, self._video_files)
         self.stack.setCurrentIndex(2)
+        self.statusbar.showMessage("Zuordnung prüfen")
+
+    def _on_assignment_continue(self):
+        self.assignment_page.apply_to_session()
+        self.review_page.set_session(self.session, self._video_files)
+        self.stack.setCurrentIndex(3)
         self.review_page.navigate_to_peak(0)
-        self.statusbar.showMessage(f"{num_peaks} Peaks gefunden")
+        self.statusbar.showMessage(f"{len(self.session.peaks)} Peaks gefunden")
 
     def _on_analysis_error(self, msg):
         _log.error("Analysis error: %s", msg)
@@ -254,7 +266,7 @@ class MainWindow(QMainWindow):
     # ══════════════════════════════════════════════════════════════
 
     def keyPressEvent(self, event):
-        if self.stack.currentIndex() != 2:
+        if self.stack.currentIndex() != 3:
             super().keyPressEvent(event)
             return
 
@@ -277,6 +289,7 @@ class MainWindow(QMainWindow):
     # ══════════════════════════════════════════════════════════════
 
     def closeEvent(self, event):
+        self.assignment_page.cleanup()
         self.review_page.cleanup()
 
         if self._worker:

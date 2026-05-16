@@ -1,7 +1,32 @@
+import os
+
+# Must be set before PyQt6 is imported anywhere (conftest loads before test
+# modules). Without this the documented `pytest tests/` command segfaults on
+# headless/CI machines because Qt picks the native platform. setdefault keeps
+# an explicit override (e.g. a dev wanting a visible run) intact.
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+import sys
+
 import pytest
 
 from core.project import PeakCutProject
 from core.peak import Peak
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _qt_app():
+    """One QApplication, held for the whole session.
+
+    PyQt6 garbage-collects a discarded QApplication wrapper, which destroys
+    the C++ app and aborts the next QWidget ("Must construct a QApplication
+    before a QWidget"). A session-scoped fixture keeps a live reference so
+    the per-test ``_app()`` helpers just find this instance.
+    """
+    from PyQt6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    yield app
 
 
 @pytest.fixture

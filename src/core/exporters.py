@@ -15,25 +15,6 @@ _TTS_FALLBACK_SILENCE_MS = 300
 _TTS_NUMBER_GAP_MS = 100
 
 
-def extract_guest_name(file_paths: list[str]) -> str:
-    """Extract guest name from 'mix' filename among the given file paths.
-
-    Expected patterns: "Prefix - Gastname mix.wav", "Prefix - Gastname (mix).wav"
-    """
-    import re
-    for f in file_paths:
-        name = os.path.basename(f)
-        if "mix" in name.lower():
-            base = os.path.splitext(name)[0]
-            parts = base.split(" - ")
-            if len(parts) > 1:
-                guest = parts[1].split("(")[0].strip()
-                guest = re.sub(r'\s*mix\s*$', '', guest, flags=re.IGNORECASE).strip()
-                if guest:
-                    return guest
-    return "Unknown"
-
-
 def generate_tts_number(n, temp_dir, voice):
     """Generate number via macOS TTS (say command)."""
     os.makedirs(temp_dir, exist_ok=True)
