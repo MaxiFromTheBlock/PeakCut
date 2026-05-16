@@ -160,9 +160,11 @@ src/
 │   ├── guest_name.py           # Gastname aus 'mix'-Dateinamen extrahieren (eigenes Modul seit v2.9.0)
 │   └── exporters.py            # MP3/XML/TXT Exporter (ffprobe for resolution, samplerate, depth, channels)
 ├── gui/
-│   ├── main_window.py          # Hauptfenster: Import, Gastname-Dialog, Analyse-Orchestrierung (~280 Zeilen)
+│   ├── main_window.py          # Hauptfenster: Import, Gastname-Dialog, Analyse-Orchestrierung, Flow Welcome→Analyse→Zuordnung→Review
+│   ├── assignment_page.py      # Folgenschnitt-Zuordnung (gekapselt): build_assignment_state (pure) + AssignmentPage Widget
+│   ├── thumbnail_worker.py     # Async Kamera-Thumbnails (QThread, sequenziell, ffmpeg fast-seek)
 │   ├── review_page.py          # ReviewPage Widget: Video + Controls + Navigation + Export (~420 Zeilen)
-│   ├── workers.py              # AnalysisWorker + ExportWorker (QThread, Subprocess) (~145 Zeilen)
+│   ├── workers.py              # AnalysisWorker + ExportWorker (QThread); ExportWorker kapselt guarded Folgenschnitt-Pipeline
 │   ├── apple_style.py          # macOS Apple-Style Stylesheet, hell/weiss (15 Sections, COLORS dict, get_stylesheet())
 │   └── video_preview_peak.py   # Video-Player: QMediaPlayer + LUT + Async Screenshots
 └── lib/
@@ -281,7 +283,7 @@ Status-Updates laufen über `session.status_update` Callbacks + stderr vom Subpr
 
 ---
 
-## UI Design (3-Page Flow)
+## UI Design (4-Page Flow)
 
 ### Pages (QStackedWidget)
 
@@ -289,7 +291,8 @@ Status-Updates laufen über `session.status_update` Callbacks + stderr vom Subpr
 |------|-------|--------|
 | **Welcome** | 0 | Zentrierter "PeakCut" Titel + "Import Files" Button |
 | **Analysis** | 1 | Analyse-Status + Fortschritt (wartet auf Subprocess) |
-| **Review** | 2 | Video-Player + Controls + Navigation + Export |
+| **Zuordnung** | 2 | Folgenschnitt: Kamera→Shot-Typ/Person + Mic→Person (gekapselt, eigenes Widget). 0-Peaks-Guard greift davor. |
+| **Review** | 3 | Video-Player + Controls + Navigation + Export |
 
 ### Review Page Layout (von oben nach unten)
 
@@ -362,7 +365,7 @@ Status-Updates laufen über `session.status_update` Callbacks + stderr vom Subpr
 | `I` | Ignore Peak | Review-Page |
 | `S` | Screenshot | Review-Page |
 
-Shortcuts sind nur auf der Review-Page aktiv (Page Index 2).
+Shortcuts sind nur auf der Review-Page aktiv (Page Index 3).
 
 ---
 
@@ -564,6 +567,33 @@ Screenshots können parallel zur Analyse gemacht werden, weil der Mix als Datei 
 ---
 
 ## Changelog
+
+### v2.10.0 (2026-05-16) — Generischer Zuordnungs-Schritt (Folgenschnitt produktiv)
+
+*Versionslabel vorläufig — finale Nummer ist Max' Entscheidung.*
+
+Folgenschnitt Stufe 1 in der App bedienbar gemacht und das Datenmodell von
+Hotel-Matze-fest auf produktionsunabhängig generalisiert. 4-Augen mit Carl
+(Plan), Claude (TDD-Bau), Max (Entscheider). Gate A bestanden. Spec:
+`docs/specs/2026-05-16-zuordnung-generisch-design.md`.
+
+- **Generisches Datenmodell**: `SpeakerId`/`CameraRole`-Enums entfernt.
+  Person = freier String, `CameraAssignment = (shot_type, person|None)`,
+  `MicAssignment` trennt `speaker_key` (Analyse) von `person` (final).
+  Unknown = `None` statt `"unknown"`.
+- **Gekapselter Zuordnungs-Schritt**: neue Page (Index 2) zwischen Analyse
+  und Review. Voller Dateiname + Shot-Typ + bedingte Person, Mic→Person
+  vorbelegt/überschreibbar. Async Kamera-Thumbnails. Review-Screen
+  unverändert.
+- **Harte Leitplanke**: `folgenschnitt_pipeline.prepare_folgenschnitt_for_export`
+  + ExportWorker-Kapselung — Keyboardstellen-Export läuft IMMER, selbst bei
+  unvollständiger Zuordnung oder Pipeline-Fehler (nur kurzer Hinweis).
+- **Mic-Schutzfilter erhalten + testgesichert**: mix/keyboard/keys/klavier
+  werden vor dem Paaren mit Personen weiter ausgefiltert.
+- **Reaktives Cutter-Profil-Verhalten 1:1 erhalten** (HM-Regressions-Wächter
+  grün). Cutter-Urteil zur reaktiven Vollfolge: "extrem stark, besser als
+  Resolves Auto-Cut".
+- **Tests**: 123 → 140 grün.
 
 ### v2.9.0 (2026-05-15) — CheckIn-Integration, Distribution-Pivot, Refactor
 
@@ -819,4 +849,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-15 (v2.9.0 — Distribution-Pivot, extract_guest_name refactor, Auto-Kamerawechsel-Vision)*
+*Zuletzt aktualisiert: 2026-05-16 (v2.10.0 — generischer Zuordnungs-Schritt, Folgenschnitt produktiv-fähig)*

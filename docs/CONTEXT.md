@@ -10,16 +10,25 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 ## Tech-Stack
 
 - Python 3.11 + PyQt6
-- 94 Tests, CI via GitHub Action
+- 140 Tests, CI via GitHub Action
 - Distribution: Launcher-App in /Applications, ruft Repo-Code direkt auf
   (PyInstaller-Bundle-Strategie geparkt — siehe Distribution-Sektion in CLAUDE.md)
 
 ## Design-Prinzipien
 
 - Apple-Style: hell, weiss (NICHT dark!)
-- 3-Page Flow: Welcome → Analysis → Review
+- 4-Page Flow: Welcome → Analysis → Zuordnung → Review
 - Review-Page ist das Herzstueck
 - Qualitaet auf Zaha-Hadid-Niveau
+
+## Folgenschnitt (Stufe 1, produktiv-fähig)
+
+- Automatischer sprecherbasierter Rohschnitt als zweite FCP7-XML.
+- Generisches Datenmodell (freie Person × Shot-Typ) — produktionsunabhängig,
+  nicht mehr Hotel-Matze-fest verdrahtet.
+- Eigener gekapselter Zuordnungs-Schritt zwischen Analyse und Review.
+- Harte Leitplanke: Keyboardstellen-Export bricht NIE wegen Folgenschnitt;
+  unvollständige Zuordnung → nur Hinweis, Folgenschnitt-XML entfällt.
 
 ## Bekannte Einschraenkungen
 
