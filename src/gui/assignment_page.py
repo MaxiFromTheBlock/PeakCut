@@ -13,6 +13,7 @@ from PyQt6.QtGui import QPixmap
 from utils import TEMP_DIR
 from .apple_style import COLORS
 from .thumbnail_worker import ThumbnailWorker
+from .mic_preview_worker import MicPreviewWorker
 from core.folgenschnitt_models import (
     SHOT_CLOSE,
     SHOT_MEDIUM,
@@ -28,13 +29,25 @@ from core.folgenschnitt_pipeline import (
     has_minimum_folgenschnitt_assignment,
 )
 
+NEUTRAL_SHOT_LABEL = "— bitte zuordnen —"
+
 SHOT_CHOICES = [
+    (NEUTRAL_SHOT_LABEL, None),
     ("Weit", SHOT_WIDE),
     ("Nah/Close", SHOT_CLOSE),
     ("Halbnah", SHOT_MEDIUM),
     ("Totale", SHOT_TOTAL),
     ("— nicht nutzen", SHOT_UNUSED),
 ]
+
+
+def preview_start_s_for_mic(session, speaker_key: str) -> float:
+    """Start of the first window where this mic is the active speaker
+    (~0.5 s before, so the voice is actually audible). Fallback 0.0."""
+    for frame in getattr(session, "speaker_activity", []) or []:
+        if frame.smoothed_speaker == speaker_key and frame.confidence > 0:
+            return max(0.0, frame.start_ms / 1000 - 0.5)
+    return 0.0
 
 
 # ══════════════════════════════════════════════════════════════
@@ -45,7 +58,7 @@ SHOT_CHOICES = [
 class CameraRow:
     path: str
     filename: str
-    shot_type: str
+    shot_type: str | None
     person: str | None
 
 
@@ -77,10 +90,13 @@ class AssignmentState:
         ]
 
     def to_camera_assignments(self) -> list[CameraAssignment]:
-        # CameraAssignment normalizes person to None for personless shots.
+        # Neutral (unassigned) rows have shot_type None and are skipped —
+        # they produce no CameraAssignment. CameraAssignment normalizes
+        # person to None for personless shots.
         return [
             CameraAssignment(path=r.path, shot_type=r.shot_type, person=r.person)
             for r in self.camera_rows
+            if r.shot_type
         ]
 
     def is_complete(self) -> bool:
@@ -118,15 +134,12 @@ def build_assignment_state(session, video_files) -> AssignmentState:
     while len(people) < 2:
         people.append("Gast")
 
-    camera_rows: list[CameraRow] = []
-    for i, path in enumerate(video_files):
-        if i == 0:
-            shot, person = SHOT_WIDE, people[0]
-        elif i == 1:
-            shot, person = SHOT_WIDE, people[1]
-        else:
-            shot, person = SHOT_UNUSED, None
-        camera_rows.append(CameraRow(path, os.path.basename(path), shot, person))
+    # Cameras start neutral on purpose: a guessed-but-wrong default that
+    # looks filled-in is worse than an explicit "not yet assigned".
+    camera_rows = [
+        CameraRow(path, os.path.basename(path), None, None)
+        for path in video_files
+    ]
 
     return AssignmentState(camera_rows, mic_rows, people)
 
@@ -149,6 +162,7 @@ class AssignmentPage(QWidget):
         self._mic_widgets = []
         self._thumb_labels: dict[str, QLabel] = {}
         self._thumb_worker: ThumbnailWorker | None = None
+        self._preview_workers: list[MicPreviewWorker] = []
         self._build_ui()
 
     def _build_ui(self):
@@ -308,7 +322,9 @@ class AssignmentPage(QWidget):
 
         def _sync_person_enabled():
             const = self._shot_value(shot_combo)
-            person_combo.setEnabled(const not in PERSONLESS_SHOT_TYPES)
+            person_combo.setEnabled(
+                const is not None and const not in PERSONLESS_SHOT_TYPES
+            )
 
         shot_combo.currentTextChanged.connect(lambda _=None: _sync_person_enabled())
         _sync_person_enabled()
@@ -331,19 +347,32 @@ class AssignmentPage(QWidget):
         person_combo.addItems(people)
         person_combo.setCurrentText(row.person)
         h.addWidget(person_combo)
+
+        preview_btn = QPushButton("▶ Hörprobe")
+        preview_btn.clicked.connect(lambda _=None, r=row: self._play_mic_preview(r))
+        h.addWidget(preview_btn)
         h.addStretch()
 
         self._mic_widgets.append((row, person_combo))
         return container
 
-    def _select_shot(self, combo: QComboBox, value: str):
+    def _play_mic_preview(self, row: MicRow):
+        start_s = preview_start_s_for_mic(self.session, row.speaker_key)
+        worker = MicPreviewWorker(row.path, start_s=start_s)
+        worker.finished.connect(lambda w=worker: self._preview_workers.remove(w)
+                                if w in self._preview_workers else None)
+        self._preview_workers.append(worker)
+        worker.start()
+
+    def _select_shot(self, combo: QComboBox, value: str | None):
         for i in range(combo.count()):
             if combo.itemData(i) == value:
                 combo.setCurrentIndex(i)
                 return
-        combo.setCurrentText(value)
+        if value:
+            combo.setCurrentText(value)
 
-    def _shot_value(self, combo: QComboBox) -> str:
+    def _shot_value(self, combo: QComboBox) -> str | None:
         idx = combo.currentIndex()
         text = combo.currentText().strip()
         if idx >= 0 and combo.itemText(idx) == text:
@@ -384,5 +413,9 @@ class AssignmentPage(QWidget):
         self.continue_clicked.emit()
 
     def cleanup(self):
-        """Stop the thumbnail worker. Called from MainWindow.closeEvent."""
+        """Stop background workers. Called from MainWindow.closeEvent."""
         self._stop_thumbnail_worker()
+        for worker in list(self._preview_workers):
+            if worker.isRunning():
+                worker.wait(3000)
+        self._preview_workers = []
