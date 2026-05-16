@@ -10,6 +10,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 
 from .apple_style import COLORS
 from .video_preview_peak import PeakVideoPreview
+from .review_camera_labels import camera_display_label
 from .workers import ExportWorker
 
 import config
@@ -53,10 +54,9 @@ class ReviewPage(QWidget):
         top_bar.addWidget(cam_label)
 
         self.camera_combo = QComboBox()
-        self.camera_combo.setEditable(True)
+        self.camera_combo.setEditable(False)
         self.camera_combo.setMinimumWidth(180)
         self.camera_combo.currentIndexChanged.connect(self._on_camera_changed)
-        self.camera_combo.lineEdit().editingFinished.connect(self._on_camera_name_edited)
         top_bar.addWidget(self.camera_combo)
 
         top_bar.addSpacing(20)
@@ -188,9 +188,9 @@ class ReviewPage(QWidget):
 
         # Populate camera combo
         self.camera_combo.clear()
+        assignments = getattr(session, "folgenschnitt_camera_assignments", []) or []
         for path in video_files:
-            name = os.path.splitext(os.path.basename(path))[0]
-            self.camera_combo.addItem(f"{name}", path)
+            self.camera_combo.addItem(camera_display_label(path, assignments), path)
 
         if video_files:
             self.video_preview.set_videos(video_files)
@@ -326,13 +326,6 @@ class ReviewPage(QWidget):
             if self.session and self.session.peaks:
                 peak = self.session.peaks[self.session.current_peak]
                 self.video_preview.set_position(peak.position_ms)
-
-    def _on_camera_name_edited(self):
-        name = self.camera_combo.currentText().strip()
-        if name:
-            idx = self.camera_combo.currentIndex()
-            self.camera_combo.setItemText(idx, name)
-            self.video_preview.set_camera_name(name)
 
     def _on_lut_changed(self, index):
         data = self.lut_combo.currentData()
