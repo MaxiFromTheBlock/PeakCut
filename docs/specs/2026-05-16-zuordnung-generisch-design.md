@@ -173,6 +173,42 @@ Zuordnungs-Schritt (Carl-Plan Task 6), nicht das Datenmodell:
 Unverändert: Datenmodell, gekapselte Architektur, Leitplanke, Stufe-1-Logik,
 Scope-Grenzen.
 
+## Revision 2 — 2026-05-16 (zweite manuelle Abnahme)
+
+Drei Punkte aus der zweiten Abnahme, von Max entschieden. **Punkt 1 und 2
+kehren Entscheidungen aus Revision 1 um** (Max hat sie in der Praxis gesehen
+und revidiert). Punkt 3 verschiebt bewusst die Scope-Grenze „Review-Screen
+bleibt unverändert".
+
+1. **Wirklich leere Masken — auch Mics (revidiert Revision 1).** Keine
+   vorausgewählte Person *und* kein vorgefülltes Personen-Dropdown — weder
+   bei Kameras noch bei Mics. Der Mechanismus: der Nutzer tippt einen Namen
+   einmal ein; ab dann ist dieser Name an allen anderen Personen-Feldern
+   auswählbar (gemeinsame, wachsende Namensliste, nichts vorbelegt). Die
+   MIC1/MIC2-Konvention wird **nicht** mehr als Person vorbelegt. Der
+   technische `speaker_key` pro Mic-Zeile bleibt (aus der Analyse, für
+   Folgenschnitt-Mapping + Hörprobe nötig) — nur die *Person* ist leer.
+2. **Hörprobe an Stelle mit viel Redeanteil (revidiert Revision 1).** Nicht
+   das *erste* aktive Fenster, sondern der Beginn des *längsten
+   zusammenhängenden aktiven Blocks* dieses Mics (~0,5 s davor). Grund: beim
+   ersten Fenster war es teils nur ein einzelner Satz; gewünscht ist eine
+   Stelle, an der die Person durchgehend redet. Fallback bleibt 0,0 s.
+3. **Review-Screen: Kamera-Dropdown zeigt die Zuordnung (Scope-Erweiterung).**
+   Das Kamera-Dropdown im Review-/Keyboardstellen-Screen bleibt zum
+   Durchklicken, wird aber **nicht mehr editierbar**. Statt des Dateinamens
+   zeigt es die im Zuordnungs-Schritt gemachte Zuordnung, Format
+   `"{Person} {Shot-Label}"` (z. B. „Matze weit", „Hartmut Close"); Kameras
+   ohne personenbezogene Zuordnung fallen auf Shot-Label bzw. Dateiname
+   zurück. Umbenennen entfällt im Review-Screen komplett (passiert nur noch
+   im Zuordnungs-Schritt davor). **Folge-Entscheidung (Max):** Screenshots
+   werden nach diesem Label benannt (z. B. „Matze weit 1.jpg") statt nach
+   dem bisherigen Kamera-Namen. Damit ist die frühere Spec-Aussage
+   „Review-Screen bleibt unverändert" für diesen Punkt aufgehoben.
+
+Unverändert: Datenmodell/Verträge (Gate A), gekapselte Architektur,
+Leitplanke, Stufe-1-Schnittlogik, Scope-Grenzen (kein UX-Gesamtredesign,
+kein selektiver Export, Stufe 2/3, Resolve-Relink).
+
 ## Erfolgskriterium
 
 Folgenschnitt ist in der App **ohne Hilfsskript** nutzbar: Nutzer importiert,
