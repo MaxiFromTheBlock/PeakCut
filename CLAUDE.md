@@ -589,6 +589,33 @@ Backlog, kein offenes Feature mehr:
 
 ## Changelog
 
+### v2.11.0-dev (2026-05-16, develop — NOCH NICHT auf main) — Folgenschnitt Stufe 2 / Track 1
+
+Deterministische Zeitlogik-Auflockerung als Schicht ÜBER Stufe 1
+(unverändert). 4-Augen mit Carl (Plan + Snap-Delta), Claude TDD-Bau,
+Max Entscheider. Spec: `docs/specs/2026-05-16-folgenschnitt-stufe2-track1-design.md`.
+
+- **Neues Modul** `src/core/folgenschnitt_loosening.py`: Base-Camera-Adapter
+  (weit>close>halbnah>totale → synthetisches `SHOT_WIDE` nur für den
+  unveränderten Stufe-1-Aufruf), Block-Segmentierung (grosse Minuten-
+  Blöcke, `first_block`→`target`→densify, harter `min_block`-Deckel),
+  Kamera-Rotation, periodische Establishing-Totale, Pausen-Snapping
+  (`build_pause_ranges` aus `speaker_activity`; Floor gewinnt IMMER,
+  sequenziell, Klemmen statt roh, leeres Fenster → Cut weg).
+- **Pluggbare Strategie** (`FolgenschnittLooseningStrategy` Protocol) —
+  Track 2 (KI-Regisseur) wird später eingesteckt, nicht nachgebaut.
+- Pipeline-Hook in `prepare_folgenschnitt_for_export`; `has_minimum`
+  generalisiert (jede Kamera-Kombi inkl. nur-Totale → valide XML).
+  Leitplanke + applied-Flag unverändert.
+- Stufe 1 bit-stabil (Sicherheitsnetz-Tests); HM-XML-Regressionswächter
+  grün. **Tests: 153 → 182.**
+- v1-Defaults bewusst PROVISORISCH (min_block_to_loosen 120s, first 110s,
+  target 90s, min_block 50s, totale 240s/25s). Carl-Schluss-Review
+  technisch grün. **Vor main-Merge offen (Max-Entscheidung): Alex-
+  Feedback + Premiere-EDL → v1-Zahlen justieren → neu verifizieren.**
+  Anders als Folgenschnitt NICHT auf Carl-OK allein mergebar (neues
+  Schnittverhalten, nicht regression-locked auf cutter-validierte Baseline).
+
 ### v2.10.0 (2026-05-16) — Generischer Zuordnungs-Schritt (Folgenschnitt produktiv)
 
 *Versionslabel vorläufig — finale Nummer ist Max' Entscheidung.*
@@ -898,4 +925,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-16 (v2.10.0 + Abnahme-Revisionen + Task 10 Politur — 153 Tests)*
+*Zuletzt aktualisiert: 2026-05-16 (v2.11.0-dev Folgenschnitt Stufe 2 / Track 1 auf develop — 182 Tests; main = v2.10.0)*
