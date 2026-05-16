@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 
 from .folgenschnitt_models import (
+    SHOT_WIDE,
     ActivityFrame,
     CameraAssignment,
-    CameraRole,
     EditDecision,
-    SpeakerId,
+    MicAssignment,
     SpeakerTurn,
 )
 
@@ -24,18 +24,25 @@ DECISION_DEFAULTS = DecisionParams()
 
 def build_speaker_turns(
     activity_frames: list[ActivityFrame],
+    mic_assignments: list[MicAssignment],
     params: DecisionParams = DECISION_DEFAULTS,
 ) -> list[SpeakerTurn]:
+    key_to_person = {a.speaker_key: a.person for a in mic_assignments}
+
     turns: list[SpeakerTurn] = []
-    current_speaker = SpeakerId.UNKNOWN
+    current_speaker: str | None = None
     current_start = None
     current_end = None
     confidences: list[float] = []
 
     for frame in activity_frames:
-        speaker = frame.smoothed_speaker
-        if speaker is SpeakerId.UNKNOWN:
+        key = frame.smoothed_speaker
+        if key is None:
             continue
+        person = key_to_person.get(key)
+        if person is None:
+            continue
+        speaker = person
 
         if current_start is None:
             current_speaker = speaker
@@ -44,7 +51,7 @@ def build_speaker_turns(
             confidences = [frame.confidence]
             continue
 
-        same_speaker = speaker is current_speaker
+        same_speaker = speaker == current_speaker
         short_gap = frame.start_ms - current_end <= params.merge_gap_ms
         if same_speaker and short_gap:
             current_end = max(current_end, frame.end_ms)
@@ -86,7 +93,7 @@ def build_edit_decisions(
     if not speaker_turns:
         return []
 
-    wide_cameras = _speaker_wide_camera_map(camera_assignments)
+    wide_cameras = _person_wide_camera_map(camera_assignments)
     sequence_end = sequence_end_ms if sequence_end_ms is not None else speaker_turns[-1].end_ms
 
     decisions: list[EditDecision] = []
@@ -106,7 +113,7 @@ def build_edit_decisions(
             previous_turn = turn
             continue
 
-        if decisions[-1].speaker is turn.speaker:
+        if decisions[-1].speaker == turn.speaker:
             previous_turn = turn
             continue
 
@@ -147,7 +154,7 @@ def _append_turn_if_long_enough(
     turns: list[SpeakerTurn],
     start_ms: int,
     end_ms: int,
-    speaker: SpeakerId,
+    speaker: str,
     confidences: list[float],
     params: DecisionParams,
 ) -> None:
@@ -163,21 +170,23 @@ def _append_turn_if_long_enough(
     ))
 
 
-def _speaker_wide_camera_map(camera_assignments: list[CameraAssignment]) -> dict[SpeakerId, str]:
-    mapping = {}
+def _person_wide_camera_map(camera_assignments: list[CameraAssignment]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
     for assignment in camera_assignments:
-        if assignment.role is CameraRole.MATZE_WIDE:
-            mapping[SpeakerId.MATZE] = assignment.path
-        elif assignment.role is CameraRole.GUEST_WIDE:
-            mapping[SpeakerId.GUEST] = assignment.path
+        if assignment.shot_type == SHOT_WIDE and assignment.person:
+            if assignment.person in mapping:
+                raise ValueError(
+                    f"Multiple wide cameras for person: {assignment.person}"
+                )
+            mapping[assignment.person] = assignment.path
     return mapping
 
 
-def _camera_for_speaker(speaker: SpeakerId, wide_cameras: dict[SpeakerId, str]) -> str:
+def _camera_for_speaker(speaker: str, wide_cameras: dict[str, str]) -> str:
     try:
         return wide_cameras[speaker]
     except KeyError as exc:
-        raise ValueError(f"No wide camera for speaker: {speaker.value}") from exc
+        raise ValueError(f"No wide camera for person: {speaker}") from exc
 
 
 def _enforce_min_shot(
