@@ -3,7 +3,7 @@ import csv
 import numpy as np
 import soundfile as sf
 
-from core.folgenschnitt_models import MicAssignment, SpeakerId
+from core.folgenschnitt_models import MicAssignment
 from core.speaker_activity import (
     SPEAKER_ACTIVITY_DEFAULTS,
     analyze_speaker_activity,
@@ -15,7 +15,7 @@ def _write_wav(path, samples, sample_rate=16_000):
     sf.write(str(path), samples.astype(np.float32), sample_rate)
 
 
-def test_build_default_mic_assignments_ignores_mix_track():
+def test_build_default_mic_assignments_defaults_people_and_keys():
     assignments = build_default_mic_assignments([
         "/material/Podcast - Hartmut Rosa mix.wav",
         "/material/MIC1.wav",
@@ -23,20 +23,35 @@ def test_build_default_mic_assignments_ignores_mix_track():
     ])
 
     assert [a.path for a in assignments] == ["/material/MIC1.wav", "/material/MIC2.wav"]
-    assert [a.speaker for a in assignments] == [SpeakerId.MATZE, SpeakerId.GUEST]
+    assert [a.person for a in assignments] == ["Matze", "Gast"]
+    assert [a.speaker_key for a in assignments] == ["mic_1", "mic_2"]
 
 
-def test_build_default_mic_assignments_handles_hm_multitrack_layout():
-    assignments = build_default_mic_assignments([
-        "/material/Podcast - Hartmut Rosa MIX.wav",
-        "/material/MIC1.wav",
-        "/material/MIC2.wav",
-        "/material/MIC3_Keyboard.WAV",
-        "/material/MIC4.wav",
-    ])
+def test_build_default_mic_assignments_accepts_default_people():
+    assignments = build_default_mic_assignments(
+        ["/material/MIC1.wav", "/material/MIC2.wav"],
+        default_people=["Host", "Guest Name"],
+    )
+
+    assert [a.person for a in assignments] == ["Host", "Guest Name"]
+    assert [a.speaker_key for a in assignments] == ["mic_1", "mic_2"]
+
+
+def test_build_default_mic_assignments_filters_mix_and_keyboard_before_pairing_people():
+    assignments = build_default_mic_assignments(
+        [
+            "/material/Podcast - Hartmut Rosa MIX.wav",
+            "/material/MIC1.wav",
+            "/material/MIC2.wav",
+            "/material/MIC3_Keyboard.WAV",
+            "/material/MIC4.wav",
+        ],
+        default_people=["Matze", "Hartmut Rosa"],
+    )
 
     assert [a.path for a in assignments] == ["/material/MIC1.wav", "/material/MIC2.wav"]
-    assert [a.speaker for a in assignments] == [SpeakerId.MATZE, SpeakerId.GUEST]
+    assert [a.person for a in assignments] == ["Matze", "Hartmut Rosa"]
+    assert [a.speaker_key for a in assignments] == ["mic_1", "mic_2"]
 
 
 def test_analyze_speaker_activity_detects_dominant_tracks_and_writes_csv(tmp_path):
@@ -63,8 +78,8 @@ def test_analyze_speaker_activity_detects_dominant_tracks_and_writes_csv(tmp_pat
     _write_wav(mic2_path, mic2, sr)
 
     assignments = [
-        MicAssignment(track_index=0, path=str(mic1_path), speaker=SpeakerId.MATZE),
-        MicAssignment(track_index=1, path=str(mic2_path), speaker=SpeakerId.GUEST),
+        MicAssignment(track_index=0, path=str(mic1_path), person="Matze"),
+        MicAssignment(track_index=1, path=str(mic2_path), person="Gast"),
     ]
 
     frames = analyze_speaker_activity(
@@ -77,8 +92,8 @@ def test_analyze_speaker_activity_detects_dominant_tracks_and_writes_csv(tmp_pat
     matze_frames = [f for f in frames if 200 <= f.start_ms <= 800]
     guest_frames = [f for f in frames if 1_700 <= f.start_ms <= 2_300]
 
-    assert any(f.raw_speaker is SpeakerId.MATZE for f in matze_frames)
-    assert any(f.raw_speaker is SpeakerId.GUEST for f in guest_frames)
+    assert any(f.raw_speaker == "mic_1" for f in matze_frames)
+    assert any(f.raw_speaker == "mic_2" for f in guest_frames)
 
     with open(csv_path, newline="") as f:
         rows = list(csv.DictReader(f))
@@ -87,10 +102,10 @@ def test_analyze_speaker_activity_detects_dominant_tracks_and_writes_csv(tmp_pat
     assert rows[0].keys() >= {
         "start_ms",
         "end_ms",
-        "matze_db",
-        "guest_db",
-        "matze_noise_floor_db",
-        "guest_noise_floor_db",
+        "mic_1_db",
+        "mic_2_db",
+        "mic_1_noise_floor_db",
+        "mic_2_noise_floor_db",
         "dominance_db",
         "raw_speaker",
         "smoothed_speaker",

@@ -6,7 +6,9 @@ from dataclasses import dataclass
 import numpy as np
 import soundfile as sf
 
-from .folgenschnitt_models import ActivityFrame, MicAssignment, SpeakerId
+from .folgenschnitt_models import ActivityFrame, MicAssignment
+
+DEFAULT_PEOPLE = ["Matze", "Gast"]
 
 
 @dataclass(frozen=True)
@@ -22,16 +24,25 @@ class SpeakerActivityParams:
 SPEAKER_ACTIVITY_DEFAULTS = SpeakerActivityParams()
 
 
-def build_default_mic_assignments(mic_tracks: list[str]) -> list[MicAssignment]:
-    """Build MVP default assignments: first two real speaker mic files are Matze/Gast."""
+def build_default_mic_assignments(
+    mic_tracks: list[str],
+    default_people: list[str] | None = None,
+) -> list[MicAssignment]:
+    """Build MVP default assignments.
+
+    The defensive filter is load-bearing: mix/keyboard tracks must never be
+    mistaken for a person's microphone. Filter first, then pair the first two
+    real speaker mics with default_people positionally — never pair against
+    the raw mic_tracks list.
+    """
+    people = default_people if default_people is not None else list(DEFAULT_PEOPLE)
     speaker_tracks = [
         path for path in mic_tracks
         if _is_speaker_mic_candidate(path)
     ]
-    speakers = [SpeakerId.MATZE, SpeakerId.GUEST]
     assignments = []
-    for idx, path in enumerate(speaker_tracks[:2]):
-        assignments.append(MicAssignment(track_index=idx, path=path, speaker=speakers[idx]))
+    for idx, (path, person) in enumerate(zip(speaker_tracks[:2], people)):
+        assignments.append(MicAssignment(track_index=idx, path=path, person=person))
     return assignments
 
 
@@ -51,7 +62,7 @@ def analyze_speaker_activity(
         return []
 
     level_series = {
-        assignment.speaker.value: _read_window_levels_db(
+        assignment.speaker_key: _read_window_levels_db(
             assignment.path,
             window_ms=params.window_ms,
             hop_ms=params.hop_ms,
@@ -75,7 +86,7 @@ def analyze_speaker_activity(
     }
 
     frames = []
-    previous_speaker = SpeakerId.UNKNOWN
+    previous_speaker: str | None = None
 
     for frame_idx in range(min_frames):
         levels_db = {
@@ -89,7 +100,7 @@ def analyze_speaker_activity(
             previous_speaker,
         )
         smoothed_speaker = raw_speaker
-        if smoothed_speaker is not SpeakerId.UNKNOWN:
+        if smoothed_speaker is not None:
             previous_speaker = smoothed_speaker
 
         frame = ActivityFrame(
@@ -112,34 +123,31 @@ def analyze_speaker_activity(
 
 def write_speaker_activity_csv(frames: list[ActivityFrame], csv_path: str) -> None:
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-    fieldnames = [
-        "start_ms",
-        "end_ms",
-        "matze_db",
-        "guest_db",
-        "matze_noise_floor_db",
-        "guest_noise_floor_db",
-        "dominance_db",
-        "raw_speaker",
-        "smoothed_speaker",
-        "confidence",
-    ]
+
+    speaker_keys = list(frames[0].levels_db.keys()) if frames else []
+    fieldnames = (
+        ["start_ms", "end_ms"]
+        + [f"{key}_db" for key in speaker_keys]
+        + [f"{key}_noise_floor_db" for key in speaker_keys]
+        + ["dominance_db", "raw_speaker", "smoothed_speaker", "confidence"]
+    )
+
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for frame in frames:
-            writer.writerow({
+            row = {
                 "start_ms": frame.start_ms,
                 "end_ms": frame.end_ms,
-                "matze_db": frame.levels_db.get("matze", ""),
-                "guest_db": frame.levels_db.get("guest", ""),
-                "matze_noise_floor_db": frame.noise_floor_db.get("matze", ""),
-                "guest_noise_floor_db": frame.noise_floor_db.get("guest", ""),
                 "dominance_db": frame.dominance_db,
-                "raw_speaker": frame.raw_speaker.value,
-                "smoothed_speaker": frame.smoothed_speaker.value,
+                "raw_speaker": frame.raw_speaker or "unknown",
+                "smoothed_speaker": frame.smoothed_speaker or "unknown",
                 "confidence": frame.confidence,
-            })
+            }
+            for key in speaker_keys:
+                row[f"{key}_db"] = frame.levels_db.get(key, "")
+                row[f"{key}_noise_floor_db"] = frame.noise_floor_db.get(key, "")
+            writer.writerow(row)
 
 
 def _read_window_levels_db(path: str, window_ms: int, hop_ms: int) -> list[float]:
@@ -172,15 +180,15 @@ def _classify_frame(
     levels_db: dict[str, float],
     noise_floor_db: dict[str, float],
     params: SpeakerActivityParams,
-    previous_speaker: SpeakerId,
-) -> tuple[SpeakerId, float, float]:
+    previous_speaker: str | None,
+) -> tuple[str | None, float, float]:
     active = []
     for speaker, level_db in levels_db.items():
         if level_db - noise_floor_db.get(speaker, -120.0) >= params.active_db_above_noise:
             active.append((speaker, level_db))
 
     if not active:
-        return SpeakerId.UNKNOWN, 0.0, 0.0
+        return None, 0.0, 0.0
 
     active.sort(key=lambda item: item[1], reverse=True)
     top_speaker, top_level = active[0]
@@ -188,11 +196,11 @@ def _classify_frame(
     dominance_db = top_level - second_level
 
     threshold = params.switch_dominance_db
-    if previous_speaker.value == top_speaker:
+    if previous_speaker == top_speaker:
         threshold = params.hold_dominance_db
 
     if dominance_db < threshold:
-        return SpeakerId.UNKNOWN, float(dominance_db), 0.0
+        return None, float(dominance_db), 0.0
 
     confidence = min(1.0, max(0.0, dominance_db / params.switch_dominance_db))
-    return SpeakerId(top_speaker), float(dominance_db), float(confidence)
+    return top_speaker, float(dominance_db), float(confidence)
