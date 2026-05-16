@@ -10,6 +10,7 @@ from core.folgenschnitt_models import (
     MicAssignment,
 )
 from gui.assignment_page import (
+    SHOT_COMBO_STYLESHEET,
     AssignmentPage,
     build_assignment_state,
     preview_start_s_for_mic,
@@ -138,3 +139,8 @@ def test_committed_person_name_becomes_option_without_prefilling_other_empty_fie
     assert untouched.findText("Matze") >= 0
     assert target.currentText() == ""
     assert untouched.currentText() == ""
+
+
+def test_shot_combo_stylesheet_sets_readable_text_color():
+    assert "color:" in SHOT_COMBO_STYLESHEET
+    assert "#1D1D1F" in SHOT_COMBO_STYLESHEET

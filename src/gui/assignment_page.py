@@ -29,6 +29,19 @@ from core.folgenschnitt_pipeline import (
     has_minimum_folgenschnitt_assignment,
 )
 
+SHOT_COMBO_STYLESHEET = f"""
+QComboBox {{
+    color: {COLORS['text_primary']};
+    background-color: {COLORS['bg_primary']};
+}}
+QComboBox QAbstractItemView {{
+    color: {COLORS['text_primary']};
+    background-color: {COLORS['bg_primary']};
+    selection-background-color: {COLORS['accent_blue']};
+    selection-color: white;
+}}
+"""
+
 NEUTRAL_SHOT_LABEL = "— bitte zuordnen —"
 
 SHOT_CHOICES = [
@@ -343,6 +356,7 @@ class AssignmentPage(QWidget):
         grid.addWidget(name, 0, 1, 1, 3)
 
         shot_combo = QComboBox()
+        shot_combo.setStyleSheet(SHOT_COMBO_STYLESHEET)
         shot_combo.setEditable(True)
         for label, const in SHOT_CHOICES:
             shot_combo.addItem(label, const)
