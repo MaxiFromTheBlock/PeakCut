@@ -183,3 +183,31 @@ def test_has_minimum_skips_with_no_cameras():
     mics = [MicAssignment(0, "/m/MIC1.wav", "Matze", "mic_1"),
             MicAssignment(1, "/m/MIC2.wav", "Gast", "mic_2")]
     assert has_minimum_folgenschnitt_assignment(mics, []) == (False, SKIP_REASON)
+
+
+def test_pipeline_totale_only_produces_folgenschnitt_not_skip(sample_config):
+    # Non-HM production: only a Totale + two mics. Pre-Stufe-2 this hit the
+    # Stage-1 wide-pflicht -> Skip. With the base-camera adapter wired in,
+    # it must now produce Folgenschnitt.
+    from core.folgenschnitt_models import SHOT_TOTAL, CameraAssignment
+    session = _session(sample_config)
+    session.folgenschnitt_camera_assignments = [
+        CameraAssignment("/material/TOTALE.mov", SHOT_TOTAL, None)
+    ]
+    session.folgenschnitt_mic_assignments = _mic_assignments()
+
+    reason = prepare_folgenschnitt_for_export(session)
+
+    assert reason is None
+    assert session.folgenschnitt_edit_decisions
+    assert session.folgenschnitt_skip_reason is None
+
+
+def test_pipeline_wide_only_unchanged_short_activity(sample_config):
+    # HM 2-wide, short activity -> loosening is a no-op -> Stage-1 result.
+    session = _session(sample_config)
+    reason = prepare_folgenschnitt_for_export(session)
+    assert reason is None
+    assert session.folgenschnitt_edit_decisions
+    cams = {d.camera_path for d in session.folgenschnitt_edit_decisions}
+    assert cams <= {"/material/CAM_MATZE.mp4", "/material/CAM_GUEST.mp4"}

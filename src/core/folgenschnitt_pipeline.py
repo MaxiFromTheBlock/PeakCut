@@ -7,7 +7,11 @@ reason, never an exception that propagates to the export worker.
 """
 
 from .folgenschnitt_decisions import build_edit_decisions, build_speaker_turns
-from .folgenschnitt_loosening import build_stage1_base_camera_assignments
+from .folgenschnitt_loosening import (
+    apply_time_logic_loosening,
+    build_pause_ranges,
+    build_stage1_base_camera_assignments,
+)
 from .speaker_activity import build_default_mic_assignments
 
 SKIP_REASON = "Zuordnung unvollstaendig"
@@ -77,8 +81,19 @@ def prepare_folgenschnitt_for_export(session) -> str | None:
     try:
         turns = build_speaker_turns(activity, mic_assignments)
         sequence_end_ms = max((f.end_ms for f in activity), default=0)
-        decisions = build_edit_decisions(
-            turns, camera_assignments, sequence_end_ms=sequence_end_ms
+        # Generality adapter: feed Stage 1 a synthetic per-person base
+        # (wide>close>halbnah>totale). Stage 1 stays UNCHANGED. The
+        # loosening layer then works on the ORIGINAL assignments.
+        base_camera_assignments = build_stage1_base_camera_assignments(
+            mic_assignments, camera_assignments
+        )
+        stage1_decisions = build_edit_decisions(
+            turns, base_camera_assignments, sequence_end_ms=sequence_end_ms
+        )
+        decisions = apply_time_logic_loosening(
+            stage1_decisions,
+            camera_assignments,
+            pause_ranges=build_pause_ranges(activity),
         )
     except ValueError:
         return _skip(session, SKIP_REASON)
