@@ -94,3 +94,39 @@ def test_base_camera_totale_fallback_and_unresolvable_excluded():
 
     # no camera at all -> nobody resolvable
     assert build_stage1_base_camera_assignments(mics, []) == []
+
+
+def test_split_block_short_block_not_split():
+    from core.folgenschnitt_loosening import split_block_segments
+    p = LooseningParams(min_block_to_loosen_ms=100)
+    assert split_block_segments(0, 80, p) == [(0, 80)]
+
+
+def test_split_block_segments_exact():
+    from core.folgenschnitt_loosening import split_block_segments
+    p = LooseningParams(
+        min_block_to_loosen_ms=100,
+        first_block_ms=50,
+        target_block_ms=40,
+        densify_factor=0.5,
+        min_block_ms=20,
+    )
+    segs = split_block_segments(0, 160, p)
+    assert segs == [(0, 50), (50, 90), (90, 110), (110, 130), (130, 160)]
+
+
+def test_split_block_invariants():
+    from core.folgenschnitt_loosening import split_block_segments
+    p = LooseningParams(
+        min_block_to_loosen_ms=100,
+        first_block_ms=40,
+        target_block_ms=30,
+        densify_factor=0.5,
+        min_block_ms=10,
+    )
+    segs = split_block_segments(1000, 1000 + 500, p)
+    assert segs[0][0] == 1000 and segs[-1][1] == 1500          # exact coverage
+    for a, b in zip(segs, segs[1:]):
+        assert a[1] == b[0]                                     # gapless
+    assert all(e - s >= p.min_block_ms for s, e in segs)        # hard floor
+    assert segs[0][1] - segs[0][0] == 40                        # first_block

@@ -87,6 +87,41 @@ class PauseRange:
     end_ms: int
 
 
+def split_block_segments(start_ms, end_ms, params):
+    """Split one long single-speaker block into balanced segments:
+    a long calm first segment (first_block_ms), then target_block_ms
+    progressively densified (target * densify_factor**k), hard floor at
+    min_block_ms, and a small final remainder is absorbed into the last
+    segment (no sub-min tail). Gapless, covers [start, end] exactly.
+    Blocks below min_block_to_loosen_ms are returned unsplit.
+    """
+    duration = end_ms - start_ms
+    if duration < params.min_block_to_loosen_ms:
+        return [(start_ms, end_ms)]
+
+    segments = []
+    pos = start_ms
+    first_len = min(params.first_block_ms, end_ms - pos)
+    segments.append((pos, pos + first_len))
+    pos += first_len
+
+    k = 0
+    while pos < end_ms:
+        seg_len = max(
+            params.min_block_ms,
+            round(params.target_block_ms * (params.densify_factor ** k)),
+        )
+        seg_end = pos + seg_len
+        if seg_end >= end_ms or (end_ms - seg_end) < params.min_block_ms:
+            segments.append((pos, end_ms))  # absorb small remainder
+            break
+        segments.append((pos, seg_end))
+        pos = seg_end
+        k += 1
+
+    return segments
+
+
 class FolgenschnittLooseningStrategy(Protocol):
     """Pluggable camera-decision strategy. Track 1 = time logic;
     Track 2 (AI director) will implement the same interface later."""
