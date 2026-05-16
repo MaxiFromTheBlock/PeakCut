@@ -21,6 +21,18 @@ _log = get_logger("peakcut.review")
 _PLAYBACK_POLL_MS = 200
 
 
+class ResettableBrightnessSlider(QSlider):
+    """Brightness slider that resets to 0 on double-click. setValue(0)
+    triggers the existing valueChanged path, so no preview logic here."""
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.setValue(0)
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+
 class ReviewPage(QWidget):
     """Peak Review Page — Video player, navigation, export."""
 
@@ -76,7 +88,7 @@ class ReviewPage(QWidget):
         brightness_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         top_bar.addWidget(brightness_label)
 
-        self.brightness_slider = QSlider(Qt.Orientation.Horizontal)
+        self.brightness_slider = ResettableBrightnessSlider(Qt.Orientation.Horizontal)
         self.brightness_slider.setRange(-100, 100)
         self.brightness_slider.setValue(0)
         self.brightness_slider.setFixedWidth(120)
