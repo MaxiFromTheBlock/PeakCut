@@ -130,3 +130,54 @@ def test_split_block_invariants():
         assert a[1] == b[0]                                     # gapless
     assert all(e - s >= p.min_block_ms for s, e in segs)        # hard floor
     assert segs[0][1] - segs[0][0] == 40                        # first_block
+
+
+def _rot_params():
+    return LooseningParams(
+        min_block_to_loosen_ms=100, first_block_ms=50,
+        target_block_ms=40, densify_factor=0.5, min_block_ms=20,
+    )
+
+
+def test_rotation_wide_close_alternates_big_blocks():
+    from core.folgenschnitt_models import SHOT_CLOSE, CameraAssignment, EditDecision
+    decisions = [EditDecision(0, 160, "/m/G_WIDE.mp4", "Gast", "first_speaker")]
+    cams = [
+        CameraAssignment("/m/G_WIDE.mp4", SHOT_WIDE, "Gast"),
+        CameraAssignment("/m/G_CLOSE.mp4", SHOT_CLOSE, "Gast"),
+    ]
+    out = apply_time_logic_loosening(decisions, cams, [], _rot_params())
+    assert [d.camera_path for d in out] == [
+        "/m/G_WIDE.mp4", "/m/G_CLOSE.mp4", "/m/G_WIDE.mp4",
+        "/m/G_CLOSE.mp4", "/m/G_WIDE.mp4",
+    ]
+    assert [(d.start_ms, d.end_ms) for d in out] == [
+        (0, 50), (50, 90), (90, 110), (110, 130), (130, 160)
+    ]
+    assert out[0].reason == "first_speaker"
+    assert all(d.reason == "loosen_rotation" for d in out[1:])
+    assert all(d.speaker == "Gast" for d in out)
+
+
+def test_rotation_wide_close_medium_round_robin():
+    from core.folgenschnitt_models import (
+        SHOT_CLOSE, SHOT_MEDIUM, CameraAssignment, EditDecision,
+    )
+    decisions = [EditDecision(0, 160, "/m/W.mp4", "Gast", "first_speaker")]
+    cams = [
+        CameraAssignment("/m/W.mp4", SHOT_WIDE, "Gast"),
+        CameraAssignment("/m/C.mp4", SHOT_CLOSE, "Gast"),
+        CameraAssignment("/m/H.mp4", SHOT_MEDIUM, "Gast"),
+    ]
+    out = apply_time_logic_loosening(decisions, cams, [], _rot_params())
+    assert [d.camera_path for d in out] == [
+        "/m/W.mp4", "/m/C.mp4", "/m/H.mp4", "/m/W.mp4", "/m/C.mp4"
+    ]
+
+
+def test_rotation_single_camera_unchanged():
+    from core.folgenschnitt_models import CameraAssignment, EditDecision
+    decisions = [EditDecision(0, 160, "/m/W.mp4", "Gast", "first_speaker")]
+    cams = [CameraAssignment("/m/W.mp4", SHOT_WIDE, "Gast")]
+    out = apply_time_logic_loosening(decisions, cams, [], _rot_params())
+    assert out == decisions

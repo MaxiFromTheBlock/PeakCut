@@ -122,6 +122,54 @@ def split_block_segments(start_ms, end_ms, params):
     return segments
 
 
+def _person_single_person_cameras(person, camera_assignments, rotation_order):
+    """That person's single-person cameras, ordered by rotation_order."""
+    ordered = []
+    for shot in rotation_order:
+        cam = next(
+            (
+                c
+                for c in camera_assignments
+                if c.person == person and c.shot_type == shot
+            ),
+            None,
+        )
+        if cam is not None:
+            ordered.append(cam.path)
+    return ordered
+
+
+def _loosen_decision(decision, camera_assignments, params):
+    """Subdivide one long single-speaker block by rotating through that
+    speaker's single-person cameras. Returns [decision] unchanged when
+    there is nothing to rotate or the block is too short."""
+    ordered = _person_single_person_cameras(
+        decision.speaker, camera_assignments, params.rotation_order
+    )
+    if len(ordered) < 2:
+        return [decision]
+
+    segments = split_block_segments(decision.start_ms, decision.end_ms, params)
+    if len(segments) < 2:
+        return [decision]
+
+    try:
+        start_i = ordered.index(decision.camera_path)
+    except ValueError:
+        start_i = 0
+
+    out = []
+    for i, (s, e) in enumerate(segments):
+        out.append(EditDecision(
+            s,
+            e,
+            ordered[(start_i + i) % len(ordered)],
+            decision.speaker,
+            decision.reason if i == 0 else "loosen_rotation",
+        ))
+    return out
+
+
 class FolgenschnittLooseningStrategy(Protocol):
     """Pluggable camera-decision strategy. Track 1 = time logic;
     Track 2 (AI director) will implement the same interface later."""
@@ -147,7 +195,10 @@ class TimeLogicLooseningStrategy:
         pause_ranges: list[PauseRange],
         params: LooseningParams,
     ) -> list[EditDecision]:
-        return list(decisions)
+        out: list[EditDecision] = []
+        for decision in decisions:
+            out.extend(_loosen_decision(decision, camera_assignments, params))
+        return out
 
 
 def apply_time_logic_loosening(
