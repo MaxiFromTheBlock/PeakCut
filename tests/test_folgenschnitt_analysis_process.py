@@ -47,3 +47,6 @@ def test_run_analysis_includes_speaker_activity_for_two_mics(tmp_path):
     assert "speaker_activity" in results
     assert isinstance(results["speaker_activity"], list)
     assert results["speaker_activity_csv"] == str(export_dir / "speaker_activity.csv")
+    assert "speaker_activity_mic_assignments" in results
+    assert results["speaker_activity_mic_assignments"][0]["speaker_key"] == "mic_1"
+    assert results["speaker_activity_mic_assignments"][1]["speaker_key"] == "mic_2"

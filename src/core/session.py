@@ -57,6 +57,10 @@ class PeakCutSession:
         self.speaker_turns = []
         self.folgenschnitt_edit_decisions = []
         self.speaker_activity_csv: str | None = None
+        self.speaker_activity_mic_assignments = []
+        self.folgenschnitt_mic_assignments = []
+        self.folgenschnitt_camera_assignments = []
+        self.folgenschnitt_skip_reason: str | None = None
 
     def play_current(self, index=None):
         """Play the current peak (keyboard or mic mode)."""
@@ -150,7 +154,12 @@ class PeakCutSession:
                 peak.ignored = True
             self.peaks.append(peak)
 
-        from .folgenschnitt_models import ActivityFrame, EditDecision, SpeakerTurn
+        from .folgenschnitt_models import (
+            ActivityFrame,
+            EditDecision,
+            MicAssignment,
+            SpeakerTurn,
+        )
 
         self.speaker_activity = [
             ActivityFrame.from_dict(item)
@@ -163,6 +172,10 @@ class PeakCutSession:
         self.folgenschnitt_edit_decisions = [
             EditDecision.from_dict(item)
             for item in results.get("folgenschnitt_edit_decisions", [])
+        ]
+        self.speaker_activity_mic_assignments = [
+            MicAssignment.from_dict(item)
+            for item in results.get("speaker_activity_mic_assignments", [])
         ]
         self.speaker_activity_csv = results.get("speaker_activity_csv")
 

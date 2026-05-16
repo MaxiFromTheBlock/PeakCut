@@ -56,6 +56,9 @@ class AnalysisWorker(QThread):
 
         cfg = self.session.config
 
+        guest = (project.guest_name or "").strip()
+        guest_person = guest if guest and guest.lower() != "unknown" else "Gast"
+
         config_data = {
             "keyboard_track": project.keyboard_track,
             "mic_tracks": project.mic_tracks,
@@ -63,6 +66,7 @@ class AnalysisWorker(QThread):
             "reference_track": project.get_reference_track(),
             "temp_dir": TEMP_DIR,
             "export_dir": project.export_dir,
+            "default_people": ["Matze", guest_person],
             "config": cfg
         }
 
