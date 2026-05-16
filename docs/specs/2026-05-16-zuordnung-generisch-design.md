@@ -147,6 +147,32 @@ Contracts zuerst, Risiko früh, TDD, Tests mitziehen).
 
 ---
 
+## Revision 2026-05-16 (nach erster manueller Abnahme durch Max)
+
+Zwei Punkte aus der Abnahme, von Max entschieden. Ändern den
+Zuordnungs-Schritt (Carl-Plan Task 6), nicht das Datenmodell:
+
+1. **Kamera-Felder starten neutral, nicht vorbelegt.** Eine ausgefüllt
+   *aussehende*, aber durch reine Reihenfolge geratene Vorbelegung ist
+   sicherheitskritisch schlecht: ein falscher Default rutscht unbemerkt in
+   den Schnitt. Deshalb starten alle Kamera-Zeilen auf einem neutralen
+   Zustand („— bitte zuordnen —"), Person bleibt leer/inaktiv bis ein
+   personenbezogener Shot-Typ gewählt ist. Eine Kamera im neutralen Zustand
+   erzeugt **keine** `CameraAssignment` (wird übersprungen) → die bestehende
+   Leitplanke meldet sauber „Zuordnung unvollständig", bis genug gesetzt
+   ist. **Mics behalten ihre Vorbelegung** (MIC1/MIC2-Konvention ist
+   zuverlässig und war in der Abnahme korrekt).
+2. **Hörprobe pro Mic-Zeile.** Ohne Abspielmöglichkeit kann Mic→Person in
+   PeakCut nicht verifiziert werden (man müsste die Datei im Finder suchen).
+   Pro Mic-Zeile ein „▶ Hörprobe"-Knopf, der eine kurze Probe (~5 s) der
+   Mic-Spur abspielt. Wiedergabe off-main-thread (kein UI-Freeze), nutzt
+   vorhandene Audio-Infrastruktur; nur ein kurzer Ausschnitt wird dekodiert
+   (kein Vollladen großer Spuren). Reine Verifikations-Hilfe, ändert keine
+   Daten.
+
+Unverändert: Datenmodell, gekapselte Architektur, Leitplanke, Stufe-1-Logik,
+Scope-Grenzen.
+
 ## Erfolgskriterium
 
 Folgenschnitt ist in der App **ohne Hilfsskript** nutzbar: Nutzer importiert,
