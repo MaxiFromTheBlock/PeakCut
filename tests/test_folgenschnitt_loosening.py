@@ -204,15 +204,22 @@ def test_totale_periodic_establishing_blocks():
     out = apply_time_logic_loosening(decisions, cams, [], _tot_params())
 
     tot = [d for d in out if d.camera_path == "/m/TOT.mov"]
-    assert [(d.start_ms, d.end_ms) for d in tot] == [(100, 130), (300, 330)]
+    # No pauses -> totale start clamped into the floor-safe window
+    # (Carl-final: clamp, not skip). t=100->100, t=200->220, t=300->300.
+    assert [(d.start_ms, d.end_ms) for d in tot] == [
+        (100, 130), (220, 250), (300, 330)
+    ]
     assert all(d.reason == "loosen_total" for d in tot)
     assert all(d.speaker == "Gast" for d in tot)
-    # no totale starting at 200 (would leave 0-length left part -> floor)
-    assert all(d.start_ms != 200 for d in tot)
-    # gapless + exact coverage
+    assert all(d.end_ms - d.start_ms == 30 for d in tot)        # fixed length
+    # gapless + exact coverage; non-totale segments keep the hard floor
     assert out[0].start_ms == 0 and out[-1].end_ms == 400
     for a, b in zip(out, out[1:]):
         assert a.end_ms == b.start_ms
+    assert all(
+        d.end_ms - d.start_ms >= 20 or d.camera_path == "/m/TOT.mov"
+        for d in out
+    )
 
 
 def test_totale_skipped_for_short_block():
@@ -233,3 +240,107 @@ def test_pure_totale_stays_single_clip():
     cams = [CameraAssignment("/m/TOT.mov", SHOT_TOTAL, None)]
     out = apply_time_logic_loosening(decisions, cams, [], _tot_params())
     assert out == decisions
+
+
+def test_build_pause_ranges_merges_none_frames():
+    from core.folgenschnitt_models import ActivityFrame
+    from core.folgenschnitt_loosening import build_pause_ranges, PauseRange
+    frames = [
+        ActivityFrame(0, 200, {}, {}, 0.0, None, None, 0.0),
+        ActivityFrame(100, 300, {}, {}, 0.0, None, None, 0.0),
+        ActivityFrame(200, 400, {}, {}, 5.0, "mic_1", "mic_1", 0.9),
+        ActivityFrame(300, 500, {}, {}, 0.0, None, None, 0.0),
+    ]
+    assert build_pause_ranges(frames) == [PauseRange(0, 300), PauseRange(300, 500)]
+
+
+def _snap_params(**kw):
+    base = dict(min_block_to_loosen_ms=100, first_block_ms=30,
+                target_block_ms=30, densify_factor=1.0, min_block_ms=20,
+                snap_window_ms=30)
+    base.update(kw)
+    return LooseningParams(**base)
+
+
+def _wide_close(person="Gast"):
+    from core.folgenschnitt_models import SHOT_CLOSE, CameraAssignment
+    return [
+        CameraAssignment("/m/W.mp4", SHOT_WIDE, person),
+        CameraAssignment("/m/C.mp4", SHOT_CLOSE, person),
+    ]
+
+
+def test_rotation_cut_snaps_to_nearest_pause():
+    from core.folgenschnitt_models import EditDecision
+    from core.folgenschnitt_loosening import PauseRange
+    d = [EditDecision(0, 200, "/m/W.mp4", "Gast", "first_speaker")]
+    out = apply_time_logic_loosening(
+        d, _wide_close(), [PauseRange(56, 60)], _snap_params()
+    )
+    # first internal cut (raw 30) snaps right to pause midpoint 58
+    assert out[0].end_ms == 58
+
+
+def test_rotation_cut_does_not_snap_below_min_block():
+    from core.folgenschnitt_models import EditDecision
+    from core.folgenschnitt_loosening import PauseRange
+    d = [EditDecision(0, 200, "/m/W.mp4", "Gast", "first_speaker")]
+    # pause midpoint 5 is inside snap window of raw cut 30 (±30 -> [0,60])
+    # but below valid_lo (0+min_block=20) -> floor wins, no snap
+    out = apply_time_logic_loosening(
+        d, _wide_close(), [PauseRange(3, 7)], _snap_params()
+    )
+    assert out[0].end_ms == 30  # stayed at clamped desired
+
+
+def test_rotation_cut_falls_back_without_pause_in_window():
+    from core.folgenschnitt_models import EditDecision
+    from core.folgenschnitt_loosening import PauseRange
+    d = [EditDecision(0, 200, "/m/W.mp4", "Gast", "first_speaker")]
+    out = apply_time_logic_loosening(
+        d, _wide_close(), [PauseRange(900, 950)], _snap_params()
+    )
+    assert out[0].end_ms == 30  # no pause near -> desired kept
+
+
+def test_rotation_fallback_clamped_after_previous_right_snap():
+    from core.folgenschnitt_models import EditDecision
+    from core.folgenschnitt_loosening import PauseRange
+    d = [EditDecision(0, 200, "/m/W.mp4", "Gast", "first_speaker")]
+    out = apply_time_logic_loosening(
+        d, _wide_close(), [PauseRange(56, 60)], _snap_params()
+    )
+    cuts = [s.end_ms for s in out[:-1]]
+    assert cuts[0] == 58                       # snapped right
+    assert cuts[1] == 78                       # == left(58) + min_block(20)
+    bounds = [0] + cuts + [200]
+    assert all(b - a >= 20 for a, b in zip(bounds, bounds[1:]))  # invariant
+
+
+def test_totale_start_snaps_to_pause_keeps_min_blocks():
+    from core.folgenschnitt_models import SHOT_TOTAL, CameraAssignment, EditDecision
+    from core.folgenschnitt_loosening import PauseRange
+    d = [EditDecision(0, 400, "/m/W.mp4", "Gast", "first_speaker")]
+    cams = _wide_close() + [CameraAssignment("/m/TOT.mov", SHOT_TOTAL, None)]
+    p = _snap_params(min_block_to_loosen_ms=100, first_block_ms=400,
+                      target_block_ms=400, min_block_ms=20,
+                      totale_interval_ms=100, totale_block_ms=30, snap_window_ms=25)
+    out = apply_time_logic_loosening(d, cams, [PauseRange(108, 116)], p)
+    tot = [s for s in out if s.camera_path == "/m/TOT.mov"]
+    assert tot and tot[0].start_ms == 112              # snapped to pause mid
+    assert tot[0].end_ms == 112 + 30
+    assert all(s.end_ms - s.start_ms >= 20 or s.camera_path == "/m/TOT.mov"
+               for s in out)
+    for a, b in zip(out, out[1:]):
+        assert a.end_ms == b.start_ms                   # gapless
+
+
+def test_totale_omitted_when_no_room():
+    from core.folgenschnitt_models import SHOT_TOTAL, CameraAssignment, EditDecision
+    d = [EditDecision(0, 130, "/m/W.mp4", "Gast", "first_speaker")]
+    cams = _wide_close() + [CameraAssignment("/m/TOT.mov", SHOT_TOTAL, None)]
+    p = _snap_params(min_block_to_loosen_ms=100, first_block_ms=130,
+                      target_block_ms=130, min_block_ms=55,
+                      totale_interval_ms=60, totale_block_ms=30, snap_window_ms=10)
+    out = apply_time_logic_loosening(d, cams, [], p)
+    assert all(s.camera_path != "/m/TOT.mov" for s in out)  # no room -> omitted

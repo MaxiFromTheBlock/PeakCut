@@ -122,6 +122,47 @@ def split_block_segments(start_ms, end_ms, params):
     return segments
 
 
+def build_pause_ranges(activity_frames):
+    """Contiguous frames with no dominant speaker (smoothed_speaker is
+    None) = a speech pause. Overlapping/adjacent None-frames are merged."""
+    ranges = []
+    cur_start = None
+    cur_end = None
+    for f in activity_frames:
+        if f.smoothed_speaker is None:
+            if cur_start is None:
+                cur_start, cur_end = f.start_ms, f.end_ms
+            else:
+                cur_end = max(cur_end, f.end_ms)
+        elif cur_start is not None:
+            ranges.append(PauseRange(cur_start, cur_end))
+            cur_start = None
+    if cur_start is not None:
+        ranges.append(PauseRange(cur_start, cur_end))
+    return ranges
+
+
+def _snap_into_window(desired_ms, valid_lo, valid_hi, pause_ranges, snap_window_ms):
+    """Return the best pause midpoint near desired_ms that keeps the hard
+    min_block floors (valid window), else the desired point clamped into
+    the valid window. None means: no floor-safe position -> omit the cut.
+    The floor always wins over a 'nice' pause.
+    """
+    if valid_lo > valid_hi:
+        return None
+    candidates = []
+    for pr in pause_ranges:
+        mid = (pr.start_ms + pr.end_ms) // 2
+        if (
+            desired_ms - snap_window_ms <= mid <= desired_ms + snap_window_ms
+            and valid_lo <= mid <= valid_hi
+        ):
+            candidates.append(mid)
+    if candidates:
+        return min(candidates, key=lambda m: abs(m - desired_ms))
+    return max(valid_lo, min(desired_ms, valid_hi))
+
+
 def _person_single_person_cameras(person, camera_assignments, rotation_order):
     """That person's single-person cameras, ordered by rotation_order."""
     ordered = []
@@ -139,30 +180,50 @@ def _person_single_person_cameras(person, camera_assignments, rotation_order):
     return ordered
 
 
-def _loosen_decision(decision, camera_assignments, params):
+def _loosen_decision(decision, camera_assignments, pause_ranges, params):
     """Subdivide one long single-speaker block by rotating through that
-    speaker's single-person cameras. Returns [decision] unchanged when
-    there is nothing to rotate or the block is too short."""
+    speaker's single-person cameras. Cut points snap to the nearest
+    speech pause within the snap window, but the hard min_block floor
+    always wins (sequentially validated). Returns [decision] unchanged
+    when there is nothing to rotate or the block is too short."""
     ordered = _person_single_person_cameras(
         decision.speaker, camera_assignments, params.rotation_order
     )
     if len(ordered) < 2:
         return [decision]
 
-    segments = split_block_segments(decision.start_ms, decision.end_ms, params)
-    if len(segments) < 2:
+    raw = split_block_segments(decision.start_ms, decision.end_ms, params)
+    if len(raw) < 2:
         return [decision]
 
+    raw_cuts = [raw[i][1] for i in range(len(raw) - 1)]
+    left = decision.start_ms
+    right = decision.end_ms  # block end (Carl-allowed right_bound)
+    final_cuts = []
+    for desired in raw_cuts:
+        snapped = _snap_into_window(
+            desired,
+            left + params.min_block_ms,
+            right - params.min_block_ms,
+            pause_ranges,
+            params.snap_window_ms,
+        )
+        if snapped is None:
+            continue  # no floor-safe spot -> drop this cut (segments merge)
+        final_cuts.append(snapped)
+        left = snapped
+
+    bounds = [decision.start_ms] + final_cuts + [decision.end_ms]
     try:
         start_i = ordered.index(decision.camera_path)
     except ValueError:
         start_i = 0
 
     out = []
-    for i, (s, e) in enumerate(segments):
+    for i in range(len(bounds) - 1):
         out.append(EditDecision(
-            s,
-            e,
+            bounds[i],
+            bounds[i + 1],
             ordered[(start_i + i) % len(ordered)],
             decision.speaker,
             decision.reason if i == 0 else "loosen_rotation",
@@ -177,11 +238,14 @@ def _totale_path(camera_assignments):
     return cam.path if cam is not None else None
 
 
-def _insert_totale(segments, block_start, block_end, totale_path, params):
+def _insert_totale(segments, block_start, block_end, totale_path,
+                   pause_ranges, params):
     """Overlay periodic Establishing-Totale at block_start + n*interval.
-    Splits the containing segment into pre / totale / post, keeping
-    min_block_ms on both sides; skips a point if the floor would break or
-    the segment is already the totale. Gapless / coverage preserved."""
+    The totale start snaps to the nearest pause; the block stays exactly
+    totale_block_ms. Splits the containing segment into pre / totale /
+    post, keeping min_block_ms on both sides (floor wins). Skips the point
+    if no floor-safe start exists or the segment is already the totale.
+    Gapless / coverage preserved."""
     t = block_start + params.totale_interval_ms
     while t < block_end:
         idx = next(
@@ -196,18 +260,24 @@ def _insert_totale(segments, block_start, block_end, totale_path, params):
             t += params.totale_interval_ms
             continue
         seg = segments[idx]
-        tot_end = t + params.totale_block_ms
-        if (
-            seg.camera_path != totale_path
-            and (t - seg.start_ms) >= params.min_block_ms
-            and (seg.end_ms - tot_end) >= params.min_block_ms
-        ):
+        if seg.camera_path == totale_path:
+            t += params.totale_interval_ms
+            continue
+        start = _snap_into_window(
+            t,
+            seg.start_ms + params.min_block_ms,
+            seg.end_ms - params.totale_block_ms - params.min_block_ms,
+            pause_ranges,
+            params.snap_window_ms,
+        )
+        if start is not None:
+            tot_end = start + params.totale_block_ms
             segments = (
                 segments[:idx]
                 + [
-                    EditDecision(seg.start_ms, t, seg.camera_path,
+                    EditDecision(seg.start_ms, start, seg.camera_path,
                                  seg.speaker, seg.reason),
-                    EditDecision(t, tot_end, totale_path,
+                    EditDecision(start, tot_end, totale_path,
                                  seg.speaker, "loosen_total"),
                     EditDecision(tot_end, seg.end_ms, seg.camera_path,
                                  seg.speaker, seg.reason),
@@ -246,7 +316,9 @@ class TimeLogicLooseningStrategy:
         totale_path = _totale_path(camera_assignments)
         out: list[EditDecision] = []
         for decision in decisions:
-            segs = _loosen_decision(decision, camera_assignments, params)
+            segs = _loosen_decision(
+                decision, camera_assignments, pause_ranges, params
+            )
             block_duration = decision.end_ms - decision.start_ms
             if (
                 totale_path is not None
@@ -254,7 +326,7 @@ class TimeLogicLooseningStrategy:
             ):
                 segs = _insert_totale(
                     segs, decision.start_ms, decision.end_ms,
-                    totale_path, params,
+                    totale_path, pause_ranges, params,
                 )
             out.extend(segs)
         return out
