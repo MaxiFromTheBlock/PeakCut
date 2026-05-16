@@ -170,6 +170,54 @@ def _loosen_decision(decision, camera_assignments, params):
     return out
 
 
+def _totale_path(camera_assignments):
+    cam = next(
+        (c for c in camera_assignments if c.shot_type == SHOT_TOTAL), None
+    )
+    return cam.path if cam is not None else None
+
+
+def _insert_totale(segments, block_start, block_end, totale_path, params):
+    """Overlay periodic Establishing-Totale at block_start + n*interval.
+    Splits the containing segment into pre / totale / post, keeping
+    min_block_ms on both sides; skips a point if the floor would break or
+    the segment is already the totale. Gapless / coverage preserved."""
+    t = block_start + params.totale_interval_ms
+    while t < block_end:
+        idx = next(
+            (
+                i
+                for i, d in enumerate(segments)
+                if d.start_ms <= t < d.end_ms
+            ),
+            None,
+        )
+        if idx is None:
+            t += params.totale_interval_ms
+            continue
+        seg = segments[idx]
+        tot_end = t + params.totale_block_ms
+        if (
+            seg.camera_path != totale_path
+            and (t - seg.start_ms) >= params.min_block_ms
+            and (seg.end_ms - tot_end) >= params.min_block_ms
+        ):
+            segments = (
+                segments[:idx]
+                + [
+                    EditDecision(seg.start_ms, t, seg.camera_path,
+                                 seg.speaker, seg.reason),
+                    EditDecision(t, tot_end, totale_path,
+                                 seg.speaker, "loosen_total"),
+                    EditDecision(tot_end, seg.end_ms, seg.camera_path,
+                                 seg.speaker, seg.reason),
+                ]
+                + segments[idx + 1:]
+            )
+        t += params.totale_interval_ms
+    return segments
+
+
 class FolgenschnittLooseningStrategy(Protocol):
     """Pluggable camera-decision strategy. Track 1 = time logic;
     Track 2 (AI director) will implement the same interface later."""
@@ -195,9 +243,20 @@ class TimeLogicLooseningStrategy:
         pause_ranges: list[PauseRange],
         params: LooseningParams,
     ) -> list[EditDecision]:
+        totale_path = _totale_path(camera_assignments)
         out: list[EditDecision] = []
         for decision in decisions:
-            out.extend(_loosen_decision(decision, camera_assignments, params))
+            segs = _loosen_decision(decision, camera_assignments, params)
+            block_duration = decision.end_ms - decision.start_ms
+            if (
+                totale_path is not None
+                and block_duration >= params.min_block_to_loosen_ms
+            ):
+                segs = _insert_totale(
+                    segs, decision.start_ms, decision.end_ms,
+                    totale_path, params,
+                )
+            out.extend(segs)
         return out
 
 

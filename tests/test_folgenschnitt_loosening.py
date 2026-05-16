@@ -181,3 +181,55 @@ def test_rotation_single_camera_unchanged():
     cams = [CameraAssignment("/m/W.mp4", SHOT_WIDE, "Gast")]
     out = apply_time_logic_loosening(decisions, cams, [], _rot_params())
     assert out == decisions
+
+
+def _tot_params():
+    return LooseningParams(
+        min_block_to_loosen_ms=100, first_block_ms=200, target_block_ms=200,
+        densify_factor=1.0, min_block_ms=20,
+        totale_interval_ms=100, totale_block_ms=30,
+    )
+
+
+def test_totale_periodic_establishing_blocks():
+    from core.folgenschnitt_models import (
+        SHOT_CLOSE, SHOT_TOTAL, CameraAssignment, EditDecision,
+    )
+    decisions = [EditDecision(0, 400, "/m/W.mp4", "Gast", "first_speaker")]
+    cams = [
+        CameraAssignment("/m/W.mp4", SHOT_WIDE, "Gast"),
+        CameraAssignment("/m/C.mp4", SHOT_CLOSE, "Gast"),
+        CameraAssignment("/m/TOT.mov", SHOT_TOTAL, None),
+    ]
+    out = apply_time_logic_loosening(decisions, cams, [], _tot_params())
+
+    tot = [d for d in out if d.camera_path == "/m/TOT.mov"]
+    assert [(d.start_ms, d.end_ms) for d in tot] == [(100, 130), (300, 330)]
+    assert all(d.reason == "loosen_total" for d in tot)
+    assert all(d.speaker == "Gast" for d in tot)
+    # no totale starting at 200 (would leave 0-length left part -> floor)
+    assert all(d.start_ms != 200 for d in tot)
+    # gapless + exact coverage
+    assert out[0].start_ms == 0 and out[-1].end_ms == 400
+    for a, b in zip(out, out[1:]):
+        assert a.end_ms == b.start_ms
+
+
+def test_totale_skipped_for_short_block():
+    from core.folgenschnitt_models import SHOT_TOTAL, CameraAssignment, EditDecision
+    decisions = [EditDecision(0, 80, "/m/W.mp4", "Gast", "first_speaker")]
+    cams = [
+        CameraAssignment("/m/W.mp4", SHOT_WIDE, "Gast"),
+        CameraAssignment("/m/TOT.mov", SHOT_TOTAL, None),
+    ]
+    out = apply_time_logic_loosening(decisions, cams, [], _tot_params())
+    assert out == decisions  # short block -> no loosening, no totale
+
+
+def test_pure_totale_stays_single_clip():
+    from core.folgenschnitt_models import SHOT_TOTAL, CameraAssignment, EditDecision
+    # only-totale: Stage 1 already produced one totale clip; no churn.
+    decisions = [EditDecision(0, 600, "/m/TOT.mov", "Gast", "first_speaker")]
+    cams = [CameraAssignment("/m/TOT.mov", SHOT_TOTAL, None)]
+    out = apply_time_logic_loosening(decisions, cams, [], _tot_params())
+    assert out == decisions
