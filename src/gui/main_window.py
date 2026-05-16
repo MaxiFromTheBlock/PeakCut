@@ -289,6 +289,7 @@ class MainWindow(QMainWindow):
     # ══════════════════════════════════════════════════════════════
 
     def closeEvent(self, event):
+        self.assignment_page.cleanup()
         self.review_page.cleanup()
 
         if self._worker:

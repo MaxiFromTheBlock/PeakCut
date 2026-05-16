@@ -8,8 +8,11 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QComboBox, QScrollArea, QFrame,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QPixmap
 
+from utils import TEMP_DIR
 from .apple_style import COLORS
+from .thumbnail_worker import ThumbnailWorker
 from core.folgenschnitt_models import (
     SHOT_CLOSE,
     SHOT_MEDIUM,
@@ -144,6 +147,8 @@ class AssignmentPage(QWidget):
         self._state: AssignmentState | None = None
         self._camera_widgets = []
         self._mic_widgets = []
+        self._thumb_labels: dict[str, QLabel] = {}
+        self._thumb_worker: ThumbnailWorker | None = None
         self._build_ui()
 
     def _build_ui(self):
@@ -197,10 +202,44 @@ class AssignmentPage(QWidget):
         self.session = session
         self._state = build_assignment_state(session, video_files)
         self._render_rows()
+        self._start_thumbnails(list(video_files))
+
+    def _start_thumbnails(self, video_paths):
+        self._stop_thumbnail_worker()
+        if not video_paths:
+            return
+        thumb_dir = os.path.join(TEMP_DIR, "assignment_thumbs")
+        self._thumb_worker = ThumbnailWorker(video_paths, thumb_dir)
+        self._thumb_worker.thumbnail_ready.connect(self._on_thumbnail_ready)
+        self._thumb_worker.start()
+
+    def _on_thumbnail_ready(self, video_path, thumb_path):
+        label = self._thumb_labels.get(video_path)
+        if label is None:
+            return
+        pixmap = QPixmap(thumb_path)
+        if pixmap.isNull():
+            return
+        label.setText("")
+        label.setPixmap(
+            pixmap.scaled(
+                label.width(),
+                label.height(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+
+    def _stop_thumbnail_worker(self):
+        if self._thumb_worker is not None:
+            if self._thumb_worker.isRunning():
+                self._thumb_worker.wait(3000)
+            self._thumb_worker = None
 
     def _clear_rows(self):
         self._camera_widgets = []
         self._mic_widgets = []
+        self._thumb_labels = {}
         while self._rows_layout.count():
             item = self._rows_layout.takeAt(0)
             w = item.widget()
@@ -246,6 +285,7 @@ class AssignmentPage(QWidget):
         thumb.setStyleSheet(
             "background:#2a2a2a; color:#888; border-radius:4px;"
         )
+        self._thumb_labels[row.path] = thumb
         grid.addWidget(thumb, 0, 0, 2, 1)
 
         name = QLabel(row.filename)
@@ -342,3 +382,7 @@ class AssignmentPage(QWidget):
         self.apply_to_session()
         self._refresh_status()
         self.continue_clicked.emit()
+
+    def cleanup(self):
+        """Stop the thumbnail worker. Called from MainWindow.closeEvent."""
+        self._stop_thumbnail_worker()
