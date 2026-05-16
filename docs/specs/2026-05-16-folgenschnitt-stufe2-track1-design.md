@@ -120,11 +120,16 @@ provisorisch. Benannte Parameter:
 | `totale_interval_ms` / `totale_block_ms` | Takt & Länge der Establishing-Totale |
 | `rotation_order` | bei ≥3 Einzel-Kameras: Reihenfolge **— offen, s. u.** |
 
-Werte werden fundiert aus (a) einer EDL/Schnittliste einer fertigen Folge
-von Alex *oder* (b) der ffmpeg-Szenenanalyse zweier Cutter-Folgen
-(Lukas/Alex) abgeleitet — und final über einen **Cutter-Fragenkatalog**
-justiert, der mit der ersten Track-1-XML an Alex geht. Der Mechanismus
-liefert v1-Defaults aus; Tuning ändert nur Zahlen, nicht die Logik.
+Werte werden fundiert aus einer **Premiere-Final-Cut-Pro-XML einer
+fertigen Folge** (Alex, ersatzweise Lukas) abgeleitet — Carl-Urteil:
+genauer als alles andere und exakt PeakCuts Zielformat. Daraus: Cliplängen
+Video-Track 1, Cuts/Min, Median/P25/P75, Verlauf pro 5-Min-Bucket, optional
+Kamerawechsel-Matrix (falls Clipnamen/Tracks die Kamera erkennen lassen).
+EDL nur als Backup (simpler, weniger Metadaten). yt-dlp+ffmpeg-Szenenanalyse
+**verworfen** (YouTube PO-Token-Sackgasse, ungenau — nicht investieren).
+Final justiert über einen **Cutter-Fragenkatalog**, der mit der ersten
+Track-1-XML an Alex geht. Der Mechanismus liefert v1-Defaults aus; Tuning
+ändert nur Zahlen, nicht die Logik.
 
 ---
 
