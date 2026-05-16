@@ -43,19 +43,28 @@ def _skip(session, reason):
 
 def prepare_folgenschnitt_for_export(session) -> str | None:
     activity = list(getattr(session, "speaker_activity", []) or [])
-
-    mic_assignments = (
-        list(getattr(session, "folgenschnitt_mic_assignments", []) or [])
-        or list(getattr(session, "speaker_activity_mic_assignments", []) or [])
-    )
-    if not mic_assignments:
-        mic_assignments = build_default_folgenschnitt_mic_assignments(
-            getattr(session, "project", None),
-            getattr(session, "speaker_activity_mic_assignments", None),
-        )
     camera_assignments = list(
         getattr(session, "folgenschnitt_camera_assignments", []) or []
     )
+
+    if getattr(session, "folgenschnitt_assignment_applied", False):
+        # User went through the assignment step. An empty result is a
+        # deliberate "incomplete" — never substitute analysis/default mics.
+        mic_assignments = list(
+            getattr(session, "folgenschnitt_mic_assignments", []) or []
+        )
+    else:
+        # Legacy/headless path (assignment step never run): keep the old
+        # fallback so non-Folgenschnitt usage is unaffected.
+        mic_assignments = (
+            list(getattr(session, "folgenschnitt_mic_assignments", []) or [])
+            or list(getattr(session, "speaker_activity_mic_assignments", []) or [])
+        )
+        if not mic_assignments:
+            mic_assignments = build_default_folgenschnitt_mic_assignments(
+                getattr(session, "project", None),
+                getattr(session, "speaker_activity_mic_assignments", None),
+            )
 
     if not activity:
         return _skip(session, SKIP_REASON)

@@ -29,7 +29,7 @@ def _hm_mics():
     ]
 
 
-def test_default_assignment_state_starts_cameras_neutral_and_keeps_mic_defaults():
+def test_default_assignment_state_starts_all_person_fields_empty():
     session = _session(mic_assignments=_hm_mics())
     video_files = [
         "/material/_HM_HartmutRosa_Cam04_MV_7922.MP4",
@@ -47,7 +47,10 @@ def test_default_assignment_state_starts_cameras_neutral_and_keeps_mic_defaults(
     assert all(r.shot_type is None for r in state.camera_rows)
     assert all(r.person is None for r in state.camera_rows)
     assert state.to_camera_assignments() == []
-    assert [r.person for r in state.mic_rows] == ["Matze", "Hartmut Rosa"]
+    # speaker_key stays (technical, from analysis); person is deliberately empty
+    assert [r.speaker_key for r in state.mic_rows] == ["mic_1", "mic_2"]
+    assert [r.person for r in state.mic_rows] == ["", ""]
+    assert state.people == []
 
 
 def test_neutral_camera_rows_create_no_camera_assignments():
@@ -80,13 +83,16 @@ def test_assignment_state_reports_incomplete_but_does_not_block_keyboard_export(
     assert isinstance(state.to_mic_assignments(), list)
 
 
-def test_preview_start_uses_first_active_frame_for_mic():
+def test_preview_start_uses_longest_active_run_for_mic():
     session = _session(speaker_activity=[
         ActivityFrame(10_000, 10_200, {}, {}, 0.0, None, None, 0.0),
         ActivityFrame(12_000, 12_200, {}, {}, 8.0, "mic_1", "mic_1", 0.9),
+        ActivityFrame(20_000, 20_200, {}, {}, 8.0, "mic_1", "mic_1", 0.9),
+        ActivityFrame(20_100, 20_300, {}, {}, 8.0, "mic_1", "mic_1", 0.9),
+        ActivityFrame(20_200, 20_400, {}, {}, 8.0, "mic_1", "mic_1", 0.9),
     ])
 
-    assert preview_start_s_for_mic(session, "mic_1") == 11.5
+    assert preview_start_s_for_mic(session, "mic_1") == 19.5
 
 
 def test_preview_start_falls_back_to_zero_without_activity():

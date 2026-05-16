@@ -42,12 +42,32 @@ SHOT_CHOICES = [
 
 
 def preview_start_s_for_mic(session, speaker_key: str) -> float:
-    """Start of the first window where this mic is the active speaker
-    (~0.5 s before, so the voice is actually audible). Fallback 0.0."""
-    for frame in getattr(session, "speaker_activity", []) or []:
-        if frame.smoothed_speaker == speaker_key and frame.confidence > 0:
-            return max(0.0, frame.start_ms / 1000 - 0.5)
-    return 0.0
+    """Start of the *longest* sustained run where this mic is the active
+    speaker (~0.5 s before its begin), so the person is actually talking
+    through it — not just a one-sentence first hit. Fallback 0.0."""
+    frames = [
+        f
+        for f in (getattr(session, "speaker_activity", []) or [])
+        if f.smoothed_speaker == speaker_key and f.confidence > 0
+    ]
+    if not frames:
+        return 0.0
+    best_start = frames[0].start_ms
+    best_len = 1
+    run_start = frames[0].start_ms
+    run_len = 1
+    prev = frames[0]
+    for frame in frames[1:]:
+        if frame.start_ms <= prev.end_ms + 150:
+            run_len += 1
+        else:
+            run_start = frame.start_ms
+            run_len = 1
+        if run_len > best_len:
+            best_len = run_len
+            best_start = run_start
+        prev = frame
+    return max(0.0, best_start / 1000 - 0.5)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -111,37 +131,26 @@ def build_assignment_state(session, video_files) -> AssignmentState:
     analysis_mics = list(
         getattr(session, "speaker_activity_mic_assignments", []) or []
     )
+    if not analysis_mics:
+        analysis_mics = build_default_folgenschnitt_mic_assignments(project)
 
-    if analysis_mics:
-        people: list[str] = []
-        for m in analysis_mics:
-            if m.person and m.person not in people:
-                people.append(m.person)
-        mic_rows = [
-            MicRow(m.track_index, m.path, os.path.basename(m.path), m.person, m.speaker_key)
-            for m in analysis_mics
-        ]
-    else:
-        guest = (getattr(project, "guest_name", "") or "").strip()
-        guest_person = guest if guest and guest.lower() != "unknown" else "Gast"
-        people = ["Matze", guest_person]
-        defaults = build_default_folgenschnitt_mic_assignments(project)
-        mic_rows = [
-            MicRow(m.track_index, m.path, os.path.basename(m.path), m.person, m.speaker_key)
-            for m in defaults
-        ]
+    # speaker_key + path are technical (needed for Folgenschnitt mapping and
+    # the Hörprobe). The *person* is deliberately left empty — no analysis/
+    # convention default may pre-fill it.
+    mic_rows = [
+        MicRow(m.track_index, m.path, os.path.basename(m.path), "", m.speaker_key)
+        for m in analysis_mics
+    ]
 
-    while len(people) < 2:
-        people.append("Gast")
-
-    # Cameras start neutral on purpose: a guessed-but-wrong default that
-    # looks filled-in is worse than an explicit "not yet assigned".
+    # Cameras start neutral too: a guessed-but-wrong default that looks
+    # filled-in is worse than an explicit "not yet assigned".
     camera_rows = [
         CameraRow(path, os.path.basename(path), None, None)
         for path in video_files
     ]
 
-    return AssignmentState(camera_rows, mic_rows, people)
+    # Shared person list starts empty; it grows from what the user types.
+    return AssignmentState(camera_rows, mic_rows, [])
 
 
 # ══════════════════════════════════════════════════════════════
@@ -163,7 +172,29 @@ class AssignmentPage(QWidget):
         self._thumb_labels: dict[str, QLabel] = {}
         self._thumb_worker: ThumbnailWorker | None = None
         self._preview_workers: list[MicPreviewWorker] = []
+        # Shared, growing name list: a name typed once becomes selectable
+        # everywhere. Nothing is pre-filled.
+        self._person_combos: list[QComboBox] = []
+        self._person_pool: list[str] = []
         self._build_ui()
+
+    def _register_person_combo(self, combo: QComboBox):
+        for name in self._person_pool:
+            if combo.findText(name) < 0:
+                combo.addItem(name)
+        self._person_combos.append(combo)
+        combo.lineEdit().editingFinished.connect(
+            lambda c=combo: self._commit_person_name(c)
+        )
+
+    def _commit_person_name(self, combo: QComboBox):
+        name = combo.currentText().strip()
+        if not name or name in self._person_pool:
+            return
+        self._person_pool.append(name)
+        for other in self._person_combos:
+            if other.findText(name) < 0:
+                other.addItem(name)
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
@@ -254,6 +285,8 @@ class AssignmentPage(QWidget):
         self._camera_widgets = []
         self._mic_widgets = []
         self._thumb_labels = {}
+        self._person_combos = []
+        self._person_pool = []
         while self._rows_layout.count():
             item = self._rows_layout.takeAt(0)
             w = item.widget()
@@ -265,8 +298,6 @@ class AssignmentPage(QWidget):
         if self._state is None:
             return
 
-        people = list(self._state.people)
-
         cam_header = QLabel("Kameras")
         cam_header.setStyleSheet(
             f"color: {COLORS['text_primary']}; font-weight: 600;"
@@ -274,7 +305,7 @@ class AssignmentPage(QWidget):
         self._rows_layout.addWidget(cam_header)
 
         for row in self._state.camera_rows:
-            self._rows_layout.addWidget(self._build_camera_row(row, people))
+            self._rows_layout.addWidget(self._build_camera_row(row))
 
         mic_header = QLabel("Mikrofone")
         mic_header.setStyleSheet(
@@ -283,12 +314,12 @@ class AssignmentPage(QWidget):
         self._rows_layout.addWidget(mic_header)
 
         for row in self._state.mic_rows:
-            self._rows_layout.addWidget(self._build_mic_row(row, people))
+            self._rows_layout.addWidget(self._build_mic_row(row))
 
         self._rows_layout.addStretch()
         self._refresh_status()
 
-    def _build_camera_row(self, row: CameraRow, people: list[str]) -> QWidget:
+    def _build_camera_row(self, row: CameraRow) -> QWidget:
         container = QWidget()
         grid = QGridLayout(container)
         grid.setContentsMargins(0, 0, 0, 0)
@@ -315,9 +346,8 @@ class AssignmentPage(QWidget):
 
         person_combo = QComboBox()
         person_combo.setEditable(True)
-        person_combo.addItems(people)
-        if row.person:
-            person_combo.setCurrentText(row.person)
+        person_combo.setCurrentText(row.person or "")
+        self._register_person_combo(person_combo)
         grid.addWidget(person_combo, 1, 2)
 
         def _sync_person_enabled():
@@ -332,7 +362,7 @@ class AssignmentPage(QWidget):
         self._camera_widgets.append((row, shot_combo, person_combo))
         return container
 
-    def _build_mic_row(self, row: MicRow, people: list[str]) -> QWidget:
+    def _build_mic_row(self, row: MicRow) -> QWidget:
         container = QWidget()
         h = QHBoxLayout(container)
         h.setContentsMargins(0, 0, 0, 0)
@@ -344,8 +374,8 @@ class AssignmentPage(QWidget):
 
         person_combo = QComboBox()
         person_combo.setEditable(True)
-        person_combo.addItems(people)
-        person_combo.setCurrentText(row.person)
+        person_combo.setCurrentText(row.person or "")
+        self._register_person_combo(person_combo)
         h.addWidget(person_combo)
 
         preview_btn = QPushButton("▶ Hörprobe")
@@ -406,6 +436,9 @@ class AssignmentPage(QWidget):
         self._collect_into_state()
         self.session.folgenschnitt_mic_assignments = self._state.to_mic_assignments()
         self.session.folgenschnitt_camera_assignments = self._state.to_camera_assignments()
+        # User has been through the assignment step: an empty result is now
+        # a deliberate "incomplete", not a cue to fall back to defaults.
+        self.session.folgenschnitt_assignment_applied = True
 
     def _on_continue(self):
         self.apply_to_session()

@@ -87,6 +87,20 @@ def test_prepare_folgenschnitt_for_export_skips_incomplete_assignment(sample_con
     assert reason == "Zuordnung unvollstaendig"
     assert session.folgenschnitt_edit_decisions == []
     assert session.speaker_turns == []
+
+
+def test_applied_empty_assignment_does_not_fall_back_to_analysis_people(sample_config):
+    # Deliberately empty mic assignment + flag set: must NOT silently reuse
+    # the analysis-default mics, even though valid cameras + activity exist.
+    session = _session(sample_config)
+    session.folgenschnitt_assignment_applied = True
+    session.folgenschnitt_mic_assignments = []
+    # cameras stay valid (2 wide); only mics are deliberately blank
+
+    reason = prepare_folgenschnitt_for_export(session)
+
+    assert reason == "Zuordnung unvollstaendig"
+    assert session.folgenschnitt_edit_decisions == []
     assert session.folgenschnitt_skip_reason == "Zuordnung unvollstaendig"
 
 

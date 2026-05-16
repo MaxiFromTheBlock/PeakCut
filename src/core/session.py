@@ -61,6 +61,10 @@ class PeakCutSession:
         self.folgenschnitt_mic_assignments = []
         self.folgenschnitt_camera_assignments = []
         self.folgenschnitt_skip_reason: str | None = None
+        # True once the user has gone through the assignment step. Then a
+        # deliberately empty assignment must NOT silently fall back to
+        # analysis/default mics.
+        self.folgenschnitt_assignment_applied = False
 
     def play_current(self, index=None):
         """Play the current peak (keyboard or mic mode)."""
