@@ -629,8 +629,15 @@ Produkt):**
   leise Fußtipp in die Sprach-Mikros blutet, ist die alleinige
   Entscheidungsfrage, gleich für KICK wie WAV. Test auf weicher Matte
   (Körperschall/Boden killen). „KICK genommen" ≠ „erledigt".
-- Offener Vor-Kauf-Check: KICK-Manual gegenlesen — behält es Sound +
-  Empfindlichkeit über Aus/An (echtes Null-Klick), Ausgänge, Strom?
+- KICK-Spec-Befund (Roland, 2026-05-17): Bedienung über PHYSISCHE
+  Knöpfe (INST=Soundwahl, THRES/SENS, POWER) → Knopfstellung bleibt
+  per Bau-Prinzip stehen = echtes Plug-and-play, kein Setup pro
+  Session. Ausgang Mono 6,3 mm + Phones (ideal für 1 Marker-Spur),
+  KEIN XLR (DI bleibt). 22 Sounds + 1 User-Sample-Slot (≤5 s WAV,
+  optional, nicht nötig). Strom: 4×AA ODER Netzteil DC9V (separat).
+  OFFEN: Auto-Power-Off in Manuals nicht dokumentiert → Empfehlung
+  Netzbetrieb (killt Leere-Batterie- + meist Auto-Off-Risiko); vor
+  produktivem Verlass am Gerät/Roland-Support gegenchecken.
 - Das fehlende Trigger-In bleibt das Kernargument für den eigenen
   Hardware-Button (lautloser Schalter + Tongeber = was dem SPD fehlt).
 - Startone ist KEINE Dauerbrücke mehr (Matze will es weg).
