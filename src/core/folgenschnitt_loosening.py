@@ -67,13 +67,13 @@ def build_stage1_base_camera_assignments(mic_assignments, camera_assignments):
 
 @dataclass(frozen=True)
 class LooseningParams:
-    min_block_to_loosen_ms: int = 120_000
-    first_block_ms: int = 110_000
-    target_block_ms: int = 90_000
+    min_block_to_loosen_ms: int = 90_000
+    first_block_ms: int = 70_000
+    target_block_ms: int = 55_000
     densify_factor: float = 0.85
-    min_block_ms: int = 50_000
+    min_block_ms: int = 35_000
     totale_interval_ms: int = 240_000
-    totale_block_ms: int = 25_000
+    totale_block_ms: int = 20_000
     rotation_order: tuple[str, ...] = (SHOT_WIDE, SHOT_CLOSE, SHOT_MEDIUM)
     snap_window_ms: int = 15_000
 

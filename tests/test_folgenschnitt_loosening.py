@@ -20,13 +20,13 @@ def _decisions():
 
 def test_loosening_defaults_are_v1():
     assert LOOSENING_DEFAULTS == LooseningParams(
-        min_block_to_loosen_ms=120_000,
-        first_block_ms=110_000,
-        target_block_ms=90_000,
+        min_block_to_loosen_ms=90_000,
+        first_block_ms=70_000,
+        target_block_ms=55_000,
         densify_factor=0.85,
-        min_block_ms=50_000,
+        min_block_ms=35_000,
         totale_interval_ms=240_000,
-        totale_block_ms=25_000,
+        totale_block_ms=20_000,
         rotation_order=(SHOT_WIDE, SHOT_CLOSE, SHOT_MEDIUM),
         snap_window_ms=15_000,
     )
