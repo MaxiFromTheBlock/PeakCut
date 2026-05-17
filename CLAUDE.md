@@ -623,8 +623,13 @@ Max Entscheider. Spec: `docs/specs/2026-05-16-folgenschnitt-stufe2-track1-design
   LOW/verworfen (las Basis-Assembly, nicht den Schnitt). Aus Schirach
   (P75 ~49s Halte-Decke) v1-Zahlen moderat gesenkt: min_block_to_loosen
   120→90s, first 110→70s, target 90→55s, min_block 50→35s, totale_block
-  25→20s. **Weiter provisorisch — Neu-Verifikation an echter Folge mit
-  neuen Zahlen vor main-Merge offen.** Tests 182 → 195.
+  25→20s. **Neu-Verifikation an echter Folge erledigt** (Hartmut Rosa,
+  gecachte Analyse, `scripts/verify_folgenschnitt_recut.py`, OLD-Lauf
+  reproduziert bestehende XML exakt): max-Block 118s→89s, Blöcke >90s
+  26→0, Clips 325→347, Schnitte/Min 1,95→2,08 (Median 16,4→19,7 weil
+  Über-90s-Blöcke zu 35–55s-Blöcken zerlegt, nicht "alles kürzer").
+  **Offen vor main-Merge: Carl-Review des Ergebnisses + Max-Go.**
+  Tests 182 → 197.
 
 ### v2.10.0 (2026-05-16) — Generischer Zuordnungs-Schritt (Folgenschnitt produktiv)
 
@@ -935,4 +940,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-17 (v2.11.0-dev Stufe 2 / Track 1 + v1-Kalibrierung auf develop — 195 Tests; main = v2.10.0)*
+*Zuletzt aktualisiert: 2026-05-17 (v2.11.0-dev Stufe 2 / Track 1 + v1-Kalibrierung + Neu-Verifikation auf develop — 197 Tests; main = v2.10.0)*
