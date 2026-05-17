@@ -677,6 +677,30 @@ Produkt):**
 
 ## Changelog
 
+### Härtung-Welle (auf main gelandet 2026-05-17, Merge b81d7ab; Versionslabel = Max-Entscheidung)
+
+Aus dem 2-Pass-Health-Check (Carl + Claude unabhängig). Marker-Commit
+`b81d7ab` (3395ecd..b81d7ab), 215 Tests grün, CI grün am echten
+Runner, echter App-Smoke-Test durch Max bestanden (Analyse/
+Screenshots/LUT/Close). `core/` + Folgenschnitt-Leitplanke unberührt.
+
+- **LUT hinzufügen** (Review-Seite „LUT +"): Datei-Dialog →
+  Validierung mit echtem Parser → in `luts/` kopieren; Kollision-
+  Rückfrage, IO-/Permission-Schutz (read-only Bundle). 4-Augen-
+  Post-Review Carl grün.
+- **HC-1:** XML-Escaping-Bug im produktiven Keyboardstellen-Export
+  behoben (Gastname/Dateiname mit `&`/`<`/`>`); veralteter
+  Zuordnungs-Hinweis korrigiert; Build/Spec-Versionsdrift als
+  STALE-PARKED markiert + dokumentiert.
+- **HC-2 (höchste Konfidenz, Carl-Plan):** Worker-/Subprocess-
+  Lifecycle gehärtet — faktisch toter Frozen-/Multiprocess-Timeout
+  repariert (Deadline vor Pollschleife, exitcode=None kontrolliert),
+  öffentliche `request_stop()`-API, `closeEvent` ohne Prozess-
+  Interna, `ScreenshotWorker` cancelbar + non-blocking Cleanup.
+  Carl-Schluss-Review grün (P2 nachgezogen).
+- **CI-Fix:** `libegl1`/`libgl1` ergänzt — CI war seit Tagen still
+  rot (PyQt6-Import scheiterte auf dem Runner, jeder Commit „failed").
+
 ### v2.11.0 (Stufe 2 — auf main gelandet 2026-05-17; Versionslabel = Max-Entscheidung) — Folgenschnitt Stufe 2 / Track 1
 
 **main-Merge 2026-05-17:** `--no-ff` Marker-Commit `3395ecd`
@@ -1036,4 +1060,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-17 (Stufe 2 auf main gelandet 3395ecd; develop danach: LUT-Feature, HC-1, HC-2 Worker-Lifecycle-Härtung — 214 Tests grün auf develop)*
+*Zuletzt aktualisiert: 2026-05-17 (HC-1 + HC-2 + LUT-Feature + CI-Fix auf main gelandet, Merge b81d7ab — 215 Tests grün, CI grün, Max-Smoke-Test bestanden; develop = main)*

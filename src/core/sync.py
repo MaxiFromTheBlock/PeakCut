@@ -1,5 +1,6 @@
 import os
 import subprocess
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
@@ -48,12 +49,18 @@ def load_audio_as_array(path, max_seconds=None):
 
     If max_seconds is given, only load that many seconds from the start.
     """
-    data, samplerate = sf.read(path)
+    if max_seconds is None:
+        data, samplerate = sf.read(path)
+    else:
+        # Echtes Teil-Lesen: nur n Frames von der Platte holen, statt
+        # voll zu lesen und danach zu schneiden (HC-3). Numerisch
+        # identisch, weil die Mono-Mittelung pro Frame unabhängig ist
+        # (mean(full)[:n] == mean(full[:n]) == mean(read n)).
+        samplerate = sf.info(path).samplerate
+        max_samples = int(samplerate * max_seconds)
+        data, samplerate = sf.read(path, frames=max_samples)
     if len(data.shape) > 1:
         data = np.mean(data, axis=1)
-    if max_seconds is not None:
-        max_samples = int(samplerate * max_seconds)
-        data = data[:max_samples]
     return data, samplerate
 
 
@@ -95,8 +102,14 @@ def format_offset(offset_seconds, fps=25):
     return f"{sign}{hours:02d}:{minutes:02d}:{seconds:02d}:{frames:02d}"
 
 
-def _sync_single_video(video_path, reference_data, ref_sr, temp_dir, fps, status_fn=None):
-    """Sync a single video against reference audio. Returns (filename, offset_timecode) or None."""
+def _sync_single_video(video_path, reference_window, ref_sr,
+                       ref_full_loader, temp_dir, fps, status_fn=None):
+    """Sync a single video against reference audio. Returns (filename, offset_timecode) or None.
+
+    reference_window = nur das _SYNC_WINDOW_S-Anfangsfenster der Referenz.
+    ref_full_loader() = lazy, thread-sicher, lädt die VOLLE Referenz nur
+    beim ersten Fallback (geteilt über parallele Kameras).
+    """
     def status(msg):
         if status_fn:
             status_fn(msg)
@@ -112,19 +125,21 @@ def _sync_single_video(video_path, reference_data, ref_sr, temp_dir, fps, status
         _log.error("Audio extraction failed for %s: %s", video_filename, e)
         raise RuntimeError(f"Audio-Extraktion fehlgeschlagen für {video_filename}") from e
 
-    target_data_full, target_sr = load_audio_as_array(temp_audio_path)
-
-    # Try fast sync with first 10 minutes
+    # Schneller Pfad: nur das Anfangsfenster von der Platte holen
     status(f"Calculating offset: {video_filename}...")
-    ref_window = reference_data[:int(ref_sr * _SYNC_WINDOW_S)]
-    target_window = target_data_full[:int(ref_sr * _SYNC_WINDOW_S)]
-    offset_samples, confidence = calculate_offset(ref_window, target_window)
+    target_window, _ = load_audio_as_array(
+        temp_audio_path, max_seconds=_SYNC_WINDOW_S)
+    offset_samples, confidence = calculate_offset(
+        reference_window, target_window)
 
     if confidence < _CORRELATION_THRESHOLD:
         _log.info("Sync %s: weak correlation (%.4f) with %ds window, retrying with full audio",
                   video_filename, confidence, _SYNC_WINDOW_S)
         status(f"Retrying full sync: {video_filename}...")
-        offset_samples, confidence = calculate_offset(reference_data, target_data_full)
+        reference_full = ref_full_loader()
+        target_full, _ = load_audio_as_array(temp_audio_path)
+        offset_samples, confidence = calculate_offset(
+            reference_full, target_full)
 
     offset_seconds = offset_samples / ref_sr
 
@@ -152,14 +167,32 @@ def sync_videos(video_files, reference_path, temp_dir, fps=25, status_fn=None):
     os.makedirs(temp_dir, exist_ok=True)
 
     status("Loading reference audio...")
-    reference_data, ref_sr = load_audio_as_array(reference_path)
+    reference_window, ref_sr = load_audio_as_array(
+        reference_path, max_seconds=_SYNC_WINDOW_S)
+
+    # Volle Referenz nur lazy beim ersten Fallback laden — und nur EINMAL,
+    # auch wenn mehrere Kameras parallel zurückfallen (Lock + Cache).
+    _ref_full_cache = {}
+    _ref_full_lock = threading.Lock()
+
+    def ref_full_loader():
+        with _ref_full_lock:
+            if "data" not in _ref_full_cache:
+                full, full_sr = load_audio_as_array(reference_path)
+                if full_sr != ref_sr:
+                    raise RuntimeError(
+                        f"Referenz-Samplerate inkonsistent: "
+                        f"Fenster {ref_sr} vs. voll {full_sr}")
+                _ref_full_cache["data"] = full
+            return _ref_full_cache["data"]
 
     video_offsets = []
 
     if len(video_files) == 1:
         # Single video — no thread overhead
         result = _sync_single_video(
-            video_files[0], reference_data, ref_sr, temp_dir, fps, status_fn
+            video_files[0], reference_window, ref_sr, ref_full_loader,
+            temp_dir, fps, status_fn
         )
         if result:
             video_offsets.append(result)
@@ -169,7 +202,8 @@ def sync_videos(video_files, reference_path, temp_dir, fps=25, status_fn=None):
             futures = {
                 executor.submit(
                     _sync_single_video, video_path,
-                    reference_data, ref_sr, temp_dir, fps, status_fn
+                    reference_window, ref_sr, ref_full_loader,
+                    temp_dir, fps, status_fn
                 ): video_path
                 for video_path in video_files
             }
