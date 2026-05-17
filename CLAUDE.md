@@ -616,21 +616,23 @@ Produkt):**
 - **Ein** Kabel, möglichst balanciert/XLR direkt ins Multicore (ohne
   DI-Box). XLR nicht zwingend, aber Ziel = Kabelsalat weg.
 - Robuster, wiederholbarer, eleganter Druckpunkt.
-- Heißester Off-the-shelf-Kandidat: **Roland SPD::ONE WAV** — eigener
-  ladbarer Sample (kurzer harter Blip, fester Pegel = robusteste
-  PeakCut-Erkennung), Empfindlichkeit via [SENS]/[THRES]-Regler.
-  Contingent auf den akustischen Bleed-Test (s.o.). Wenn Tipp in
-  Sprach-Mikros hörbar → eigener Hardware-Button bleibt die Antwort.
-- **Spec-Befund (Roland-Manual, 2026-05-17): KEIN externer
-  Trigger-Eingang** — nur MASTER OUT + PHONES (6,3 mm Stereo) + USB
-  Micro-B. Heißt: kein stummer Ersatz-Schalter anschließbar, man MUSS
-  die Gummifläche tippen → der Bleed-Test ist unausweichlich, kein
-  Umweg. Kein XLR (DI bleibt). Sample-WAV muss 44,1 kHz/16 Bit sein,
-  12 Slots. ~140×160×56 mm, 900 g, harter Block → im Test auf weiche
-  Matte (killt Körperschall/Boden-Dröhnen). USB-MIDI für PeakCut
-  irrelevant (liest Audio, nicht MIDI). Das fehlende Trigger-In ist
-  genau das Argument für den eigenen Button (lautloser Schalter +
-  Tongeber = was dem SPD fehlt).
+- **Max-Entscheidung 2026-05-17: Roland SPD::ONE KICK** (nicht WAV).
+  Grund: **Plug-and-play** für den Alltag — feste eingebaute Sounds,
+  kein Sample laden/auswählen, anmachen und treten. Der WAV-Vorteil
+  (eigenes Sample) war nur marginaler Erkennungs-Feinschliff; ein
+  Kick-Sound ist für PeakCut ohnehin nahezu ideal (kurzer, knackiger,
+  breitbandiger Impuls, keine Tonhöhen-Mehrdeutigkeit) → Erkennungs-
+  qualität wird NICHT geopfert.
+- **Unverändert offen (modell-unabhängig): der akustische Bleed-Test.**
+  Kein SPD hat externen Trigger-Eingang (nur OUT + PHONES 6,3 mm +
+  USB; kein XLR → DI bleibt). Man MUSS die Gummifläche tippen → ob der
+  leise Fußtipp in die Sprach-Mikros blutet, ist die alleinige
+  Entscheidungsfrage, gleich für KICK wie WAV. Test auf weicher Matte
+  (Körperschall/Boden killen). „KICK genommen" ≠ „erledigt".
+- Offener Vor-Kauf-Check: KICK-Manual gegenlesen — behält es Sound +
+  Empfindlichkeit über Aus/An (echtes Null-Klick), Ausgänge, Strom?
+- Das fehlende Trigger-In bleibt das Kernargument für den eigenen
+  Hardware-Button (lautloser Schalter + Tongeber = was dem SPD fehlt).
 - Startone ist KEINE Dauerbrücke mehr (Matze will es weg).
 | **Abo-Modell** | ~10€/Monat Software, Hardware separat | Account-System vorbereiten (User-ID für ML-Daten) |
 
