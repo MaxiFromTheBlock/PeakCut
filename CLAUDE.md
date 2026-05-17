@@ -594,6 +594,28 @@ Carl tiefer bei (1)(2)(3). Genau wofür 4-Augen da ist.
 | Vision | Was | Weichen jetzt? |
 |--------|-----|----------------|
 | **Hardware-Button** | Physischer Marker statt Keyboard (~50-69€) | Keyboard-Erkennung abstrakt halten, nicht auf Piano-Sound hardcoden |
+
+**Lastenheft Hardware-Button (erarbeitet 2026-05-17 mit Max — die
+Markt-Recherche ergab: gibt's nicht von der Stange, das IST das
+Produkt):**
+- Fußbedienung, flaches Bodenteil, unter dem Tisch unsichtbar
+  (Folgen werden gefilmt — nichts auf dem Tisch, Moderator drückt
+  elegant mit dem Fuß, Körper sichtbar unverändert).
+- Auslösung **nahezu lautlos**: kein mechanisches Klack/Klick und kein
+  Boden-Dröhnen — Gerät liegt im mikrofonierten Aufnahmeraum, jedes
+  Eigengeräusch blutet in die Sprach-Mikros. (Genau dieser Grund hat
+  schon gegen ein Schlag-Pad wie Roland SPD::ONE entschieden.)
+- Erzeugt **selbst** einen Ton, kurz/knackig, **fester Pegel** →
+  immer der lauteste, gut getrennte Impuls auf seiner Spur
+  (PeakCut-Schwelle ist relativ zum Spur-Maximum, 0.3×max, min_gap
+  12s — kurzer harter Sound = robusteste Erkennung).
+- **Ein** Kabel, möglichst balanciert/XLR direkt ins Multicore (ohne
+  DI-Box). XLR nicht zwingend, aber Ziel = Kabelsalat weg.
+- Robuster, wiederholbarer, eleganter Druckpunkt.
+- Status quo (Brücke bis dahin): Startone-Keyboard am Boden,
+  Mini-Klinke→Klinke→DI→XLR. Erfüllt die harten Bedingungen, nur
+  Kabelsalat + „umfunktioniert statt elegant". Bewusst kein
+  Optik-Tausch mitten in anderen Prioritäten.
 | **Abo-Modell** | ~10€/Monat Software, Hardware separat | Account-System vorbereiten (User-ID für ML-Daten) |
 
 ### Technik
