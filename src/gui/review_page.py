@@ -5,6 +5,7 @@ import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFrame, QComboBox, QSlider,
+    QFileDialog, QMessageBox,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 
@@ -81,6 +82,11 @@ class ReviewPage(QWidget):
         self.lut_combo.setMinimumWidth(150)
         self.lut_combo.currentIndexChanged.connect(self._on_lut_changed)
         top_bar.addWidget(self.lut_combo)
+
+        self.add_lut_btn = QPushButton("LUT +")
+        self.add_lut_btn.setToolTip("LUT-Datei (.cube) zur Bibliothek hinzufügen")
+        self.add_lut_btn.clicked.connect(self._on_add_lut)
+        top_bar.addWidget(self.add_lut_btn)
 
         top_bar.addSpacing(20)
 
@@ -211,7 +217,7 @@ class ReviewPage(QWidget):
 
         self._populate_lut_combo()
 
-    def _populate_lut_combo(self):
+    def _populate_lut_combo(self, select_filename=None):
         self.lut_combo.blockSignals(True)
         self.lut_combo.clear()
         self.lut_combo.addItem("Kein LUT", "")
@@ -225,11 +231,43 @@ class ReviewPage(QWidget):
         for filename in lut_files:
             self.lut_combo.addItem(os.path.splitext(filename)[0], filename)
 
-        # Always start with "Kein LUT". video_preview reads the LUT directly
-        # from config, so the stored path must be cleared too.
-        self.lut_combo.setCurrentIndex(0)
-        config.set_value("lut_path", "")
+        idx = self.lut_combo.findData(select_filename) if select_filename else 0
+        if idx < 0:
+            idx = 0
+        # Default: start with "Kein LUT" (video_preview reads the LUT from
+        # config, so clear the stored path too). Exception: a freshly added
+        # LUT is selected + applied for immediate "it worked" feedback.
+        self.lut_combo.setCurrentIndex(idx)
+        config.set_value("lut_path", self.lut_combo.itemData(idx) or "")
         self.lut_combo.blockSignals(False)
+        if idx > 0:
+            self.video_preview.refresh_lut()
+
+    def _on_add_lut(self):
+        from lib.lut_processor import add_lut_to_library
+        path, _ = QFileDialog.getOpenFileName(
+            self, "LUT hinzufügen", os.path.expanduser("~/Desktop"),
+            "LUT-Dateien (*.cube)")
+        if not path:
+            return
+        result = add_lut_to_library(path, LUTS_DIR)
+        if result.reason == "exists":
+            if QMessageBox.question(
+                self, "LUT überschreiben?",
+                f"{result.filename} ist schon in der Bibliothek. "
+                f"Überschreiben?",
+            ) != QMessageBox.StandardButton.Yes:
+                return
+            result = add_lut_to_library(path, LUTS_DIR, overwrite=True)
+        if result.ok:
+            self._populate_lut_combo(select_filename=result.filename)
+        else:
+            msg = {
+                "not_found": "Datei nicht gefunden.",
+                "not_cube": "Keine .cube-Datei.",
+                "invalid": "Die Datei ist kein gültiges .cube-LUT.",
+            }.get(result.reason, "LUT konnte nicht hinzugefügt werden.")
+            QMessageBox.warning(self, "LUT hinzufügen", msg)
 
     # ══════════════════════════════════════════════════════════════
     # Peak Navigation
