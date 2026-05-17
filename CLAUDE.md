@@ -400,7 +400,94 @@ develop  ← Aktive Entwicklung (hier arbeiten)
 
 ---
 
-## V3 Vision — Modulare Production Suite
+## Produkt-Strategie & Roadmap — Assistant Editor für Gesprächsformate
+
+> Konvergenz aus 2 unabhängigen Strategie-Pässen (Carl + Claude,
+> 2026-05-18), von Max abgenommen. Ersetzt die frühere „V3 — Modulare
+> Production Suite". Lebendes Dokument — Identität/Reihenfolge ändert
+> nur Max.
+
+### Identität
+
+PeakCut ist **keine** breite Post-Produktions-Suite. Es ist ein
+**Assistant Editor für lange Gesprächsformate / das Gedächtnis einer
+Produktion**: Raw-Aufnahmeordner rein → editor-ready Paket raus (Sync,
+Marker, sinnvolle Clip-Kandidaten, Multicam-Rohschnitt, XML/Assets/
+Metadaten). PeakCut sitzt **vor** Premiere/Pro Tools/CheckIn/Opus und
+macht aus chaotischem Material strukturierte Entscheidungen — es
+ersetzt sie nicht. Drei Dinge: Material **verstehen** → redaktionelle
+**Absicht erkennen** → **Übergabe-Artefakte** für Profisysteme erzeugen.
+
+**Bewusst NICHT:** NLE, Social-Scheduler, Analytics-Plattform, Pro-
+Tools-Ersatz, generischer „KI macht dir Content"-Kasten. Je näher an
+finaler Kreativentscheidung/Publishing, desto mehr verwässert der
+Vorteil. Das Wort „Suite" ist raus — es verführt zum Alles-Bauen.
+
+### Nutzer
+
+Bester nächster Nutzer = **Team mit wiederkehrenden langen Gesprächs-
+Produktionen** (getrennte Spuren, Multicam, echter Cutter):
+Produktionsfirmen, Podcast-Studios, Producer wie Matze, Cutter-Teams.
+NICHT der Solo-Creator (kommt später). Wertversprechen: „nimm 70 % der
+stumpfen Vorarbeit weg, ohne den Premiere-Workflow kaputtzumachen".
+
+### Kern-Objekt: ClipCandidate
+
+Nicht nur „Peak". Felder: peak_id, Boundary, Transkript-Auszug, Grund,
+Score, Status: vorgeschlagen → ausgewählt → produziert → veröffentlicht
+→ verworfen. Plus `peak_decisions.json` als Rückkanal. Die
+**Negativdaten** (nicht produziert / produziert-nicht-veröffentlicht /
+veröffentlicht-aber-geflopt) sind der Burggraben — genau das haben
+Opus-artige Tools nicht. **Minibar = Max' privates R&D-Labor** für
+dieses Lernsystem, KEIN Produkt-Feature.
+
+### Roadmap-Reihenfolge (Carl/Claude-Konsens — ersetzt alte V3-Liste)
+
+1. **Persistenz + `.peakcut`-Projektakte** (= HC-4, der Schlussstein —
+   IST das Produkt, nicht „kein State" wie früher gedacht).
+2. **ClipCandidate-Modell** inkl. Rückweg-Status.
+3. **Smarte Clip-Grenzen** um Peaks (Transkript/KI: wo beginnt/endet
+   der Gedanke, Hook).
+4. **Profile als Datenmodell** — zweigeteilt: *Production-Profil* (fps,
+   NLE, Kamera/Mic, LUT, Export, Sync) + *Brand/Social-Profil* (Logo,
+   Font, Untertitel, Safe Areas, Formate). Erst Datenvertrag, dann
+   simple Exporte, dann schöner Renderer.
+5. **Hybrid/NAS-Pilot** (s. u.).
+6. **Dann erst** Hub / UI-Revamp.
+7. **Danach** Social-Asset / Opus-artiges Modul.
+
+Bewusst NICHT V3-Start: UI-Revamp, Create Mix. **Opus-Score: als
+Nordstern eine Falle, als spätes Modul auf besseren Rohdaten ok** —
+nicht kopieren, von unten unterlaufen. **Create Mix** kein Flaggschiff
+(HM mischt in Pro Tools via CheckIn), höchstens später Preview-Mix für
+fremde Teams.
+
+### Deployment-Topologie: Hybrid (KEIN Web-Rewrite)
+
+Interaktives (PyQt, Scrubbing, LUT-Preview, NLE-Nähe) bleibt am
+Studio-Mac. NAS = Hintergrund-Rückgrat:
+1. NAS-Projektordner wird Wahrheit: `.peakcut/` = State, relative
+   Pfade, Assignments, Analyse, ClipCandidates, Profile-Refs.
+2. Pro Studio-Mac kleiner Launcher → kein MacBook-Zwang.
+3. Headless Worker: `peakcut analyze/export <ordner>` lokal ODER im
+   Synology-Container.
+4. Web-Hub nur für Status/Queue/Profile/Approval — NICHT Voll-Video-
+   Review.
+5. Web/Electron erst, wenn wirklich externe Teams bedient werden.
+
+### Geparkt (später)
+
+Descript-API, SRT/Untertitel in XML, Auphonic Mix-Polish, In/Out-Clip-
+Editor, voller Social-Renderer, Smart Scan (relevant sobald fremdes
+Material zählt), Marker-Export, Einzel-Clip-MP4, Projekt-Metadaten.
+
+---
+
+## V3 Vision — Modulare Production Suite (HISTORISCH — überholt 2026-05-18)
+
+> Belassen als Kontext. Die Reihenfolge/Identität gilt **nicht** mehr —
+> maßgeblich ist „Produkt-Strategie & Roadmap" oben. Insb. „Kein
+> persistenter State" ist überholt: Persistenz ist jetzt der Kern.
 
 ### Architektur-Prinzip
 
@@ -548,16 +635,16 @@ Carl tiefer bei (1)(2)(3). Genau wofür 4-Augen da ist.
 - [x] ~~`extract_guest_name` aus exporters.py in eigenes Modul~~ — erledigt (v2.9.0, → `core/guest_name.py`)
 - [ ] Code Signing (Apple Developer Account) für Gatekeeper-freie Installation (geparkt — siehe Distribution)
 
-### Strukturell (vor V3)
-- [ ] **UI Revamp** — Redesign in Figma, dann Umsetzung in PyQt6. Figma ist das Design-Tool. Arbeitsteilung: Max/Design-KI designt in Figma → Screenshots an Claude → Claude setzt in PyQt6 um. Gleich den V3 Hub mitdesignen, nicht nur die aktuelle 3-Page-Struktur.
+### V3 / Roadmap
 
-### V3 Module
-- [ ] **Smart Scan** — Ordner scannen, Audio analysieren
-- [ ] **Create Mix** — Sprach-Spuren zusammenmischen (mit Gain-Normalisierung)
-- [ ] **Screenshots Page** — Eigene Page mit Video-Scrubbing, Thumbnail-Grid
-- [ ] Marker-Export (Peaks als Marker statt Clips im XML)
-- [ ] Einzelne Video-Clips pro Peak (MP4 Export)
-- [ ] **Projekt-Metadaten**: Gastname, Aufnahmedatum, Kamera-Zuordnung — ersetzt `extract_guest_name` und Dateinamen-Parsing
+**Maßgeblich = oben „Produkt-Strategie & Roadmap" (Carl/Claude-Konsens
+2026-05-18).** Die frühere Liste (UI-Revamp / Smart Scan / Create Mix
+als V3-Start) ist überholt. Erster echter Schritt = **HC-4
+(.peakcut-Persistenz)**, dann ClipCandidate → Clip-Grenzen → Profile →
+NAS-Pilot → dann Hub/UI → dann Opus-artiges Modul. UI-Revamp, Smart
+Scan, Create Mix, Marker-Export, Einzel-Clip-MP4, Projekt-Metadaten
+bleiben spätere/optionale Punkte (siehe Roadmap-/Geparkt-Liste oben),
+NICHT der Einstieg.
 
 ### Erledigt
 - [x] ~~Multiprocessing für Video-Sync~~ — erledigt (v2.6.0)
@@ -1074,4 +1161,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-18 (HC-3 Sync-Fenster-Lesen auf main gelandet, Merge 7c1bd8e — 221 Tests grün, Offsets bit-identisch an echtem HR-Material verifiziert; develop = main)*
+*Zuletzt aktualisiert: 2026-05-18 (HC-3 auf main 7c1bd8e, 221 grün; Produkt-Strategie/Roadmap neu festgeschrieben — Assistant Editor, Carl/Claude-Konsens, Reihenfolge ab HC-4 .peakcut-Persistenz)*
