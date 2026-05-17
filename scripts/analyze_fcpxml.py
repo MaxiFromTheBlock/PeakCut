@@ -93,7 +93,10 @@ def _candidates(elem, eff_lane, assets):
             yield from _candidates(child, lane, assets)
 
 
-def analyze_fcpxml(path):
+def analyze_fcpxml(path, window=None):
+    """window=(from_s, to_s) restricts the measurement to spine segments
+    whose start falls inside [from_s, to_s) — used to exclude intro/ads/
+    outro so the calibration reflects only the interview body."""
     root = ET.parse(path).getroot()
     if root.tag != "fcpxml":
         raise ValueError("Kein <fcpxml> Root — falsches Format für diesen Estimator")
@@ -115,7 +118,7 @@ def analyze_fcpxml(path):
     unresolved = []        # (start,end) no camera at all
     for c in spine:
         if c.tag == "gap":
-            gaps.append(_rt(c.get("duration")))
+            gaps.append((_rt(c.get("offset")), _rt(c.get("duration"))))
             continue
         if c.tag == "transition":
             continue
@@ -132,6 +135,14 @@ def analyze_fcpxml(path):
             segments.append((start, end, next(iter(keys))))
         else:
             ambiguous.append((start, end))
+
+    if window is not None:
+        lo, hi = window
+        segments = [x for x in segments if lo <= x[0] < hi]
+        ambiguous = [x for x in ambiguous if lo <= x[0] < hi]
+        unresolved = [x for x in unresolved if lo <= x[0] < hi]
+        gaps = [g for g in gaps if lo <= g[0] < hi]
+    gaps = [d for _, d in gaps]
 
     # merge adjacent same-camera segments (gap <= 2 frames)
     segments.sort(key=lambda s: s[0])
@@ -217,6 +228,7 @@ def analyze_fcpxml(path):
     return {
         "disclaimer": DISCLAIMER,
         "confidence": conf,
+        "window_s": [window[0], window[1]] if window is not None else None,
         "fps": fps,
         "run_count": n,
         "visible_min": round(vis_min, 2),
@@ -240,8 +252,22 @@ def analyze_fcpxml(path):
     }
 
 
+def _parse_ts(s):
+    """'MM:SS', 'HH:MM:SS' or plain seconds -> seconds."""
+    if ":" in s:
+        parts = [float(p) for p in s.split(":")]
+        sec = 0.0
+        for p in parts:
+            sec = sec * 60 + p
+        return sec
+    return float(s)
+
+
 def _report(r):
     print(f"⚠ {r['disclaimer']}")
+    if r["window_s"] is not None:
+        lo, hi = r["window_s"]
+        print(f"FENSTER: {lo:.0f}s–{hi:.0f}s (nur Interview-Teil)")
     print(f"CONFIDENCE: {r['confidence']}  (unklar {r['pct_unclear']}% )")
     print(f"Runs: {r['run_count']}  sichtbar {r['visible_min']} min  "
           f"Schnitte/Min {r['cuts_per_min']}")
@@ -259,10 +285,15 @@ def _report(r):
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("Nutzung: analyze_fcpxml.py <datei.fcpxml>", file=sys.stderr)
+    if len(sys.argv) not in (2, 4):
+        print("Nutzung: analyze_fcpxml.py <datei.fcpxml> [von bis]\n"
+              "  von/bis als MM:SS, HH:MM:SS oder Sekunden",
+              file=sys.stderr)
         return 1
-    _report(analyze_fcpxml(sys.argv[1]))
+    window = None
+    if len(sys.argv) == 4:
+        window = (_parse_ts(sys.argv[2]), _parse_ts(sys.argv[3]))
+    _report(analyze_fcpxml(sys.argv[1], window=window))
     return 0
 
 

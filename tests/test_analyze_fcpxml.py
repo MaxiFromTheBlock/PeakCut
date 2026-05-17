@@ -139,6 +139,26 @@ def test_plausibility_brake_long_run(tmp_path):
     assert any("base assembly" in w.lower() for w in r["warnings"])
 
 
+def test_window_trims_segments_outside_interview(tmp_path):
+    # 3 segments at 0-200s, 200-400s, 400-600s. Window [200,400)
+    # keeps only the middle one.
+    body = (
+        '<clip offset="0/25s" duration="5000/25s" enabled="1">'
+        '<video ref="a1"/></clip>'
+        '<clip offset="5000/25s" duration="5000/25s" enabled="1">'
+        '<video ref="a2"/></clip>'
+        '<clip offset="10000/25s" duration="5000/25s" enabled="1">'
+        '<video ref="a1"/></clip>'
+    )
+    full = analyze_fcpxml(_w(tmp_path, body))
+    win = analyze_fcpxml(_w(tmp_path, body), window=(200.0, 400.0))
+    assert full["run_count"] == 3
+    assert win["run_count"] == 1
+    assert win["window_s"] == [200.0, 400.0]
+    assert "Cam Schirach" in dict(win["camera_share_by_duration"])
+    assert "Cam Matze" not in dict(win["camera_share_by_duration"])
+
+
 def test_confidence_low_when_single_camera(tmp_path):
     body = (
         '<clip offset="0/25s" duration="1000/25s" enabled="1"><video ref="a1"/></clip>'
