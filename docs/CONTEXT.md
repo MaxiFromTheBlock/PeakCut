@@ -10,7 +10,7 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 ## Tech-Stack
 
 - Python 3.11 + PyQt6
-- 197 Tests, CI via GitHub Action
+- 214 Tests, CI via GitHub Action
 - Distribution: Launcher-App in /Applications, ruft Repo-Code direkt auf
   (PyInstaller-Bundle-Strategie geparkt — siehe Distribution-Sektion in CLAUDE.md)
 

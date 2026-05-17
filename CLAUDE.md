@@ -1036,4 +1036,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-17 (Stufe 2 + v1-Kalibrierung auf main gelandet, Merge 3395ecd — 197 Tests grün auf main; develop = main)*
+*Zuletzt aktualisiert: 2026-05-17 (Stufe 2 auf main gelandet 3395ecd; develop danach: LUT-Feature, HC-1, HC-2 Worker-Lifecycle-Härtung — 214 Tests grün auf develop)*
