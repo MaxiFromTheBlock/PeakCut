@@ -293,13 +293,9 @@ class MainWindow(QMainWindow):
         self.review_page.cleanup()
 
         if self._worker:
-            if hasattr(self._worker, '_process') and self._worker._process:
-                if self._worker._process.poll() is None:
-                    self._worker._process.terminate()
-                    try:
-                        self._worker._process.wait(timeout=2)
-                    except Exception:
-                        self._worker._process.kill()
+            # Nur noch über die öffentliche Lifecycle-API — kein Zugriff
+            # mehr auf Prozess-Interna (beendet Dev- UND Frozen-Pfad).
+            self._worker.request_stop()
             if self._worker.isRunning():
                 self._worker.wait(_WORKER_SHUTDOWN_WAIT_MS)
 

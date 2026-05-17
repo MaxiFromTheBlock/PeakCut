@@ -5,7 +5,12 @@ set -e
 cd "$(dirname "$0")"
 
 VENV="./venv311"
-VERSION="2.9.0"
+# ACHTUNG: DMG-/Bundle-Build ist seit dem Launcher-Pivot (Mai 2026)
+# bewusst geparkt. Diese VERSION ist STALE und NICHT die App-Version
+# (siehe CLAUDE.md Changelog/Distribution). Vor einer Bundle-
+# Wiederbelebung hier + PeakCut.spec aktualisieren (Versionsnummer =
+# Max-Entscheidung, nicht automatisch hochzählen).
+VERSION="2.9.0-STALE-PARKED"
 
 echo "=== PeakCut Build v${VERSION} ==="
 

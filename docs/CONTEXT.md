@@ -10,7 +10,7 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 ## Tech-Stack
 
 - Python 3.11 + PyQt6
-- 197 Tests, CI via GitHub Action
+- 214 Tests, CI via GitHub Action
 - Distribution: Launcher-App in /Applications, ruft Repo-Code direkt auf
   (PyInstaller-Bundle-Strategie geparkt — siehe Distribution-Sektion in CLAUDE.md)
 
@@ -34,7 +34,7 @@ Dieses Dokument ist die Kurzversion fuer den PO.
   unvollständige Zuordnung → nur Hinweis, Folgenschnitt-XML entfällt. Eine
   bewusst leere Zuordnung wird NICHT heimlich durch Defaults ersetzt.
 
-## Folgenschnitt Stufe 2 / Track 1 (auf develop, vor main-Merge)
+## Folgenschnitt Stufe 2 / Track 1 (auf main gelandet 2026-05-17)
 
 - Lange Ein-Personen-Monologe werden in grosse, ausgewogene Minuten-
   Blöcke aufgelockert (Rotation durch die Kameras der Person + periodische
@@ -45,8 +45,9 @@ Dieses Dokument ist die Kurzversion fuer den PO.
   justiert (min_block_to_loosen 90s, first 70s, target 55s, min_block
   35s, totale_block 20s) — weiter PROVISORISCH. Neu-Verifikation an
   echter Folge (Hartmut Rosa, gecachte Analyse) erledigt: max-Block
-  118s→89s, Blöcke >90s 26→0, Clips 325→347. Vor main-Merge offen:
-  Carl-Review des Verifikationsergebnisses + Max-Go.
+  118s→89s, Blöcke >90s 26→0, Clips 325→347. Auf main gelandet
+  (Merge 3395ecd). Alex-Sichtung + Fremdproduktion = erwartete Real-
+  Bestätigung, ggf. kleiner Tunables-Nachdreh (kein Regressionsrisiko).
 - `scripts/verify_folgenschnitt_recut.py`: fährt Pipeline über gecachte
   speaker_activity.csv (alt vs neu), OLD-Lauf selbst-validiert gegen
   bestehende XML.

@@ -2,6 +2,7 @@ import os
 import subprocess
 from abc import ABC, abstractmethod
 from urllib.parse import quote
+from xml.sax.saxutils import escape
 
 from pydub import AudioSegment
 
@@ -315,7 +316,7 @@ class XMLExporter(BaseExporter):
                     rec_end_f = record_pos + clip_dur_f
 
                     f.write(f'          <clipitem id="{clip_id}">\n')
-                    f.write(f'            <name>{os.path.splitext(video_file)[0]}</name>\n')
+                    f.write(f'            <name>{escape(os.path.splitext(video_file)[0])}</name>\n')
                     f.write(f'            <duration>{clip_dur_f}</duration>\n')
                     f.write(f'            {rate_block}\n')
                     f.write(f'            <start>{rec_start_f}</start>\n')
@@ -325,7 +326,7 @@ class XMLExporter(BaseExporter):
 
                     if clip_idx == 0:
                         f.write(f'            <file id="{file_id}">\n')
-                        f.write(f'              <name>{video_file}</name>\n')
+                        f.write(f'              <name>{escape(video_file)}</name>\n')
                         f.write(f'              <pathurl>{_file_url(video_path)}</pathurl>\n')
                         f.write(f'              {rate_block}\n')
                         f.write(f'              {tc_block}\n')
@@ -383,7 +384,7 @@ class XMLExporter(BaseExporter):
 
                     audio_name = os.path.splitext(audio_file)[0]
                     f.write(f'          <clipitem id="{clip_id}">\n')
-                    f.write(f'            <name>{audio_name}</name>\n')
+                    f.write(f'            <name>{escape(audio_name)}</name>\n')
                     f.write(f'            <duration>{clip_dur_f}</duration>\n')
                     f.write(f'            {rate_block}\n')
                     f.write(f'            <start>{rec_start_f}</start>\n')
@@ -393,7 +394,7 @@ class XMLExporter(BaseExporter):
 
                     if clip_idx == 0:
                         f.write(f'            <file id="{file_id}">\n')
-                        f.write(f'              <name>{audio_file}</name>\n')
+                        f.write(f'              <name>{escape(audio_file)}</name>\n')
                         f.write(f'              <pathurl>{_file_url(audio_path)}</pathurl>\n')
                         f.write(f'              {rate_block}\n')
                         f.write(f'              {tc_block}\n')

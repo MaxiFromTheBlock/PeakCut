@@ -2,6 +2,10 @@
 LUT Processor - Loads and applies .cube LUT files to images
 Correctly handles the .cube file format where R varies fastest
 """
+import os
+import shutil
+from dataclasses import dataclass
+
 import numpy as np
 from pathlib import Path
 
@@ -214,3 +218,45 @@ class LUTProcessor:
     def is_loaded(self) -> bool:
         """Check if a LUT is currently loaded."""
         return self.lut_data is not None
+
+
+@dataclass(frozen=True)
+class LutAddResult:
+    ok: bool
+    reason: str  # added | overwritten | not_found | not_cube | invalid | exists
+    filename: str | None = None
+
+
+def add_lut_to_library(src_path: str, luts_dir: str,
+                        overwrite: bool = False) -> LutAddResult:
+    """Validate a .cube file and copy it into the LUT library.
+
+    Validation uses the real parser (LUTProcessor.load_cube) so a broken
+    LUT never pollutes the library. On a name collision the caller must
+    opt in via overwrite=True (so the UI can ask first).
+    """
+    if not os.path.isfile(src_path):
+        return LutAddResult(False, "not_found")
+    if os.path.splitext(src_path)[1].lower() != ".cube":
+        return LutAddResult(False, "not_cube")
+    if not LUTProcessor().load_cube(src_path):
+        return LutAddResult(False, "invalid")
+
+    filename = os.path.basename(src_path)
+    dest = os.path.join(luts_dir, filename)
+
+    if os.path.abspath(src_path) == os.path.abspath(dest):
+        return LutAddResult(True, "added", filename)  # already the library file
+    if os.path.exists(dest) and not overwrite:
+        return LutAddResult(False, "exists", filename)
+
+    try:
+        os.makedirs(luts_dir, exist_ok=True)
+        existed = os.path.exists(dest)
+        shutil.copy2(src_path, dest)
+    except PermissionError:
+        # e.g. LUTS_DIR inside a read-only frozen .app bundle
+        return LutAddResult(False, "permission", filename)
+    except OSError:
+        return LutAddResult(False, "copy_failed", filename)
+    return LutAddResult(True, "overwritten" if existed else "added", filename)

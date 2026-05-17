@@ -109,6 +109,12 @@ Wird aktuell nicht genutzt, weil keine DMG mehr verteilt wird. Infrastruktur ble
 - `build.sh` ruft `bundle_ffmpeg.sh` automatisch auf wenn nötig
 - Im Code: `FFMPEG_BIN` und `FFPROBE_BIN` aus `utils.py` verwenden (FROZEN-aware)
 - **Nie** hardcoded `"ffmpeg"` oder `"ffprobe"` in subprocess-Aufrufen verwenden
+- **Versionsdrift (bewusst geparkt, HC-1 2026-05-17):** `build.sh` (`VERSION`)
+  und `PeakCut.spec` (gitignored, lokal) stehen noch auf `2.9.0` — NICHT
+  die App-Version (main = v2.11.0-Stand). `build.sh` ist als
+  `2.9.0-STALE-PARKED` markiert. Vor einer Bundle-Wiederbelebung beide
+  aktualisieren; die finale Versionsnummer ist eine Max-Entscheidung,
+  nicht automatisch hochzuzählen.
 
 ---
 
@@ -594,6 +600,53 @@ Carl tiefer bei (1)(2)(3). Genau wofür 4-Augen da ist.
 | Vision | Was | Weichen jetzt? |
 |--------|-----|----------------|
 | **Hardware-Button** | Physischer Marker statt Keyboard (~50-69€) | Keyboard-Erkennung abstrakt halten, nicht auf Piano-Sound hardcoden |
+
+**Lastenheft Hardware-Button (erarbeitet 2026-05-17 mit Max — die
+Markt-Recherche ergab: gibt's nicht von der Stange, das IST das
+Produkt):**
+- Fußbedienung, flaches Bodenteil, unter dem Tisch unsichtbar
+  (Folgen werden gefilmt — nichts auf dem Tisch, Moderator drückt
+  elegant mit dem Fuß, Körper sichtbar unverändert).
+- Auslösung **nahezu lautlos**: kein mechanisches Klack/Klick und kein
+  Boden-Dröhnen — Gerät liegt im mikrofonierten Aufnahmeraum, jedes
+  Eigengeräusch blutet in die Sprach-Mikros. NICHT vorab gegen ein
+  Trigger-Pad entschieden: Empfindlichkeit hoch → leichter Fußtipp
+  möglich. Ob der Tipp in die Sprach-Mikros blutet, ist eine
+  EMPIRISCHE Frage (2-Min-Test: Sprach-Mikros + Marker-Spur parallel
+  aufnehmen, in die Sprach-Mikros reinhören). Startone wird von Matze
+  aktiv abgelehnt → echter Ersatz ist aktiver Bedarf, keine Politur.
+- Erzeugt **selbst** einen Ton, kurz/knackig, **fester Pegel** →
+  immer der lauteste, gut getrennte Impuls auf seiner Spur
+  (PeakCut-Schwelle ist relativ zum Spur-Maximum, 0.3×max, min_gap
+  12s — kurzer harter Sound = robusteste Erkennung).
+- **Ein** Kabel, möglichst balanciert/XLR direkt ins Multicore (ohne
+  DI-Box). XLR nicht zwingend, aber Ziel = Kabelsalat weg.
+- Robuster, wiederholbarer, eleganter Druckpunkt.
+- **Max-Entscheidung 2026-05-17: Roland SPD::ONE KICK** (nicht WAV).
+  Grund: **Plug-and-play** für den Alltag — feste eingebaute Sounds,
+  kein Sample laden/auswählen, anmachen und treten. Der WAV-Vorteil
+  (eigenes Sample) war nur marginaler Erkennungs-Feinschliff; ein
+  Kick-Sound ist für PeakCut ohnehin nahezu ideal (kurzer, knackiger,
+  breitbandiger Impuls, keine Tonhöhen-Mehrdeutigkeit) → Erkennungs-
+  qualität wird NICHT geopfert.
+- **Unverändert offen (modell-unabhängig): der akustische Bleed-Test.**
+  Kein SPD hat externen Trigger-Eingang (nur OUT + PHONES 6,3 mm +
+  USB; kein XLR → DI bleibt). Man MUSS die Gummifläche tippen → ob der
+  leise Fußtipp in die Sprach-Mikros blutet, ist die alleinige
+  Entscheidungsfrage, gleich für KICK wie WAV. Test auf weicher Matte
+  (Körperschall/Boden killen). „KICK genommen" ≠ „erledigt".
+- KICK-Spec-Befund (Roland, 2026-05-17): Bedienung über PHYSISCHE
+  Knöpfe (INST=Soundwahl, THRES/SENS, POWER) → Knopfstellung bleibt
+  per Bau-Prinzip stehen = echtes Plug-and-play, kein Setup pro
+  Session. Ausgang Mono 6,3 mm + Phones (ideal für 1 Marker-Spur),
+  KEIN XLR (DI bleibt). 22 Sounds + 1 User-Sample-Slot (≤5 s WAV,
+  optional, nicht nötig). Strom: 4×AA ODER Netzteil DC9V (separat).
+  OFFEN: Auto-Power-Off in Manuals nicht dokumentiert → Empfehlung
+  Netzbetrieb (killt Leere-Batterie- + meist Auto-Off-Risiko); vor
+  produktivem Verlass am Gerät/Roland-Support gegenchecken.
+- Das fehlende Trigger-In bleibt das Kernargument für den eigenen
+  Hardware-Button (lautloser Schalter + Tongeber = was dem SPD fehlt).
+- Startone ist KEINE Dauerbrücke mehr (Matze will es weg).
 | **Abo-Modell** | ~10€/Monat Software, Hardware separat | Account-System vorbereiten (User-ID für ML-Daten) |
 
 ### Technik
@@ -624,7 +677,15 @@ Carl tiefer bei (1)(2)(3). Genau wofür 4-Augen da ist.
 
 ## Changelog
 
-### v2.11.0-dev (2026-05-16, develop — NOCH NICHT auf main) — Folgenschnitt Stufe 2 / Track 1
+### v2.11.0 (Stufe 2 — auf main gelandet 2026-05-17; Versionslabel = Max-Entscheidung) — Folgenschnitt Stufe 2 / Track 1
+
+**main-Merge 2026-05-17:** `--no-ff` Marker-Commit `3395ecd`
+"Folgenschnitt Stufe 2 + v1-Kalibrierung — Feature gelandet"
+(26f8097..3395ecd), 197 grün auf main, zurück auf develop. Carl
+redaktionell grün + Max-Go. v1-Zahlen bewusst PROVISORISCH — Alex-
+Sichtung + Fremdproduktion sind erwartete Real-Bestätigungen, können
+einen kleinen Tunables-Nachdreh auslösen (kein Regressionsrisiko: Stufe
+1 regression-gesperrt, Track 2/KI fasst die Logik ohnehin nochmal an).
 
 Deterministische Zeitlogik-Auflockerung als Schicht ÜBER Stufe 1
 (unverändert). 4-Augen mit Carl (Plan + Snap-Delta), Claude TDD-Bau,
@@ -975,4 +1036,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-17 (v2.11.0-dev Stufe 2 / Track 1 + v1-Kalibrierung + Neu-Verifikation + Gesundheits-Check-Backlog auf develop — 197 Tests; main = v2.10.0)*
+*Zuletzt aktualisiert: 2026-05-17 (Stufe 2 auf main gelandet 3395ecd; develop danach: LUT-Feature, HC-1, HC-2 Worker-Lifecycle-Härtung — 214 Tests grün auf develop)*
