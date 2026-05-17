@@ -624,7 +624,15 @@ Carl tiefer bei (1)(2)(3). Genau wofür 4-Augen da ist.
 
 ## Changelog
 
-### v2.11.0-dev (2026-05-16, develop — NOCH NICHT auf main) — Folgenschnitt Stufe 2 / Track 1
+### v2.11.0 (Stufe 2 — auf main gelandet 2026-05-17; Versionslabel = Max-Entscheidung) — Folgenschnitt Stufe 2 / Track 1
+
+**main-Merge 2026-05-17:** `--no-ff` Marker-Commit `3395ecd`
+"Folgenschnitt Stufe 2 + v1-Kalibrierung — Feature gelandet"
+(26f8097..3395ecd), 197 grün auf main, zurück auf develop. Carl
+redaktionell grün + Max-Go. v1-Zahlen bewusst PROVISORISCH — Alex-
+Sichtung + Fremdproduktion sind erwartete Real-Bestätigungen, können
+einen kleinen Tunables-Nachdreh auslösen (kein Regressionsrisiko: Stufe
+1 regression-gesperrt, Track 2/KI fasst die Logik ohnehin nochmal an).
 
 Deterministische Zeitlogik-Auflockerung als Schicht ÜBER Stufe 1
 (unverändert). 4-Augen mit Carl (Plan + Snap-Delta), Claude TDD-Bau,
@@ -975,4 +983,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-17 (v2.11.0-dev Stufe 2 / Track 1 + v1-Kalibrierung + Neu-Verifikation + Gesundheits-Check-Backlog auf develop — 197 Tests; main = v2.10.0)*
+*Zuletzt aktualisiert: 2026-05-17 (Stufe 2 + v1-Kalibrierung auf main gelandet, Merge 3395ecd — 197 Tests grün auf main; develop = main)*
