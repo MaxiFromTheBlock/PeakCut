@@ -140,12 +140,12 @@ class ScreenshotWorker(QThread):
             self._stopped = True
             proc = self._proc
         if proc and proc.poll() is None:
+            # Non-blocking: nur terminate() senden. Das Reaping macht der
+            # Worker-Thread über communicate() (der hat seinen eigenen
+            # _SCREENSHOT_TIMEOUT_S-Guard). Kein wait()/kill() hier, sonst
+            # hängt Close auf dem GUI-Thread N×1s bei N Screenshots.
             try:
                 proc.terminate()
-                try:
-                    proc.wait(timeout=1.0)
-                except Exception:
-                    proc.kill()
             except Exception:
                 pass
 

@@ -70,3 +70,34 @@ def test_cleanup_cancels_running_workers_without_blocking():
 
 def test_screenshot_worker_has_request_stop():
     assert hasattr(ScreenshotWorker, "request_stop")
+
+
+class _FakeProc:
+    """Zeichnet Aufrufe auf (statt zu werfen — sonst schlucken die
+    breiten except in request_stop die Assertion)."""
+    def __init__(self):
+        self.terminated = self.waited = self.killed = False
+
+    def poll(self):
+        return None  # läuft noch
+
+    def terminate(self):
+        self.terminated = True
+
+    def wait(self, *a, **k):
+        self.waited = True
+
+    def kill(self):
+        self.killed = True
+
+
+def test_request_stop_is_non_blocking():
+    w = ScreenshotWorker("v.mp4", 0.0, "", "/luts", "Cam", "/out", 1, 25)
+    fp = _FakeProc()
+    with w._proc_lock:
+        w._proc = fp
+    w.request_stop()
+    assert w._stopped is True
+    assert fp.terminated is True
+    assert fp.waited is False   # nicht blockieren
+    assert fp.killed is False   # Reaping macht der Worker-Thread
