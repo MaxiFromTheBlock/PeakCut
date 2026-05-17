@@ -503,6 +503,41 @@ Backlog, kein offenes Feature mehr:
 - [ ] Competitor-Recherche (autocut.com, Resolve Scene-Cut, GitHub-Repos) —
   Inspiration, geparkt.
 
+### Gesundheits-Check-Backlog — abgegrenzt 2026-05-17 (KEIN Feature)
+
+Ergebnis eines **2-Pass-Reviews** (Carl + Claude, unabhängig
+durchgelaufen, dann verglichen). Strategische Konvergenz beider Pässe:
+*Stufe 2 über Alex landen, dann der V3-/Suite-Sprung* — das ist die
+Richtung, kein Grübelthema mehr. Folgende Punkte sind Carls tieferer
+Sicht entsprungen (wo ein einzelner Pass nicht gereicht hätte) und
+bewusst getrennter Backlog, kein offenes Feature:
+- [ ] **Threading-/Lebenszyklus-Härtung (höchste Bauchschmerz-Stelle):**
+  Qt/QMediaPlayer/LUTWorker/ScreenshotWorker/ExportWorker/AnalysisWorker
+  + Subprocess/ffmpeg-Lebenszyklen sind der historisch fragilste Teil
+  (`video_preview_peak.py`, Crash-Historie im Changelog). Vor V3 gezielt
+  durchgehen, nicht erst wenn's wieder kracht. Mit Carl.
+- [ ] **Internes Timeline-Modell statt XML-Strings:** Timeline lebt als
+  handgeschriebenes FCP7-XML. Langfristig: internes Timeline-Modell mit
+  mehreren Exportern (löst auch den Resolve-Relink-/FCPXML-Schmerz an
+  der Wurzel). Architektur-Vorarbeit, eigene Spec mit Carl.
+- [ ] **Projekt-/Session-Persistenz + Undo = V3-VORAUSSETZUNG**, nicht
+  „nice to have". Ohne das wird die Suite (mehrere Module, längerer
+  Flow) brüchig. Vor/with V3-Hub planen.
+- [ ] **Doku-Entrümpelung:** Specs teils noch in „Design/offen"-Sprache;
+  als Projektgedächtnis wird das zäh. Abgeschlossene Specs als solche
+  markieren/archivieren.
+- [ ] **Python-Version bewusst pinnen:** 3.11 ist Produktteil
+  (audioop/pydub-Deprecation = Frühsignal Richtung 3.13). Nicht
+  nebenbei hochstolpern; Version explizit festschreiben.
+- [ ] **Distributions-Gabel bewusst entscheiden** (Carl neutral, Claude:
+  aktuell bewusst „Max' Repo-App" = Wettbewerbsvorteil, nicht extern):
+  entweder bewusst so bleiben oder saubere Releases/Versionierung —
+  „dazwischen" tut irgendwann weh. Max-Strategieentscheidung, kein Tech-
+  Gate.
+
+Provenance: getrennte Health-Checks, hohe Übereinstimmung im Großbild;
+Carl tiefer bei (1)(2)(3). Genau wofür 4-Augen da ist.
+
 ### Quick Fixes (vor V3)
 - [x] ~~`extract_guest_name` aus exporters.py in eigenes Modul~~ — erledigt (v2.9.0, → `core/guest_name.py`)
 - [ ] Code Signing (Apple Developer Account) für Gatekeeper-freie Installation (geparkt — siehe Distribution)
@@ -940,4 +975,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-17 (v2.11.0-dev Stufe 2 / Track 1 + v1-Kalibrierung + Neu-Verifikation auf develop — 197 Tests; main = v2.10.0)*
+*Zuletzt aktualisiert: 2026-05-17 (v2.11.0-dev Stufe 2 / Track 1 + v1-Kalibrierung + Neu-Verifikation + Gesundheits-Check-Backlog auf develop — 197 Tests; main = v2.10.0)*
