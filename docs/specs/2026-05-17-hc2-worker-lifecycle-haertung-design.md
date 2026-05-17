@@ -82,6 +82,16 @@ sauberer Shutdown beider Prozess-Pfade.
   werden korrekt freigegeben.
 - Volle Suite grün; neue Worker-/Lifecycle-Tests dauerhaft im CI.
 
+## Bekannte Schwierigkeit (Carl im Plan explizit adressieren)
+
+Der Frozen-/`multiprocessing`-Pfad — genau der heute kaputte — lässt
+sich **nicht** durch Starten eines echten `.app`-Bundles in CI testen.
+Carls Plan muss die Teststrategie dafür ausdrücklich benennen, statt
+sie zu umgehen: z. B. die Timeout-/exitcode-Logik isoliert testbar
+machen (injizierbares Fake-Prozess-Objekt mit steuerbarem
+`is_alive()`/`exitcode`) statt einen realen Hänger zu provozieren. Die
+schwierigste Stelle darf im Plan nicht die vageste sein.
+
 ## 4-Augen-Prozess
 
 Spec (Claude) → **Max liest gegen (Gate)** → Carl schreibt den
