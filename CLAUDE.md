@@ -677,6 +677,20 @@ Produkt):**
 
 ## Changelog
 
+### HC-3 (auf main gelandet 2026-05-18, Merge 7c1bd8e)
+
+Sync liest im schnellen Pfad nur das 10-Min-Fenster statt der vollen
+Datei (`load_audio_as_array` echtes `sf.read(frames=)`); volle
+Referenz/Target nur beim Confidence-Fallback, Referenz lazy + Lock
+(1× bei parallelen Kameras). RAM-Peak bei langen Folgen × N Kameras
+weg. Offsets bit-identisch — Tests (Identität + Fallback==Legacy) UND
+echte HR-Folge (alle 3 Kameras framegenau == akzeptierte alte XML,
+Fallback real geübt, `scripts/verify_hc3_sync_real.py`). Carl-Plan,
+Carl-Schluss-Review grün. `core/session.py` + `calculate_offset` +
+Konstanten/Signatur unberührt. 215 → 221 Tests. Carl-Restnotiz
+(ffmpeg extrahiert weiter volle Temp-WAV) bewusst out-of-scope →
+geparkt an HC-5 (Audio-Schicht).
+
 ### Härtung-Welle (auf main gelandet 2026-05-17, Merge b81d7ab; Versionslabel = Max-Entscheidung)
 
 Aus dem 2-Pass-Health-Check (Carl + Claude unabhängig). Marker-Commit
@@ -1060,4 +1074,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-17 (HC-1 + HC-2 + LUT-Feature + CI-Fix auf main gelandet, Merge b81d7ab — 215 Tests grün, CI grün, Max-Smoke-Test bestanden; develop = main)*
+*Zuletzt aktualisiert: 2026-05-18 (HC-3 Sync-Fenster-Lesen auf main gelandet, Merge 7c1bd8e — 221 Tests grün, Offsets bit-identisch an echtem HR-Material verifiziert; develop = main)*
