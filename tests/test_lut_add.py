@@ -3,6 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from lib import lut_processor  # noqa: E402
 from lib.lut_processor import add_lut_to_library  # noqa: E402
 
 _VALID = """LUT_3D_SIZE 2
@@ -63,3 +64,33 @@ def test_collision_blocks_then_overwrites(tmp_path):
     done = add_lut_to_library(src, str(luts), overwrite=True)
     assert done.ok and done.reason == "overwritten"
     assert (luts / "Look.cube").read_text() == _VALID
+
+
+def test_self_copy_guard_no_copy_attempt(tmp_path):
+    # src IS already the library file -> ok, no copy, file untouched
+    luts = tmp_path / "luts"
+    luts.mkdir()
+    target = luts / "InPlace.cube"
+    target.write_text(_VALID)
+    r = add_lut_to_library(str(target), str(luts))
+    assert r.ok and r.reason == "added" and r.filename == "InPlace.cube"
+    assert target.read_text() == _VALID  # still valid, untouched
+
+
+def test_io_failure_returns_controlled_reason(tmp_path, monkeypatch):
+    src = _w(tmp_path / "Look.cube", _VALID)
+    luts = tmp_path / "luts"
+
+    def boom_perm(*a, **k):
+        raise PermissionError("read-only bundle")
+
+    monkeypatch.setattr(lut_processor.shutil, "copy2", boom_perm)
+    r = add_lut_to_library(src, str(luts))
+    assert not r.ok and r.reason == "permission"
+
+    def boom_os(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(lut_processor.shutil, "copy2", boom_os)
+    r2 = add_lut_to_library(src, str(luts))
+    assert not r2.ok and r2.reason == "copy_failed"

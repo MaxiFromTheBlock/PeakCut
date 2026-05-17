@@ -250,7 +250,13 @@ def add_lut_to_library(src_path: str, luts_dir: str,
     if os.path.exists(dest) and not overwrite:
         return LutAddResult(False, "exists", filename)
 
-    os.makedirs(luts_dir, exist_ok=True)
-    existed = os.path.exists(dest)
-    shutil.copy2(src_path, dest)
+    try:
+        os.makedirs(luts_dir, exist_ok=True)
+        existed = os.path.exists(dest)
+        shutil.copy2(src_path, dest)
+    except PermissionError:
+        # e.g. LUTS_DIR inside a read-only frozen .app bundle
+        return LutAddResult(False, "permission", filename)
+    except OSError:
+        return LutAddResult(False, "copy_failed", filename)
     return LutAddResult(True, "overwritten" if existed else "added", filename)

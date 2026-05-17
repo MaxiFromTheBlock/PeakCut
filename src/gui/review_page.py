@@ -266,6 +266,10 @@ class ReviewPage(QWidget):
                 "not_found": "Datei nicht gefunden.",
                 "not_cube": "Keine .cube-Datei.",
                 "invalid": "Die Datei ist kein gültiges .cube-LUT.",
+                "permission": "Keine Schreibrechte im LUT-Ordner "
+                              "(z. B. App-Bundle schreibgeschützt).",
+                "copy_failed": "LUT konnte nicht kopiert werden "
+                               "(Datei-/Speicherfehler).",
             }.get(result.reason, "LUT konnte nicht hinzugefügt werden.")
             QMessageBox.warning(self, "LUT hinzufügen", msg)
 
