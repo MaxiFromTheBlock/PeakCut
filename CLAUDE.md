@@ -615,6 +615,16 @@ Max Entscheider. Spec: `docs/specs/2026-05-16-folgenschnitt-stufe2-track1-design
   Feedback + Premiere-EDL → v1-Zahlen justieren → neu verifizieren.**
   Anders als Folgenschnitt NICHT auf Carl-OK allein mergebar (neues
   Schnittverhalten, nicht regression-locked auf cutter-validierte Baseline).
+- **v1-Kalibrierung (2026-05-17, Carl-Ruling, Max-Go):** Schätz-Parser
+  `scripts/analyze_fcpxml.py` (Carl-Spec, NICHT autoritativ) liest messy
+  Premiere-FCPXML rückwärts. Confidence-Gate + **Plausibilitätsbremse**
+  (dominante Kamera ≥80%, längster Run ≥20×P75 oder ≥20min, <30 Runs bei
+  >60min → LOW). Auf Alex' Realfiles: Schirach HIGH/brauchbar, Hüther
+  LOW/verworfen (las Basis-Assembly, nicht den Schnitt). Aus Schirach
+  (P75 ~49s Halte-Decke) v1-Zahlen moderat gesenkt: min_block_to_loosen
+  120→90s, first 110→70s, target 90→55s, min_block 50→35s, totale_block
+  25→20s. **Weiter provisorisch — Neu-Verifikation an echter Folge mit
+  neuen Zahlen vor main-Merge offen.** Tests 182 → 195.
 
 ### v2.10.0 (2026-05-16) — Generischer Zuordnungs-Schritt (Folgenschnitt produktiv)
 
@@ -925,4 +935,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-16 (v2.11.0-dev Folgenschnitt Stufe 2 / Track 1 auf develop — 182 Tests; main = v2.10.0)*
+*Zuletzt aktualisiert: 2026-05-17 (v2.11.0-dev Stufe 2 / Track 1 + v1-Kalibrierung auf develop — 195 Tests; main = v2.10.0)*

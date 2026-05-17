@@ -10,7 +10,7 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 ## Tech-Stack
 
 - Python 3.11 + PyQt6
-- 182 Tests, CI via GitHub Action
+- 195 Tests, CI via GitHub Action
 - Distribution: Launcher-App in /Applications, ruft Repo-Code direkt auf
   (PyInstaller-Bundle-Strategie geparkt — siehe Distribution-Sektion in CLAUDE.md)
 
@@ -41,9 +41,14 @@ Dieses Dokument ist die Kurzversion fuer den PO.
   Establishing-Totale), Schnitte snappen auf Sprechpausen, harter
   Mindest-Block. Stufe 1 bleibt bit-stabil.
 - Generisch: jede Kamera-Kombi (inkl. nur Totale) → valide XML.
-- Carl-Schluss-Review technisch grün. v1-Zahlen PROVISORISCH — vor
-  main-Merge: Alex-Feedback + Premiere-EDL → Zahlen justieren. develop
-  trägt produktiven Einsatz.
+- Carl-Schluss-Review technisch grün. v1-Zahlen aus Schirach-Kompass
+  justiert (min_block_to_loosen 90s, first 70s, target 55s, min_block
+  35s, totale_block 20s) — weiter PROVISORISCH. Vor main-Merge offen:
+  Neu-Verifikation an einer echten Folge mit den neuen Zahlen +
+  Alex-Feedback/geflatteter Export. develop trägt produktiven Einsatz.
+- Schätz-Hilfe `scripts/analyze_fcpxml.py` (Carl-Spec, NICHT autoritativ):
+  liest messy Premiere-FCPXML rückwärts, Confidence-Gate mit
+  Plausibilitätsbremse. Schirach HIGH/brauchbar, Hüther LOW/verworfen.
 
 ## Bekannte Einschraenkungen
 
