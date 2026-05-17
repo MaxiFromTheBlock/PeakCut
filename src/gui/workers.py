@@ -7,6 +7,7 @@ import subprocess
 import multiprocessing
 import queue
 import threading
+import time
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
@@ -40,10 +41,91 @@ class AnalysisWorker(QThread):
     error = pyqtSignal(str)
     progress = pyqtSignal(str)
 
-    def __init__(self, session):
+    def __init__(self, session, *,
+                 process_factory=multiprocessing.Process,
+                 queue_factory=multiprocessing.Queue,
+                 popen_factory=subprocess.Popen,
+                 monotonic=time.monotonic,
+                 analysis_timeout_s=_ANALYSIS_TIMEOUT_S,
+                 progress_poll_s=0.2):
         super().__init__()
         self.session = session
+        self._process_factory = process_factory
+        self._queue_factory = queue_factory
+        self._popen_factory = popen_factory
+        self._monotonic = monotonic
+        self._analysis_timeout_s = analysis_timeout_s
+        self._progress_poll_s = progress_poll_s
+
+        self._process_lock = threading.Lock()
         self._process = None
+        self._stop_requested = False
+        self._timed_out = False
+
+    # --- Prozess-Lebenszyklus (duck-typed: multiprocessing.Process ODER
+    # subprocess.Popen). EINZIGE Stelle, die das Handle anfasst. ---
+
+    def _set_process(self, proc):
+        with self._process_lock:
+            self._process = proc
+
+    def _clear_process(self, proc):
+        with self._process_lock:
+            if self._process is proc:
+                self._process = None
+
+    @staticmethod
+    def _is_process_running(proc):
+        if proc is None:
+            return False
+        if hasattr(proc, "is_alive"):
+            return proc.is_alive()
+        return proc.poll() is None  # subprocess.Popen
+
+    @staticmethod
+    def _wait_process(proc, timeout_s):
+        if proc is None:
+            return
+        if hasattr(proc, "join"):          # multiprocessing.Process
+            proc.join(timeout=timeout_s)
+        elif hasattr(proc, "wait"):        # subprocess.Popen
+            try:
+                proc.wait(timeout=timeout_s)
+            except Exception:
+                pass
+
+    def _terminate_process(self, proc, grace_s=2.0):
+        if proc is None or not self._is_process_running(proc):
+            return
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+        self._wait_process(proc, grace_s)
+        if self._is_process_running(proc):
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            self._wait_process(proc, grace_s)
+
+    def _terminate_current_process(self):
+        with self._process_lock:
+            proc = self._process
+        self._terminate_process(proc)
+
+    def request_stop(self):
+        """Öffentliche Lifecycle-API: beendet den aktuellen Child-Prozess
+        (egal ob Subprocess oder Multiprocess). Danach darf niemand mehr
+        in _process greifen."""
+        with self._process_lock:
+            self._stop_requested = True
+        self._terminate_current_process()
+
+    def _mark_timeout_and_terminate_current_process(self):
+        with self._process_lock:
+            self._timed_out = True
+        self._terminate_current_process()
 
     def run(self):
         project = self.session.project
@@ -78,22 +160,29 @@ class AnalysisWorker(QThread):
 
     def _run_multiprocess(self, config_data):
         """Run analysis via multiprocessing (for bundled .app)."""
-        result_queue = multiprocessing.Queue()
-        progress_queue = multiprocessing.Queue()
+        result_queue = self._queue_factory()
+        progress_queue = self._queue_factory()
 
-        proc = multiprocessing.Process(
+        proc = self._process_factory(
             target=_analysis_worker_target,
             args=(config_data, result_queue, progress_queue),
         )
         proc.start()
+        self._set_process(proc)
 
-        # Poll progress until process finishes
-        while proc.is_alive():
+        deadline = self._monotonic() + self._analysis_timeout_s
+
+        while self._is_process_running(proc):
             try:
-                msg = progress_queue.get(timeout=0.2)
-                self.progress.emit(msg)
+                self.progress.emit(progress_queue.get(
+                    timeout=self._progress_poll_s))
             except queue.Empty:
                 pass
+            if self._monotonic() >= deadline:
+                self._mark_timeout_and_terminate_current_process()
+                self._clear_process(proc)
+                self.error.emit("Analyse abgebrochen: Timeout (>10 Min)")
+                return
 
         # Drain remaining progress messages
         while not progress_queue.empty():
@@ -102,7 +191,14 @@ class AnalysisWorker(QThread):
             except queue.Empty:
                 break
 
-        proc.join(timeout=_ANALYSIS_TIMEOUT_S)
+        self._wait_process(proc, 0)
+        self._clear_process(proc)
+
+        if self._stop_requested:
+            return  # bewusst still beendet
+        if proc.exitcode is None:
+            self.error.emit("Analyse fehlgeschlagen: Prozessstatus unbekannt")
+            return
         if proc.exitcode != 0:
             self.error.emit("Analyse fehlgeschlagen")
             return
@@ -122,35 +218,37 @@ class AnalysisWorker(QThread):
         script_path = os.path.join(script_dir, "core", "analysis_process.py")
         python_exe = sys.executable
 
+        proc = None
         try:
-            self._process = subprocess.Popen(
+            proc = self._popen_factory(
                 [python_exe, script_path, json.dumps(config_data)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 cwd=script_dir
             )
+            self._set_process(proc)
 
-            # Watchdog: kill process if analysis takes too long
+            # Watchdog über den gemeinsamen Lifecycle-Helfer (kein
+            # ungeschützter self._process-Zugriff aus dem Lambda mehr).
             watchdog = threading.Timer(
-                _ANALYSIS_TIMEOUT_S,
-                lambda: self._process.kill() if self._process and self._process.poll() is None else None
+                self._analysis_timeout_s,
+                self._mark_timeout_and_terminate_current_process,
             )
             watchdog.daemon = True
             watchdog.start()
 
             stdout_queue = queue.Queue()
 
-            def read_stdout():
-                stdout_data = self._process.stdout.read()
-                stdout_queue.put(stdout_data)
+            def read_stdout(p=proc):
+                stdout_queue.put(p.stdout.read())
 
             stdout_thread = threading.Thread(target=read_stdout, daemon=True)
             stdout_thread.start()
 
             while True:
-                line = self._process.stderr.readline()
-                if not line and self._process.poll() is not None:
+                line = proc.stderr.readline()
+                if not line and proc.poll() is not None:
                     break
                 line = line.strip()
                 if line.startswith("PROGRESS: "):
@@ -165,11 +263,16 @@ class AnalysisWorker(QThread):
             except queue.Empty:
                 stdout = ""
 
-            if self._process.returncode != 0:
-                if self._process.returncode == -9:
-                    self.error.emit("Analyse abgebrochen: Timeout (>10 Min)")
-                else:
-                    self.error.emit(f"Analyse-Prozess beendet mit Code {self._process.returncode}")
+            self._clear_process(proc)
+
+            if self._stop_requested:
+                return  # bewusst still beendet
+            if self._timed_out:
+                self.error.emit("Analyse abgebrochen: Timeout (>10 Min)")
+                return
+            if proc.returncode != 0:
+                self.error.emit(
+                    f"Analyse-Prozess beendet mit Code {proc.returncode}")
                 return
 
             try:
@@ -182,12 +285,8 @@ class AnalysisWorker(QThread):
                 self.error.emit(f"Ungültige Analyse-Ergebnisse: {e}")
 
         except Exception as e:
-            if self._process and self._process.poll() is None:
-                self._process.terminate()
-                try:
-                    self._process.wait(timeout=2)
-                except Exception:
-                    self._process.kill()
+            self._terminate_process(proc)
+            self._clear_process(proc)
             self.error.emit(f"Analyse fehlgeschlagen: {e}")
 
 
