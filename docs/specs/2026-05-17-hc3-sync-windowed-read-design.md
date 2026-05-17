@@ -94,6 +94,24 @@ muss die Teststrategie für die **Offset-Identität** ausdrücklich
 benennen (Golden-Offsets auf festem Fixture, schneller + Fallback-
 Pfad), statt sie zu umgehen.
 
+## Abgrenzungs-Frage an Carl (ausdrücklich zum Widerspruch)
+
+Claude argumentiert: Sync-Voll-Laden (HC-3) und Playback-Voll-Laden
+(`session.py:189`) sind **gleiches Symptom, andere Wurzel** → trennen.
+Begründung = Zugriffsmuster: Sync braucht nur ein festes Anfangsfenster
+(sequenziell, einmalig, verwerfbar) und liest aus Versehen alles;
+Playback braucht wahlfreien Zugriff über die ganze Folge (die Voll-Last
+ist dort eine echte Anforderung, kein Versehen) → keine gemeinsame
+Lösung heute, kein geteilter Baustein, Zusammenlegen spart keine Arbeit
+und verheiratet einen risikolosen Fix mit einem nutzersichtbaren Umbau.
+Sinnvoller Vereinigungsort später: die Audio-Schicht des internen
+Timeline-Modells / V3 (HC-5).
+
+**Carl: bitte unabhängig prüfen und widersprechen, falls du eine
+gemeinsame Wurzel/einen geteilten Baustein siehst, der ein
+Zusammenmachen *jetzt* rechtfertigt.** Diese Scope-Grenze wurde von Max
+bewusst hinterfragt — sie soll nicht aus Zufall stehen, sondern geprüft.
+
 ## 4-Augen-Prozess
 
 Spec (Claude) → **Max liest gegen (Gate)** → Carl schreibt den
