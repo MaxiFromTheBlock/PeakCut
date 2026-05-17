@@ -603,8 +603,12 @@ Produkt):**
   elegant mit dem Fuß, Körper sichtbar unverändert).
 - Auslösung **nahezu lautlos**: kein mechanisches Klack/Klick und kein
   Boden-Dröhnen — Gerät liegt im mikrofonierten Aufnahmeraum, jedes
-  Eigengeräusch blutet in die Sprach-Mikros. (Genau dieser Grund hat
-  schon gegen ein Schlag-Pad wie Roland SPD::ONE entschieden.)
+  Eigengeräusch blutet in die Sprach-Mikros. NICHT vorab gegen ein
+  Trigger-Pad entschieden: Empfindlichkeit hoch → leichter Fußtipp
+  möglich. Ob der Tipp in die Sprach-Mikros blutet, ist eine
+  EMPIRISCHE Frage (2-Min-Test: Sprach-Mikros + Marker-Spur parallel
+  aufnehmen, in die Sprach-Mikros reinhören). Startone wird von Matze
+  aktiv abgelehnt → echter Ersatz ist aktiver Bedarf, keine Politur.
 - Erzeugt **selbst** einen Ton, kurz/knackig, **fester Pegel** →
   immer der lauteste, gut getrennte Impuls auf seiner Spur
   (PeakCut-Schwelle ist relativ zum Spur-Maximum, 0.3×max, min_gap
@@ -612,10 +616,12 @@ Produkt):**
 - **Ein** Kabel, möglichst balanciert/XLR direkt ins Multicore (ohne
   DI-Box). XLR nicht zwingend, aber Ziel = Kabelsalat weg.
 - Robuster, wiederholbarer, eleganter Druckpunkt.
-- Status quo (Brücke bis dahin): Startone-Keyboard am Boden,
-  Mini-Klinke→Klinke→DI→XLR. Erfüllt die harten Bedingungen, nur
-  Kabelsalat + „umfunktioniert statt elegant". Bewusst kein
-  Optik-Tausch mitten in anderen Prioritäten.
+- Heißester Off-the-shelf-Kandidat: **Roland SPD::ONE WAV** — eigener
+  ladbarer Sample (kurzer harter Blip, fester Pegel = robusteste
+  PeakCut-Erkennung), Empfindlichkeit hoch für leichten Fußtipp.
+  Contingent auf den akustischen Bleed-Test (s.o.). Wenn Tipp in
+  Sprach-Mikros hörbar → eigener Hardware-Button bleibt die Antwort.
+- Startone ist KEINE Dauerbrücke mehr (Matze will es weg).
 | **Abo-Modell** | ~10€/Monat Software, Hardware separat | Account-System vorbereiten (User-ID für ML-Daten) |
 
 ### Technik
