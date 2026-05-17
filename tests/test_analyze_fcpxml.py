@@ -111,6 +111,34 @@ def test_two_winners_same_lane_ambiguous_excluded(tmp_path):
     assert r["ambiguous_segment_count"] >= 1
 
 
+def test_plausibility_brake_dominant_camera(tmp_path):
+    # one camera covers 90% -> LOW despite 2 keys & 0% ambiguous
+    body = (
+        '<clip offset="0/25s" duration="9000/25s" enabled="1">'
+        '<video ref="a1"/></clip>'
+        '<clip offset="9000/25s" duration="1000/25s" enabled="1">'
+        '<video ref="a2"/></clip>'
+    )
+    r = analyze_fcpxml(_w(tmp_path, body))
+    assert r["confidence"] == "LOW"
+    assert any("Dominant camera" in w for w in r["warnings"])
+    assert any("base assembly" in w.lower() for w in r["warnings"])
+
+
+def test_plausibility_brake_long_run(tmp_path):
+    # a single run >= 20 min -> LOW (dominant share kept < 0.80)
+    body = (
+        '<clip offset="0/25s" duration="9000/25s" enabled="1">'
+        '<video ref="a1"/></clip>'
+        '<clip offset="9000/25s" duration="32500/25s" enabled="1">'
+        '<video ref="a2"/></clip>'
+    )
+    r = analyze_fcpxml(_w(tmp_path, body))
+    assert r["confidence"] == "LOW"
+    assert any("Longest run" in w for w in r["warnings"])
+    assert any("base assembly" in w.lower() for w in r["warnings"])
+
+
 def test_confidence_low_when_single_camera(tmp_path):
     body = (
         '<clip offset="0/25s" duration="1000/25s" enabled="1"><video ref="a1"/></clip>'

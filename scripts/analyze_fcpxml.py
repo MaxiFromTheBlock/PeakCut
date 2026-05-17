@@ -173,13 +173,42 @@ def analyze_fcpxml(path):
     total_s = visible_s + amb_s + unres_s
     pct_unclear = (amb_s + unres_s) / total_s if total_s else 1.0
     keys = set(by_dur)
-    if len(keys) < 2 or pct_unclear > 0.05:
+    max_run = max(rl) if rl else 0.0
+    dominant_share = (max(by_dur.values()) / visible_s
+                      if visible_s and by_dur else 0.0)
+
+    # Technical unambiguity (one winner per segment) does NOT mean
+    # semantic credibility. A confidently-read base assembly track is
+    # still wrong. These checks downgrade implausible cuts to LOW.
+    warnings = []
+    implausible = False
+    if dominant_share >= 0.80:
+        implausible = True
+        warnings.append(
+            f"Dominant camera covers {dominant_share*100:.0f}% of "
+            f"visible duration")
+    if p75 > 0 and max_run >= 20 * p75:
+        implausible = True
+        warnings.append(
+            f"Longest run is {max_run:.0f}s, suspiciously above P75 "
+            f"({p75:.0f}s)")
+    elif max_run >= 1200:
+        implausible = True
+        warnings.append(f"Longest run is {max_run:.0f}s (>= 20 min)")
+    if n < 30 and vis_min > 60:
+        implausible = True
+        warnings.append(
+            f"Only {n} runs over {vis_min:.0f} min — implausibly few cuts")
+    if implausible:
+        warnings.append(
+            "Likely reading base assembly, not final camera decisions")
+
+    if len(keys) < 2 or pct_unclear > 0.05 or implausible:
         conf = "LOW"
     elif pct_unclear >= 0.01:
         conf = "MEDIUM"
     else:
         conf = "HIGH"
-    warnings = []
     if len(keys) < 2:
         warnings.append("Nur 1 Kamera-Key erkannt — Schätzung unbrauchbar als Anker.")
     if pct_unclear > 0.05:
