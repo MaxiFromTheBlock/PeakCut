@@ -3,6 +3,7 @@
 import logging
 import os
 import subprocess
+import threading
 import numpy as np
 from utils import FFMPEG_BIN
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
@@ -128,6 +129,25 @@ class ScreenshotWorker(QThread):
         self._counter = counter
         self._fps = fps
         self._brightness = brightness
+        self._proc_lock = threading.Lock()
+        self._proc = None
+        self._stopped = False
+
+    def request_stop(self):
+        """Cancelbar: bricht den laufenden ffmpeg-Prozess ab, statt den
+        GUI-Thread im Cleanup blockieren zu lassen."""
+        with self._proc_lock:
+            self._stopped = True
+            proc = self._proc
+        if proc and proc.poll() is None:
+            try:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=1.0)
+                except Exception:
+                    proc.kill()
+            except Exception:
+                pass
 
     def run(self):
         os.makedirs(self._output_dir, exist_ok=True)
@@ -173,14 +193,29 @@ class ScreenshotWorker(QThread):
         cmd.extend(["-q:v", "2", filepath])
 
         try:
-            result = subprocess.run(cmd, capture_output=True, timeout=_SCREENSHOT_TIMEOUT_S)
-            if result.returncode == 0 and os.path.exists(filepath):
+            with self._proc_lock:
+                if self._stopped:
+                    self.screenshot_done.emit("")
+                    return
+                self._proc = subprocess.Popen(
+                    cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            proc = self._proc
+            try:
+                proc.communicate(timeout=_SCREENSHOT_TIMEOUT_S)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.communicate()
+            if (not self._stopped and proc.returncode == 0
+                    and os.path.exists(filepath)):
                 self.screenshot_done.emit(filepath)
             else:
                 self.screenshot_done.emit("")
-        except (subprocess.TimeoutExpired, OSError) as e:
+        except OSError as e:
             _log.error("Screenshot error: %s", e)
             self.screenshot_done.emit("")
+        finally:
+            with self._proc_lock:
+                self._proc = None
 
 
 class PeakVideoPreview(QWidget):
@@ -532,7 +567,9 @@ class PeakVideoPreview(QWidget):
             camera_name, screenshots_dir, counter, fps, brightness
         )
         worker.screenshot_done.connect(self._on_screenshot_done)
-        worker.screenshot_done.connect(lambda _, w=worker: self._cleanup_screenshot_worker(w))
+        # Cleanup an finished (Thread WIRKLICH zu Ende) statt an
+        # screenshot_done — kein blockierendes wait() mehr nötig.
+        worker.finished.connect(lambda w=worker: self._cleanup_screenshot_worker(w))
         self._screenshot_workers.append(worker)
         worker.start()
 
@@ -540,21 +577,24 @@ class PeakVideoPreview(QWidget):
         self.screenshot_done.emit(filepath)
 
     def _cleanup_screenshot_worker(self, worker):
-        """Remove finished worker from list and schedule deletion."""
+        """An worker.finished gehängt → der Thread ist hier bereits zu
+        Ende. Kein wait() auf dem GUI-Thread mehr (das war die
+        Blockade-Stelle), nur aus der Liste nehmen + deleteLater."""
         if worker in self._screenshot_workers:
             self._screenshot_workers.remove(worker)
-        # Wait for thread to fully finish before allowing Qt to delete it.
-        # Without this, QThread::~QThread() can fire while the thread is still
-        # running, which triggers SIGABRT.
-        if worker.isRunning():
-            worker.wait(_WORKER_SHUTDOWN_WAIT_MS)
         worker.deleteLater()
 
     # --- Cleanup ---
 
     def cleanup(self):
         self._lut_worker.stop()
-        for worker in self._screenshot_workers:
+        # Laufende Screenshot-Worker cancel-en statt 3s/Worker zu
+        # blockieren; sie geben sich über finished/deleteLater selbst frei.
+        for worker in list(self._screenshot_workers):
             if worker.isRunning():
-                worker.wait(_WORKER_SHUTDOWN_WAIT_MS)
+                try:
+                    worker.screenshot_done.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
+                worker.request_stop()
         self._screenshot_workers.clear()
