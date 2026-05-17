@@ -109,6 +109,12 @@ Wird aktuell nicht genutzt, weil keine DMG mehr verteilt wird. Infrastruktur ble
 - `build.sh` ruft `bundle_ffmpeg.sh` automatisch auf wenn nötig
 - Im Code: `FFMPEG_BIN` und `FFPROBE_BIN` aus `utils.py` verwenden (FROZEN-aware)
 - **Nie** hardcoded `"ffmpeg"` oder `"ffprobe"` in subprocess-Aufrufen verwenden
+- **Versionsdrift (bewusst geparkt, HC-1 2026-05-17):** `build.sh` (`VERSION`)
+  und `PeakCut.spec` (gitignored, lokal) stehen noch auf `2.9.0` — NICHT
+  die App-Version (main = v2.11.0-Stand). `build.sh` ist als
+  `2.9.0-STALE-PARKED` markiert. Vor einer Bundle-Wiederbelebung beide
+  aktualisieren; die finale Versionsnummer ist eine Max-Entscheidung,
+  nicht automatisch hochzuzählen.
 
 ---
 

@@ -342,3 +342,27 @@ class TestXMLMultipleVideos:
         in_b = int(video_clips[1].find("in").text)
         assert in_a != in_b, \
             f"Different cameras should have different in values: CAM_A={in_a}, CAM_B={in_b}"
+
+
+class TestXMLNameEscaping:
+    """Filenames with XML-special chars must not break the productive
+    Keyboardstellen XML (HC-1c: XMLExporter did not escape names)."""
+
+    @pytest.fixture
+    def peaks(self):
+        return [Peak(index=0, position_ms=60_000, context_ms=15_000)]
+
+    def test_special_chars_in_filenames_stay_wellformed(self, peaks,
+                                                        tmp_export_dir):
+        session = _make_session(
+            peaks=peaks,
+            video_offsets=[],
+            videos=["/fake/CAM A & B <raw>.mp4"],
+            mics=["/fake/mix & take.wav"],
+            export_dir=tmp_export_dir,
+        )
+        # _export_and_parse does ET.parse -> raises if not well-formed
+        root = _export_and_parse(session)
+        names = [n.text for n in root.iter("name")]
+        assert any("CAM A & B <raw>" == t for t in names), names
+        assert any("mix & take" == t for t in names), names

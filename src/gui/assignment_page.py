@@ -227,9 +227,10 @@ class AssignmentPage(QWidget):
 
         hint = QLabel(
             "Ordne jede Kamera einem Aufnahme-Typ (und ggf. einer Person) zu. "
-            "Für den automatischen Folgenschnitt brauchst du zwei personenbezogene "
-            "Weit-Kameras. Ohne vollständige Zuordnung werden trotzdem die "
-            "Keyboardstellen exportiert."
+            "Der automatische Folgenschnitt nutzt jede sinnvolle Kamera-"
+            "Kombination (auch Close/Totale als Fallback) – je vollständiger "
+            "die Zuordnung, desto besser das Ergebnis. Ohne vollständige "
+            "Zuordnung werden trotzdem die Keyboardstellen exportiert."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
