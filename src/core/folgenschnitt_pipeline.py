@@ -7,7 +7,11 @@ reason, never an exception that propagates to the export worker.
 """
 
 from .folgenschnitt_decisions import build_edit_decisions, build_speaker_turns
-from .folgenschnitt_models import SHOT_WIDE
+from .folgenschnitt_loosening import (
+    apply_time_logic_loosening,
+    build_pause_ranges,
+    build_stage1_base_camera_assignments,
+)
 from .speaker_activity import build_default_mic_assignments
 
 SKIP_REASON = "Zuordnung unvollstaendig"
@@ -24,12 +28,11 @@ def has_minimum_folgenschnitt_assignment(mic_assignments, camera_assignments):
     persons = {m.person for m in mic_assignments if m.person}
     if len(persons) < 2:
         return False, SKIP_REASON
-    wide_persons = {
-        c.person
-        for c in camera_assignments
-        if c.shot_type == SHOT_WIDE and c.person
-    }
-    if len(wide_persons) < 2:
+    # Generalized: each speaking person must resolve to a base camera
+    # (weit > close > halbnah > totale-fallback). Guardrail unchanged:
+    # if not, Folgenschnitt is skipped cleanly.
+    base = build_stage1_base_camera_assignments(mic_assignments, camera_assignments)
+    if len({c.person for c in base if c.person}) < 2:
         return False, SKIP_REASON
     return True, None
 
@@ -78,8 +81,19 @@ def prepare_folgenschnitt_for_export(session) -> str | None:
     try:
         turns = build_speaker_turns(activity, mic_assignments)
         sequence_end_ms = max((f.end_ms for f in activity), default=0)
-        decisions = build_edit_decisions(
-            turns, camera_assignments, sequence_end_ms=sequence_end_ms
+        # Generality adapter: feed Stage 1 a synthetic per-person base
+        # (wide>close>halbnah>totale). Stage 1 stays UNCHANGED. The
+        # loosening layer then works on the ORIGINAL assignments.
+        base_camera_assignments = build_stage1_base_camera_assignments(
+            mic_assignments, camera_assignments
+        )
+        stage1_decisions = build_edit_decisions(
+            turns, base_camera_assignments, sequence_end_ms=sequence_end_ms
+        )
+        decisions = apply_time_logic_loosening(
+            stage1_decisions,
+            camera_assignments,
+            pause_ranges=build_pause_ranges(activity),
         )
     except ValueError:
         return _skip(session, SKIP_REASON)

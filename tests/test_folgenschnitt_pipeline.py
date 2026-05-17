@@ -147,3 +147,67 @@ def test_folgenschnitt_pipeline_from_turns_to_xml(tmp_export_dir, sample_config)
 
     assert os.path.exists(xml_path)
     assert os.path.basename(xml_path) == "Folgenschnitt - Hartmut Rosa.xml"
+
+
+def test_has_minimum_generalized_close_only_is_valid():
+    from core.folgenschnitt_models import SHOT_CLOSE, MicAssignment, CameraAssignment
+    from core.folgenschnitt_pipeline import has_minimum_folgenschnitt_assignment
+    mics = [MicAssignment(0, "/m/MIC1.wav", "Anna", "mic_1"),
+            MicAssignment(1, "/m/MIC2.wav", "Tom", "mic_2")]
+    cams = [CameraAssignment("/m/A_CLOSE.mp4", SHOT_CLOSE, "Anna"),
+            CameraAssignment("/m/T_CLOSE.mp4", SHOT_CLOSE, "Tom")]
+    assert has_minimum_folgenschnitt_assignment(mics, cams) == (True, None)
+
+
+def test_has_minimum_generalized_totale_only_two_mics_is_valid():
+    from core.folgenschnitt_models import SHOT_TOTAL, MicAssignment, CameraAssignment
+    from core.folgenschnitt_pipeline import has_minimum_folgenschnitt_assignment
+    mics = [MicAssignment(0, "/m/MIC1.wav", "Anna", "mic_1"),
+            MicAssignment(1, "/m/MIC2.wav", "Tom", "mic_2")]
+    cams = [CameraAssignment("/m/TOT.mov", SHOT_TOTAL, None)]
+    assert has_minimum_folgenschnitt_assignment(mics, cams) == (True, None)
+
+
+def test_has_minimum_skips_when_a_person_is_unresolvable():
+    from core.folgenschnitt_models import SHOT_WIDE, MicAssignment, CameraAssignment
+    from core.folgenschnitt_pipeline import has_minimum_folgenschnitt_assignment, SKIP_REASON
+    mics = [MicAssignment(0, "/m/MIC1.wav", "Matze", "mic_1"),
+            MicAssignment(1, "/m/MIC2.wav", "Gast", "mic_2")]
+    cams = [CameraAssignment("/m/M_WIDE.mp4", SHOT_WIDE, "Matze")]  # Gast unresolvable, no totale
+    assert has_minimum_folgenschnitt_assignment(mics, cams) == (False, SKIP_REASON)
+
+
+def test_has_minimum_skips_with_no_cameras():
+    from core.folgenschnitt_models import MicAssignment
+    from core.folgenschnitt_pipeline import has_minimum_folgenschnitt_assignment, SKIP_REASON
+    mics = [MicAssignment(0, "/m/MIC1.wav", "Matze", "mic_1"),
+            MicAssignment(1, "/m/MIC2.wav", "Gast", "mic_2")]
+    assert has_minimum_folgenschnitt_assignment(mics, []) == (False, SKIP_REASON)
+
+
+def test_pipeline_totale_only_produces_folgenschnitt_not_skip(sample_config):
+    # Non-HM production: only a Totale + two mics. Pre-Stufe-2 this hit the
+    # Stage-1 wide-pflicht -> Skip. With the base-camera adapter wired in,
+    # it must now produce Folgenschnitt.
+    from core.folgenschnitt_models import SHOT_TOTAL, CameraAssignment
+    session = _session(sample_config)
+    session.folgenschnitt_camera_assignments = [
+        CameraAssignment("/material/TOTALE.mov", SHOT_TOTAL, None)
+    ]
+    session.folgenschnitt_mic_assignments = _mic_assignments()
+
+    reason = prepare_folgenschnitt_for_export(session)
+
+    assert reason is None
+    assert session.folgenschnitt_edit_decisions
+    assert session.folgenschnitt_skip_reason is None
+
+
+def test_pipeline_wide_only_unchanged_short_activity(sample_config):
+    # HM 2-wide, short activity -> loosening is a no-op -> Stage-1 result.
+    session = _session(sample_config)
+    reason = prepare_folgenschnitt_for_export(session)
+    assert reason is None
+    assert session.folgenschnitt_edit_decisions
+    cams = {d.camera_path for d in session.folgenschnitt_edit_decisions}
+    assert cams <= {"/material/CAM_MATZE.mp4", "/material/CAM_GUEST.mp4"}

@@ -503,6 +503,41 @@ Backlog, kein offenes Feature mehr:
 - [ ] Competitor-Recherche (autocut.com, Resolve Scene-Cut, GitHub-Repos) —
   Inspiration, geparkt.
 
+### Gesundheits-Check-Backlog — abgegrenzt 2026-05-17 (KEIN Feature)
+
+Ergebnis eines **2-Pass-Reviews** (Carl + Claude, unabhängig
+durchgelaufen, dann verglichen). Strategische Konvergenz beider Pässe:
+*Stufe 2 über Alex landen, dann der V3-/Suite-Sprung* — das ist die
+Richtung, kein Grübelthema mehr. Folgende Punkte sind Carls tieferer
+Sicht entsprungen (wo ein einzelner Pass nicht gereicht hätte) und
+bewusst getrennter Backlog, kein offenes Feature:
+- [ ] **Threading-/Lebenszyklus-Härtung (höchste Bauchschmerz-Stelle):**
+  Qt/QMediaPlayer/LUTWorker/ScreenshotWorker/ExportWorker/AnalysisWorker
+  + Subprocess/ffmpeg-Lebenszyklen sind der historisch fragilste Teil
+  (`video_preview_peak.py`, Crash-Historie im Changelog). Vor V3 gezielt
+  durchgehen, nicht erst wenn's wieder kracht. Mit Carl.
+- [ ] **Internes Timeline-Modell statt XML-Strings:** Timeline lebt als
+  handgeschriebenes FCP7-XML. Langfristig: internes Timeline-Modell mit
+  mehreren Exportern (löst auch den Resolve-Relink-/FCPXML-Schmerz an
+  der Wurzel). Architektur-Vorarbeit, eigene Spec mit Carl.
+- [ ] **Projekt-/Session-Persistenz + Undo = V3-VORAUSSETZUNG**, nicht
+  „nice to have". Ohne das wird die Suite (mehrere Module, längerer
+  Flow) brüchig. Vor/with V3-Hub planen.
+- [ ] **Doku-Entrümpelung:** Specs teils noch in „Design/offen"-Sprache;
+  als Projektgedächtnis wird das zäh. Abgeschlossene Specs als solche
+  markieren/archivieren.
+- [ ] **Python-Version bewusst pinnen:** 3.11 ist Produktteil
+  (audioop/pydub-Deprecation = Frühsignal Richtung 3.13). Nicht
+  nebenbei hochstolpern; Version explizit festschreiben.
+- [ ] **Distributions-Gabel bewusst entscheiden** (Carl neutral, Claude:
+  aktuell bewusst „Max' Repo-App" = Wettbewerbsvorteil, nicht extern):
+  entweder bewusst so bleiben oder saubere Releases/Versionierung —
+  „dazwischen" tut irgendwann weh. Max-Strategieentscheidung, kein Tech-
+  Gate.
+
+Provenance: getrennte Health-Checks, hohe Übereinstimmung im Großbild;
+Carl tiefer bei (1)(2)(3). Genau wofür 4-Augen da ist.
+
 ### Quick Fixes (vor V3)
 - [x] ~~`extract_guest_name` aus exporters.py in eigenes Modul~~ — erledigt (v2.9.0, → `core/guest_name.py`)
 - [ ] Code Signing (Apple Developer Account) für Gatekeeper-freie Installation (geparkt — siehe Distribution)
@@ -588,6 +623,48 @@ Backlog, kein offenes Feature mehr:
 ---
 
 ## Changelog
+
+### v2.11.0-dev (2026-05-16, develop — NOCH NICHT auf main) — Folgenschnitt Stufe 2 / Track 1
+
+Deterministische Zeitlogik-Auflockerung als Schicht ÜBER Stufe 1
+(unverändert). 4-Augen mit Carl (Plan + Snap-Delta), Claude TDD-Bau,
+Max Entscheider. Spec: `docs/specs/2026-05-16-folgenschnitt-stufe2-track1-design.md`.
+
+- **Neues Modul** `src/core/folgenschnitt_loosening.py`: Base-Camera-Adapter
+  (weit>close>halbnah>totale → synthetisches `SHOT_WIDE` nur für den
+  unveränderten Stufe-1-Aufruf), Block-Segmentierung (grosse Minuten-
+  Blöcke, `first_block`→`target`→densify, harter `min_block`-Deckel),
+  Kamera-Rotation, periodische Establishing-Totale, Pausen-Snapping
+  (`build_pause_ranges` aus `speaker_activity`; Floor gewinnt IMMER,
+  sequenziell, Klemmen statt roh, leeres Fenster → Cut weg).
+- **Pluggbare Strategie** (`FolgenschnittLooseningStrategy` Protocol) —
+  Track 2 (KI-Regisseur) wird später eingesteckt, nicht nachgebaut.
+- Pipeline-Hook in `prepare_folgenschnitt_for_export`; `has_minimum`
+  generalisiert (jede Kamera-Kombi inkl. nur-Totale → valide XML).
+  Leitplanke + applied-Flag unverändert.
+- Stufe 1 bit-stabil (Sicherheitsnetz-Tests); HM-XML-Regressionswächter
+  grün. **Tests: 153 → 182.**
+- v1-Defaults bewusst PROVISORISCH (min_block_to_loosen 120s, first 110s,
+  target 90s, min_block 50s, totale 240s/25s). Carl-Schluss-Review
+  technisch grün. **Vor main-Merge offen (Max-Entscheidung): Alex-
+  Feedback + Premiere-EDL → v1-Zahlen justieren → neu verifizieren.**
+  Anders als Folgenschnitt NICHT auf Carl-OK allein mergebar (neues
+  Schnittverhalten, nicht regression-locked auf cutter-validierte Baseline).
+- **v1-Kalibrierung (2026-05-17, Carl-Ruling, Max-Go):** Schätz-Parser
+  `scripts/analyze_fcpxml.py` (Carl-Spec, NICHT autoritativ) liest messy
+  Premiere-FCPXML rückwärts. Confidence-Gate + **Plausibilitätsbremse**
+  (dominante Kamera ≥80%, längster Run ≥20×P75 oder ≥20min, <30 Runs bei
+  >60min → LOW). Auf Alex' Realfiles: Schirach HIGH/brauchbar, Hüther
+  LOW/verworfen (las Basis-Assembly, nicht den Schnitt). Aus Schirach
+  (P75 ~49s Halte-Decke) v1-Zahlen moderat gesenkt: min_block_to_loosen
+  120→90s, first 110→70s, target 90→55s, min_block 50→35s, totale_block
+  25→20s. **Neu-Verifikation an echter Folge erledigt** (Hartmut Rosa,
+  gecachte Analyse, `scripts/verify_folgenschnitt_recut.py`, OLD-Lauf
+  reproduziert bestehende XML exakt): max-Block 118s→89s, Blöcke >90s
+  26→0, Clips 325→347, Schnitte/Min 1,95→2,08 (Median 16,4→19,7 weil
+  Über-90s-Blöcke zu 35–55s-Blöcken zerlegt, nicht "alles kürzer").
+  **Offen vor main-Merge: Carl-Review des Ergebnisses + Max-Go.**
+  Tests 182 → 197.
 
 ### v2.10.0 (2026-05-16) — Generischer Zuordnungs-Schritt (Folgenschnitt produktiv)
 
@@ -898,4 +975,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-16 (v2.10.0 + Abnahme-Revisionen + Task 10 Politur — 153 Tests)*
+*Zuletzt aktualisiert: 2026-05-17 (v2.11.0-dev Stufe 2 / Track 1 + v1-Kalibrierung + Neu-Verifikation + Gesundheits-Check-Backlog auf develop — 197 Tests; main = v2.10.0)*
