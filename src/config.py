@@ -16,7 +16,23 @@ DEFAULTS = {
     "context_duration_ms": 15000,
     "fps": 25,
     "tts_voice": "Anna",
-    "lut_path": ""
+    "lut_path": "",
+    # Roadmap #3 — Smarte Clip-Grenzen (provisorisch, kalibrierbar).
+    # smart_boundary_enabled=False = Notbremse: Stufe A+B laufen nicht.
+    "smart_boundary_enabled": True,
+    "smart_boundary_transcription_start": "parallel_analysis",
+    "smart_boundary_transcript_wait_s": 10,
+    "smart_boundary_search_before_ms": 180000,
+    "smart_boundary_search_after_ms": 60000,
+    "smart_boundary_min_duration_ms": 12000,
+    "smart_boundary_max_duration_ms": 180000,
+    "smart_boundary_confidence_threshold": 0.5,
+    "smart_boundary_fallback_before_ms": 45000,
+    "smart_boundary_fallback_after_ms": 30000,
+    "smart_boundary_sentence_gap_ms": 900,
+    "smart_boundary_whisper_engine": "mlx-whisper",
+    "smart_boundary_whisper_model": "large-v3-turbo",
+    "smart_boundary_language": "de"
 }
 
 _config = None
