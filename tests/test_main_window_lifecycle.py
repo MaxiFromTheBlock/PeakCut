@@ -37,6 +37,7 @@ def _fake_self(worker):
     ns.review_page = types.SimpleNamespace(cleanup=lambda: None)
     ns._worker = worker
     ns._autosave = lambda: None  # HC-4: closeEvent autosaved jetzt (orthogonal)
+    ns._transcript_worker = None  # Roadmap #3: orthogonal (kein A/B-Mix)
     return ns
 
 
@@ -61,3 +62,20 @@ def test_close_event_no_process_attribute_access():
         MainWindow.closeEvent(_fake_self(worker), ev)
     assert worker.stop_called is True
     assert not hasattr(worker, "_process")
+
+
+def test_close_event_also_stops_transcript_worker():
+    # Roadmap #3: der entkoppelte TranscriptWorker (langer Job) muss
+    # beim Schliessen ebenfalls sauber abgebrochen werden (HC-2-Stil:
+    # request_stop + bounded wait), nie hängen/abreissen.
+    worker = _FakeWorker(running=False)
+    tw = _FakeWorker(running=True)
+    ev = types.SimpleNamespace(accepted=False,
+                               accept=lambda: setattr(ev, "accepted", True))
+    fs = _fake_self(worker)
+    fs._transcript_worker = tw
+    with patch("gui.main_window.stop_playback"):
+        MainWindow.closeEvent(fs, ev)
+    assert tw.stop_called is True
+    assert tw.wait_called_with == _WORKER_SHUTDOWN_WAIT_MS  # bounded
+    assert ev.accepted is True

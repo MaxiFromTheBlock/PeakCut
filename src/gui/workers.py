@@ -340,3 +340,207 @@ class ExportWorker(QThread):
             self.finished.emit(exported)
         except Exception as e:
             self.error.emit(str(e))
+
+
+_TRANSCRIPT_TIMEOUT_S = 1800  # 30 min Default (config-überschreibbar)
+
+
+class TranscriptWorker(QThread):
+    """Roadmap #3 Stufe A — Transkription früh & parallel zur Analyse.
+
+    Eigener entkoppelter Job. Schreibt das transcript.json-Sidecar über
+    den Gate-A-Besitz-Vertrag (transcript_archive); ruft NIE
+    save_project_archive (project.json-Referenz kommt erst durch
+    späteres Autosave). HC-2-Lebenszyklus: request_stop() ohne blindes
+    wait(). Kein Mix -> kontrollierter Skip. Echtes Whisper nur im
+    Child (transcription_process). Bewusst EIN Prozess-Pfad (kein
+    Popen-Zweig) — kleinere fragile Fläche als AnalysisWorker.
+    """
+    finished = pyqtSignal(dict)   # Referenzblock (oder {} bei Skip)
+    error = pyqtSignal(str)
+    progress = pyqtSignal(str)
+
+    def __init__(self, session, *,
+                 process_factory=multiprocessing.Process,
+                 queue_factory=multiprocessing.Queue,
+                 monotonic=time.monotonic,
+                 transcription_timeout_s=_TRANSCRIPT_TIMEOUT_S,
+                 progress_poll_s=0.2):
+        super().__init__()
+        self.session = session
+        self._process_factory = process_factory
+        self._queue_factory = queue_factory
+        self._monotonic = monotonic
+        self._timeout_s = transcription_timeout_s
+        self._progress_poll_s = progress_poll_s
+        self._process_lock = threading.Lock()
+        self._process = None
+        self._stop_requested = False
+        self._timed_out = False
+
+    # --- Lebenszyklus (HC-2-Stil, duck-typed) ---
+
+    def _set_process(self, proc):
+        with self._process_lock:
+            self._process = proc
+
+    def _clear_process(self, proc):
+        with self._process_lock:
+            if self._process is proc:
+                self._process = None
+
+    @staticmethod
+    def _is_process_running(proc):
+        if proc is None:
+            return False
+        if hasattr(proc, "is_alive"):
+            return proc.is_alive()
+        return proc.poll() is None
+
+    @staticmethod
+    def _wait_process(proc, timeout_s):
+        if proc is None:
+            return
+        if hasattr(proc, "join"):
+            proc.join(timeout=timeout_s)
+        elif hasattr(proc, "wait"):
+            try:
+                proc.wait(timeout=timeout_s)
+            except Exception:
+                pass
+
+    def _terminate_process(self, proc, grace_s=2.0):
+        if proc is None or not self._is_process_running(proc):
+            return
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+        self._wait_process(proc, grace_s)
+        if self._is_process_running(proc):
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            self._wait_process(proc, grace_s)
+
+    def _terminate_current_process(self):
+        with self._process_lock:
+            proc = self._process
+        self._terminate_process(proc)
+
+    def request_stop(self):
+        """Öffentliche Lifecycle-API: beendet den Child-Prozess (kein
+        blindes wait())."""
+        with self._process_lock:
+            self._stop_requested = True
+        self._terminate_current_process()
+
+    def _mark_timeout_and_terminate(self):
+        with self._process_lock:
+            self._timed_out = True
+        self._terminate_current_process()
+
+    # --- Run ---
+
+    def _cfg(self, key, default):
+        cfg = getattr(self.session, "config", None)
+        getter = getattr(cfg, "get", None)
+        if getter is None:
+            return default
+        val = getter(key, default)
+        return default if val is None else val
+
+    def run(self):
+        # Notbremse-Doppelsicherung (Start-Gate sitzt in MainWindow).
+        if not self._cfg("smart_boundary_enabled", True):
+            return
+        project = self.session.project
+        reference = project.get_reference_track()
+        if not reference:
+            self.progress.emit(
+                "Sinnabschnitte: kein Mix gefunden — übersprungen")
+            self.finished.emit({})
+            return
+
+        req = {
+            "audio_path": reference,
+            "engine": self._cfg("smart_boundary_whisper_engine",
+                                 "mlx-whisper"),
+            "model": self._cfg("smart_boundary_whisper_model",
+                                "large-v3-turbo"),
+            "language": self._cfg("smart_boundary_language", "de"),
+        }
+
+        from core.transcription_process import _transcribe_worker_target
+
+        result_queue = self._queue_factory()
+        progress_queue = self._queue_factory()
+        proc = self._process_factory(
+            target=_transcribe_worker_target,
+            args=(req, result_queue, progress_queue))
+        proc.start()
+        self._set_process(proc)
+
+        deadline = self._monotonic() + self._timeout_s
+        while self._is_process_running(proc):
+            try:
+                self.progress.emit(progress_queue.get(
+                    timeout=self._progress_poll_s))
+            except queue.Empty:
+                pass
+            if self._monotonic() >= deadline:
+                self._mark_timeout_and_terminate()
+                self._clear_process(proc)
+                self.progress.emit(
+                    "Sinnabschnitte: Transkription Timeout — übersprungen")
+                return
+
+        while not progress_queue.empty():
+            try:
+                self.progress.emit(progress_queue.get_nowait())
+            except queue.Empty:
+                break
+
+        self._wait_process(proc, 0)
+        self._clear_process(proc)
+
+        if self._stop_requested:
+            return  # bewusst still beendet
+        exitcode = getattr(proc, "exitcode", 0)
+        if exitcode not in (0, None) and exitcode is not None:
+            self.progress.emit(
+                "Sinnabschnitte: Transkription fehlgeschlagen — übersprungen")
+            return
+
+        try:
+            result = result_queue.get(timeout=5)
+        except queue.Empty:
+            self.progress.emit(
+                "Sinnabschnitte: kein Transkript erhalten — übersprungen")
+            return
+
+        if not isinstance(result, dict) or result.get("error"):
+            self.progress.emit(
+                "Sinnabschnitte: Transkription fehlgeschlagen — übersprungen")
+            return
+
+        from core.transcription import Transcript
+        from core.transcript_archive import write_transcript_sidecar
+        try:
+            transcript = Transcript.from_dict(result["transcript"])
+            ref = write_transcript_sidecar(
+                project, transcript, engine=req["engine"],
+                model=req["model"], language=req["language"],
+                audio_path=reference)
+        except Exception as e:
+            self.progress.emit(
+                f"Sinnabschnitte: Transkript nicht verwertbar — {e}")
+            return
+
+        # Besitz-Vertrag: NUR Sidecar + Session, KEIN save_project_archive
+        # (project.json-Referenz kommt erst durch späteres Autosave).
+        self.session.transcript = transcript
+        self.session.transcript_ref = ref
+        self.session.transcript_error = None
+        self.finished.emit(ref)

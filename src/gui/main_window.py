@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 
 from .apple_style import COLORS, get_stylesheet
-from .workers import AnalysisWorker
+from .workers import AnalysisWorker, TranscriptWorker
 from .assignment_page import AssignmentPage
 from .review_page import ReviewPage
 
@@ -46,6 +46,7 @@ class MainWindow(QMainWindow):
 
         self.session = None
         self._worker = None
+        self._transcript_worker = None  # Roadmap #3 Stufe A (entkoppelt)
 
         # CLI arguments from CheckIn
         self._cli_guest = cli_guest
@@ -237,6 +238,17 @@ class MainWindow(QMainWindow):
         self._worker.progress.connect(self._on_analysis_progress)
         self._worker.start()
 
+        # Roadmap #3 Stufe A: Transkription früh & parallel anstoßen —
+        # NACH AnalysisWorker.start(), eigener entkoppelter Job,
+        # bremst den Analyse-/Keyboardstellen-Weg nie. Notbremse:
+        # smart_boundary_enabled=False -> läuft gar nicht. Kein Mix ->
+        # Worker skippt selbst kontrolliert.
+        if config.get("smart_boundary_enabled"):
+            self._transcript_worker = TranscriptWorker(self.session)
+            self._transcript_worker.progress.connect(
+                self._on_analysis_progress)
+            self._transcript_worker.start()
+
     def _load_from_archive(self, archive) -> bool:
         """HC-4: Projektakte laden, Analyse überspringen. Bei Fehler
         kontrollierter Hinweis + Rückfall auf den normalen Flow (False)."""
@@ -348,6 +360,14 @@ class MainWindow(QMainWindow):
             self._worker.request_stop()
             if self._worker.isRunning():
                 self._worker.wait(_WORKER_SHUTDOWN_WAIT_MS)
+
+        if self._transcript_worker:
+            # Roadmap #3: langer Job — sauber abbrechbar (HC-2-Stil),
+            # kein blindes wait(). App-Schließen weder hängen noch
+            # unkontrolliert abreißen.
+            self._transcript_worker.request_stop()
+            if self._transcript_worker.isRunning():
+                self._transcript_worker.wait(_WORKER_SHUTDOWN_WAIT_MS)
 
         stop_playback()
         event.accept()
