@@ -45,20 +45,24 @@ def build_transcript_ref(project, *, engine, model, language, audio_path):
     }
 
 
-def write_transcript_sidecar(project, transcript, *, engine, model,
-                             language, audio_path):
-    """Früh vom Worker aufgerufen. Legt .peakcut/ selbst an, schreibt
-    transcript.json atomar, gibt den Referenzblock zurück (den der
-    Worker auf session.transcript_ref legt — persistiert wird er erst
-    später durch save_project_archive)."""
-    root = transcript_root(project)
-    archive_dir = os.path.join(root, ARCHIVE_DIR)
-    os.makedirs(archive_dir, exist_ok=True)
-    path = os.path.join(archive_dir, TRANSCRIPT_NAME)
+def write_transcript_json(path, transcript):
+    """Low-level atomarer Schreiber (tmp + os.replace). Legt den
+    Zielordner selbst an. Wird vom Child-Teil des Workers benutzt
+    (P1: nicht das volle Transcript durch die Queue schieben)."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(transcript.to_dict(), f, ensure_ascii=False)
     os.replace(tmp, path)
+
+
+def write_transcript_sidecar(project, transcript, *, engine, model,
+                             language, audio_path):
+    """Parent-seitiger High-Level-Helfer (Gate-A-Tests / Nicht-Prozess).
+    Legt .peakcut/ an, schreibt transcript.json atomar, gibt den
+    Referenzblock zurück (Persistenz in project.json erst später durch
+    save_project_archive — Besitz-Vertrag)."""
+    write_transcript_json(transcript_sidecar_path(project), transcript)
     return build_transcript_ref(project, engine=engine, model=model,
                                 language=language, audio_path=audio_path)
 

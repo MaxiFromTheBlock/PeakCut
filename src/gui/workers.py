@@ -343,6 +343,9 @@ class ExportWorker(QThread):
 
 
 _TRANSCRIPT_TIMEOUT_S = 1800  # 30 min Default (config-überschreibbar)
+# P2 (Carl): expliziter spawn-Context — eine Lebenszyklus-Linie, aber
+# KEIN versehentlicher Fork (PyQt/macOS-Historie).
+_TRANSCRIPT_MP_CONTEXT = multiprocessing.get_context("spawn")
 
 
 class TranscriptWorker(QThread):
@@ -361,8 +364,8 @@ class TranscriptWorker(QThread):
     progress = pyqtSignal(str)
 
     def __init__(self, session, *,
-                 process_factory=multiprocessing.Process,
-                 queue_factory=multiprocessing.Queue,
+                 process_factory=_TRANSCRIPT_MP_CONTEXT.Process,
+                 queue_factory=_TRANSCRIPT_MP_CONTEXT.Queue,
                  monotonic=time.monotonic,
                  transcription_timeout_s=_TRANSCRIPT_TIMEOUT_S,
                  progress_poll_s=0.2):
@@ -463,13 +466,25 @@ class TranscriptWorker(QThread):
             self.finished.emit({})
             return
 
+        engine = self._cfg("smart_boundary_whisper_engine", "mlx-whisper")
+        model = self._cfg("smart_boundary_whisper_model", "large-v3-turbo")
+        language = self._cfg("smart_boundary_language", "de")
+
+        # Parent löst Root/Pfad + Referenzblock auf (kein project-
+        # Pickling ins Child); das Child schreibt das Sidecar selbst
+        # (P1: nicht das volle Transcript durch die Queue).
+        from core.transcript_archive import (
+            transcript_sidecar_path, build_transcript_ref)
+        ref = build_transcript_ref(
+            project, engine=engine, model=model, language=language,
+            audio_path=reference)
         req = {
             "audio_path": reference,
-            "engine": self._cfg("smart_boundary_whisper_engine",
-                                 "mlx-whisper"),
-            "model": self._cfg("smart_boundary_whisper_model",
-                                "large-v3-turbo"),
-            "language": self._cfg("smart_boundary_language", "de"),
+            "engine": engine,
+            "model": model,
+            "language": language,
+            "sidecar_path": transcript_sidecar_path(project),
+            "transcript_ref": ref,
         }
 
         from core.transcription_process import _transcribe_worker_target
@@ -520,27 +535,18 @@ class TranscriptWorker(QThread):
                 "Sinnabschnitte: kein Transkript erhalten — übersprungen")
             return
 
-        if not isinstance(result, dict) or result.get("error"):
+        if not isinstance(result, dict) or result.get("error") or \
+                "ref" not in result:
             self.progress.emit(
                 "Sinnabschnitte: Transkription fehlgeschlagen — übersprungen")
             return
 
-        from core.transcription import Transcript
-        from core.transcript_archive import write_transcript_sidecar
-        try:
-            transcript = Transcript.from_dict(result["transcript"])
-            ref = write_transcript_sidecar(
-                project, transcript, engine=req["engine"],
-                model=req["model"], language=req["language"],
-                audio_path=reference)
-        except Exception as e:
-            self.progress.emit(
-                f"Sinnabschnitte: Transkript nicht verwertbar — {e}")
-            return
-
-        # Besitz-Vertrag: NUR Sidecar + Session, KEIN save_project_archive
-        # (project.json-Referenz kommt erst durch späteres Autosave).
-        self.session.transcript = transcript
-        self.session.transcript_ref = ref
+        # Child hat das Sidecar schon geschrieben und gibt nur den
+        # kleinen Referenzblock zurück. Besitz-Vertrag: KEIN
+        # save_project_archive (project.json-Referenz erst durch
+        # späteres Autosave). transcript bleibt None — Stufe B liest
+        # laut Spec ohnehin nur das gespeicherte Sidecar.
+        self.session.transcript = None
+        self.session.transcript_ref = result["ref"]
         self.session.transcript_error = None
-        self.finished.emit(ref)
+        self.finished.emit(result["ref"])

@@ -6,7 +6,21 @@ dieses Target nicht aufruft).
 """
 
 import json
+import os
 import sys
+
+
+def _apply_low_priority():
+    """P1b: Whisper niedrigste Priorität (best-effort, nie den Job
+    scheitern lassen). Ohne das misst das spätere Mess-Gate nicht die
+    geplante Architektur."""
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    os.environ.setdefault("VECLIB_MAXIMUM_THREADS", "1")
+    try:
+        os.nice(10)
+    except (OSError, AttributeError):
+        pass
 
 
 def _build_engine(req):
@@ -53,17 +67,39 @@ def run_transcription(req, engine=None):
         return {"error": str(e)}
 
 
-def _transcribe_worker_target(req, result_queue, progress_queue):
-    """Top-level für multiprocessing.Process (Pickling)."""
+def _emit_into_sidecar(req, engine=None):
+    """P1a: Child schreibt transcript.json SELBST und gibt nur einen
+    kleinen Ref/Status zurück — nicht das volle Word-Transcript durch
+    die Queue (Speicher-Doppelung / Pipe-Hang vermieden). Bleibt
+    Worker-Besitz, nur eben im Child-Teil des Workers."""
+    out = run_transcription(req, engine=engine)
+    if "error" in out:
+        return {"error": out["error"]}
+    from core.transcription import Transcript
+    from core.transcript_archive import write_transcript_json
     try:
-        result_queue.put(run_transcription(req))
+        write_transcript_json(req["sidecar_path"],
+                              Transcript.from_dict(out["transcript"]))
+    except Exception as e:  # noqa: BLE001
+        return {"error": f"Sidecar-Write fehlgeschlagen: {e}"}
+    return {"ref": req["transcript_ref"]}
+
+
+def _transcribe_worker_target(req, result_queue, progress_queue):
+    """Top-level für (spawn) multiprocessing.Process (Pickling).
+    Setzt Priorität, transkribiert, schreibt Sidecar, gibt kleinen
+    Ref/Status zurück."""
+    _apply_low_priority()
+    try:
+        result_queue.put(_emit_into_sidecar(req))
     except Exception as e:  # noqa: BLE001
         result_queue.put({"error": str(e)})
 
 
 def main():
+    _apply_low_priority()
     req = json.loads(sys.argv[1])
-    print(json.dumps(run_transcription(req)))
+    print(json.dumps(_emit_into_sidecar(req)))
 
 
 if __name__ == "__main__":
