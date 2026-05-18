@@ -773,6 +773,24 @@ Produkt):**
 
 ## Changelog
 
+### Roadmap #2 — ClipCandidate + Rückweg (auf main gelandet 2026-05-18, Merge d8d9e33)
+
+Erstes Produktobjekt im `.peakcut`-Gedächtnis. `core/clip_candidates.py`:
+`ClipBoundary`/`ClipCandidate`/`PeakDecision` (frozen, roundtrip-exakt),
+Statusmaschine `proposed→selected→produced→published→discarded`
+(published terminal v1), `PeakDecision` selbst-validierend.
+Bootstrap je Peak in `load_analysis_results` (ignoriert→discarded);
+`ignore_peak` koppelt via `Peak.index` → discarded + `PeakDecision`
+(source=ignore_peak), idempotent. `.peakcut` Schema **v2** additiv
+(`clip_candidates`/`peak_decisions` optionale Sektionen, v1+v2
+tolerant, v1-Akte bootstrappt; kaputte v2 → `ProjectArchiveError`,
+HC-4-Robustheit erhalten). Keyboardstellen-XML byte-identisch
+(Metadaten, kein Export-Einfluss). Erster echter Rückkanal über das
+bestehende Ignorieren (kein neuer GUI-Code). Carl-Plan + Schluss-
+Review grün (Gate-A-P2 + Schluss-P2), Gate-F-App-Smoke an echtem
+HR-Material bestanden. 243 → 261 Tests. Nächster Roadmap-Schritt:
+#3 smarte/KI-Clip-Grenzen.
+
 ### HC-4 — .peakcut-Projektakte (auf main gelandet 2026-05-18, Merge 317a576)
 
 PeakCut bekommt Gedächtnis: Lauf speichern + wieder laden statt erneut
@@ -1186,4 +1204,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-18 (HC-4 .peakcut-Projektakte auf main gelandet, Merge 317a576 — 243 grün, Carl-grün inkl. P1-Fix, Max-App-Smoke bestanden; develop = main)*
+*Zuletzt aktualisiert: 2026-05-18 (Roadmap #2 ClipCandidate + Rückweg auf main gelandet, Merge d8d9e33 — 261 grün, Carl-grün inkl. 2× P2-Fix, Gate-F-App-Smoke an echtem HR-Material bestanden; develop = main)*

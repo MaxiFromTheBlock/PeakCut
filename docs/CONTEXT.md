@@ -10,7 +10,7 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 ## Tech-Stack
 
 - Python 3.11 + PyQt6
-- 240 Tests, CI via GitHub Action (libegl1/libgl1-Fix — CI war seit Tagen rot)
+- 261 Tests, CI via GitHub Action (libegl1/libgl1-Fix — CI war seit Tagen rot)
 - Distribution: Launcher-App in /Applications, ruft Repo-Code direkt auf
   (PyInstaller-Bundle-Strategie geparkt — siehe Distribution-Sektion in CLAUDE.md)
 
