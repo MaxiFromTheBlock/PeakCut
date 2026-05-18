@@ -92,6 +92,17 @@ class PeakDecision:
     decided_at: str
     source: str = "manual"
 
+    def __post_init__(self):
+        # Log-Contract selbst-konsistent: Task 3 lädt dieses Log aus
+        # project.json — eine geladene Decision muss legal sein.
+        for s in (self.from_status, self.to_status):
+            if s not in _ALL_STATUS:
+                raise ClipCandidateError(f"Unbekannter Status: {s!r}")
+        if self.to_status not in _ALLOWED.get(self.from_status, set()):
+            raise ClipCandidateError(
+                f"Illegaler Übergang im Log: "
+                f"{self.from_status} -> {self.to_status}")
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "peak_id": self.peak_id,

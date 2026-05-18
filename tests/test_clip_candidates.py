@@ -55,6 +55,26 @@ def test_roundtrip_all_models():
     assert PeakDecision.from_dict(d.to_dict()) == d
 
 
+def test_peak_decision_validates_contract():
+    # legaler Roundtrip bleibt grün
+    d = PeakDecision(7, PROPOSED, SELECTED, "2026-05-18T10:00:00")
+    assert PeakDecision.from_dict(d.to_dict()) == d
+    # unbekannter Status (auch via from_dict) -> Fehler
+    for bad in ({"peak_id": 1, "from_status": "bogus", "to_status": SELECTED,
+                 "decided_at": "t", "source": "manual"},):
+        try:
+            PeakDecision.from_dict(bad)
+            assert False, "unbekannter Status muss abgelehnt werden"
+        except ClipCandidateError:
+            pass
+    # illegaler Übergang im Log -> Fehler
+    try:
+        PeakDecision(1, PROPOSED, PRODUCED, "t")
+        assert False, "proposed->produced muss abgelehnt werden"
+    except ClipCandidateError:
+        pass
+
+
 def test_legal_transition_new_instance_and_decision():
     c = _cand(PROPOSED)
     new, dec = transition(c, SELECTED, now="2026-05-18T12:00:00")
