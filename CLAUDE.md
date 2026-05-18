@@ -773,6 +773,22 @@ Produkt):**
 
 ## Changelog
 
+### HC-4 — .peakcut-Projektakte (auf main gelandet 2026-05-18, Merge 317a576)
+
+PeakCut bekommt Gedächtnis: Lauf speichern + wieder laden statt erneut
+analysieren. `core/project_archive.py` über bestehenden
+`load_analysis_results`-Vertrag; relative Pfade (verschiebbar, inkl.
+aller Assignment-Listen — Carl-P1-Fix); Peak-Round-Trip exakt;
+speaker_activity per CSV-Referenz; Keyboardstellen-XML byte-identisch
+nach Save/Load. Minimale GUI-Einhängung (Akte gefunden → Analyse
+überspringen; guarded Autosave nach Analyse/Zuordnung/Ignorieren/
+Schließen). Ohne `.peakcut` unverändertes Verhalten. Carl-Plan +
+Schluss-Review grün (P1 nachgezogen), Max-App-Smoke an echtem
+HR-Material bestanden. 221 → 243 Tests. UX-Punkte (Zuordnung-Edit/
+Archiv-Reset/Ignoriert sichtbar) bewusst Hub-Schritt (Roadmap), nicht
+HC-4. Damit ist der Roadmap-Schlussstein (das Produktions-Gedächtnis)
+gelegt.
+
 ### HC-3 (auf main gelandet 2026-05-18, Merge 7c1bd8e)
 
 Sync liest im schnellen Pfad nur das 10-Min-Fenster statt der vollen
@@ -1170,4 +1186,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-18 (HC-4 .peakcut-Projektakte komplett auf develop, Gates A–G, 240 grün, Keyboardstellen-XML byte-identisch nach Save/Load; main = HC-3-Stand 7c1bd8e)*
+*Zuletzt aktualisiert: 2026-05-18 (HC-4 .peakcut-Projektakte auf main gelandet, Merge 317a576 — 243 grün, Carl-grün inkl. P1-Fix, Max-App-Smoke bestanden; develop = main)*

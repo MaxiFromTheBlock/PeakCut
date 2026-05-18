@@ -60,6 +60,8 @@ class PeakCutSession:
         self.speaker_activity_mic_assignments = []
         self.folgenschnitt_mic_assignments = []
         self.folgenschnitt_camera_assignments = []
+        self.clip_candidates = []   # Roadmap #2: ClipCandidate je Peak
+        self.peak_decisions = []    # Roadmap #2: redaktioneller Rückkanal
         self.folgenschnitt_skip_reason: str | None = None
         # True once the user has gone through the assignment step. Then a
         # deliberately empty assignment must NOT silently fall back to
@@ -104,10 +106,51 @@ class PeakCutSession:
         self.mode = "mic" if self.mode == "keyboard" else "keyboard"
         self.play_current()
 
+    def _bootstrap_clip_candidates(self):
+        """Roadmap #2: pro Peak ein ClipCandidate (nicht ignoriert ->
+        proposed, ignoriert -> discarded). Kein Decision (kein echter
+        redaktioneller Akt mit Timestamp). Boundary defensiv (>start)."""
+        from .clip_candidates import ClipBoundary, ClipCandidate, \
+            PROPOSED, DISCARDED
+        cands = []
+        for pk in self.peaks:
+            lo, hi = pk.in_point_ms, pk.out_point_ms
+            if hi <= lo:                       # defensiv (Clamp-Edge)
+                hi = lo + 1
+            cands.append(ClipCandidate(
+                peak_id=pk.index,
+                boundary=ClipBoundary(lo, hi),
+                status=DISCARDED if pk.ignored else PROPOSED))
+        self.clip_candidates = cands
+        self.peak_decisions = []
+
     def ignore_peak(self):
         """Mark current peak as ignored."""
-        if 0 <= self.current_peak < len(self.peaks):
-            self.peaks[self.current_peak].ignored = True
+        if not (0 <= self.current_peak < len(self.peaks)):
+            return
+        peak = self.peaks[self.current_peak]
+        peak.ignored = True
+        # Roadmap #2: Rückkanal — Candidate (via peak_id == Peak.index,
+        # NICHT Listenposition) auf discarded, Decision anhängen.
+        # Idempotent (transition no-op bei gleichem Status). Defensiv:
+        # ist der Candidate published (terminal), bleibt er historisch
+        # published — der Peak wird trotzdem ignoriert (wie bisher).
+        from datetime import datetime
+        from .clip_candidates import transition, DISCARDED, \
+            ClipCandidateError
+        for i, c in enumerate(self.clip_candidates):
+            if c.peak_id != peak.index:
+                continue
+            try:
+                new, dec = transition(
+                    c, DISCARDED, now=datetime.now().isoformat(),
+                    source="ignore_peak")
+            except ClipCandidateError:
+                break  # z.B. published -> bewusst nichts ändern
+            if dec is not None:
+                self.clip_candidates[i] = new
+                self.peak_decisions.append(dec)
+            break
 
     def set_current_peak(self, index):
         """Set current peak index (bounds-checked)."""
@@ -157,6 +200,11 @@ class PeakCutSession:
             if p.get("ignored"):
                 peak.ignored = True
             self.peaks.append(peak)
+
+        # Roadmap #2: Candidates aus Peaks bootstrappen (kein Decision —
+        # keine echte redaktionelle Aktion mit Timestamp). Ein späterer
+        # Archiv-Load (Projektakte v2) überschreibt das ggf. wieder.
+        self._bootstrap_clip_candidates()
 
         from .folgenschnitt_models import (
             ActivityFrame,

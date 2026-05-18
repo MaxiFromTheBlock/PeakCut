@@ -10,7 +10,7 @@ import json
 import os
 import shutil
 
-CURRENT_SCHEMA_VERSION = 1
+CURRENT_SCHEMA_VERSION = 2  # v2: + clip_candidates/peak_decisions (additiv)
 ARCHIVE_DIR = ".peakcut"
 ARCHIVE_FILE = "project.json"
 _CSV_NAME = "speaker_activity.csv"
@@ -159,6 +159,11 @@ def build_archive_payload(session, material_root, speaker_activity_csv_ref=None)
                 _to_dict_list(getattr(
                     session, "folgenschnitt_camera_assignments", [])), _rel_p),
         },
+        # v2 additiv (Roadmap #2): keine Pfade -> keine Relativierung.
+        "clip_candidates": _to_dict_list(
+            getattr(session, "clip_candidates", [])),
+        "peak_decisions": _to_dict_list(
+            getattr(session, "peak_decisions", [])),
     }
 
 
@@ -178,6 +183,10 @@ def parse_archive_payload(payload, fallback_config):
         "project": dict(payload["project"]),
         "analysis_results": dict(payload["analysis_results"]),
         "assignments": dict(payload["assignments"]),
+        # v2 additiv: None = Sektion fehlt (v1-Akte -> bootstrappen);
+        # Liste = exakt laden (auch leere).
+        "clip_candidates": payload.get("clip_candidates"),
+        "peak_decisions": payload.get("peak_decisions"),
     }
 
 
@@ -208,6 +217,13 @@ def save_project_archive(session, root=None):
         from .speaker_activity import write_speaker_activity_csv
         write_speaker_activity_csv(list(session.speaker_activity), dst_csv)
         csv_ref = _CSV_REF
+
+    # v2: sicherstellen, dass Candidates existieren (Carl: falls nicht
+    # und Peaks da -> bootstrap), bevor das Payload gebaut wird.
+    if (not getattr(session, "clip_candidates", None)
+            and getattr(session, "peaks", None)
+            and hasattr(session, "_bootstrap_clip_candidates")):
+        session._bootstrap_clip_candidates()
 
     payload = build_archive_payload(session, root, csv_ref)
     archive_path = os.path.join(archive_dir, ARCHIVE_FILE)
@@ -305,4 +321,26 @@ def load_project_archive(archive_path_or_root, fallback_config):
         CameraAssignment.from_dict(d)
         for d in _map_assignment_paths(
             asg.get("folgenschnitt_camera_assignments", []), _abs_p)]
+
+    # v2: clip_candidates/peak_decisions — fehlt (v1-Akte/None) ->
+    # load_analysis_results hat schon aus Peaks gebootstrappt, bleibt.
+    # Vorhanden (auch leere Liste) -> exakt aus JSON laden.
+    cc = parsed.get("clip_candidates")
+    pd = parsed.get("peak_decisions")
+    # P2 (Carl): semantisch kaputte v2-Daten (unbekannter Status /
+    # illegaler Übergang) werfen ClipCandidateError — als
+    # ProjectArchiveError wrappen, damit die HC-4-Robustheit greift
+    # (kaputte Akte -> kontrollierter Hinweis + Normalflow, kein Crash).
+    from .clip_candidates import (
+        ClipCandidate, PeakDecision, ClipCandidateError)
+    try:
+        if cc is not None:
+            session.clip_candidates = [
+                ClipCandidate.from_dict(d) for d in cc]
+        if pd is not None:
+            session.peak_decisions = [
+                PeakDecision.from_dict(d) for d in pd]
+    except (ClipCandidateError, KeyError, TypeError, ValueError) as e:
+        raise ProjectArchiveError(
+            f"ClipCandidate-Daten unlesbar: {e}") from e
     return session
