@@ -42,7 +42,7 @@ class _FakeSession:
 
 
 def test_constants_are_frozen():
-    assert CURRENT_SCHEMA_VERSION == 1
+    assert CURRENT_SCHEMA_VERSION == 2  # v2: + clip_candidates/peak_decisions
     assert ARCHIVE_DIR == ".peakcut"
     assert ARCHIVE_FILE == "project.json"
 
@@ -318,3 +318,50 @@ def test_folgenschnitt_roundtrip_new_root_after_move(tmp_path):
     assert paths
     assert all(p.startswith(str(moved)) for p in paths), paths
     assert not any((str(tmp_path / "Mat") + os.sep) in p for p in paths), paths
+
+
+# --- Task 3: .peakcut Schema v2 additiv ---
+
+from core.clip_candidates import PROPOSED, DISCARDED, SELECTED
+
+
+def test_schema_is_v2_and_archive_has_both_sections(tmp_path):
+    s, *_ = _session(tmp_path, "Mat")
+    path = save_project_archive(s)
+    data = _json.loads(open(path).read())
+    assert data["schema_version"] == 2
+    assert "clip_candidates" in data and "peak_decisions" in data
+    assert len(data["clip_candidates"]) == len(s.peaks)  # bootstrap je Peak
+
+
+def test_v1_archive_without_sections_loads_and_bootstraps(tmp_path):
+    s, *_ = _session(tmp_path, "Mat")
+    path = save_project_archive(s)
+    data = _json.loads(open(path).read())
+    # v1 simulieren: Sektionen entfernen + Schema 1
+    data["schema_version"] = 1
+    del data["clip_candidates"]
+    del data["peak_decisions"]
+    open(path, "w").write(_json.dumps(data))
+    L = load_project_archive(str(tmp_path / "Mat"), dict(_CFG))
+    assert len(L.clip_candidates) == len(L.peaks)  # aus Peaks gebootstrappt
+    assert L.peak_decisions == []
+
+
+def test_v2_clip_candidates_decisions_roundtrip_bitexact(tmp_path):
+    s, *_ = _session(tmp_path, "Mat")
+    save_project_archive(s)  # bootstrappt Candidates
+    L1 = load_project_archive(str(tmp_path / "Mat"), dict(_CFG))
+    # einen Status legal ändern + erneut speichern/laden
+    from core.clip_candidates import transition
+    c0 = L1.clip_candidates[0]
+    new, dec = transition(c0, SELECTED, now="2026-05-18T10:00:00")
+    L1.clip_candidates[0] = new
+    L1.peak_decisions.append(dec)
+    save_project_archive(L1)
+    L2 = load_project_archive(str(tmp_path / "Mat"), dict(_CFG))
+    assert [c.to_dict() for c in L2.clip_candidates] == \
+        [c.to_dict() for c in L1.clip_candidates]
+    assert [d.to_dict() for d in L2.peak_decisions] == \
+        [d.to_dict() for d in L1.peak_decisions]
+    assert L2.clip_candidates[0].status == SELECTED

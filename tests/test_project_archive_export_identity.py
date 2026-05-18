@@ -70,3 +70,21 @@ def test_keyboardstellen_xml_byte_identical_after_save_load(tmp_path):
     assert before == after, (
         "Keyboardstellen-XML nach Save/Load NICHT byte-identisch — "
         "Reload verändert den Export")
+
+
+def test_clip_candidates_do_not_affect_keyboardstellen_xml(tmp_path):
+    """Task 4 / Gate E: ClipCandidate ist Metadaten — Save/Load mit
+    Candidates+Decisions darf den Keyboardstellen-Export NICHT ändern."""
+    from core.clip_candidates import transition, SELECTED
+    s, mat_root = _orig_session(tmp_path)
+    before = _export_xml_bytes(s, tmp_path / "exp_orig")
+    save_project_archive(s)
+    loaded = load_project_archive(str(mat_root), dict(_CFG))
+    # Candidates mutieren + Decision -> erneut speichern/laden
+    loaded.clip_candidates[0], dec = transition(
+        loaded.clip_candidates[0], SELECTED, now="2026-05-18T10:00:00")
+    loaded.peak_decisions.append(dec)
+    save_project_archive(loaded)
+    reloaded = load_project_archive(str(mat_root), dict(_CFG))
+    after = _export_xml_bytes(reloaded, tmp_path / "exp_loaded")
+    assert before == after, "ClipCandidate-Metadaten verändern den Export!"
