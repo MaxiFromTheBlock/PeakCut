@@ -174,3 +174,28 @@ def test_corrupt_transcript_does_not_crash_load(tmp_path):
 def test_read_sidecar_tolerant_returns_none(tmp_path):
     assert read_transcript_sidecar(str(tmp_path), None) is None
     assert read_transcript_sidecar(str(tmp_path), {"path": "x/none.json"}) is None
+
+
+# Task 3 — session.transcript* formalisiert (kein Ad-hoc-Attribut mehr)
+
+def test_fresh_session_has_transcript_state_defaults(tmp_path):
+    s = _session(tmp_path)
+    assert s.transcript is None
+    assert s.transcript_ref is None
+    assert s.transcript_error is None
+
+
+def test_transcript_ref_roundtrips_through_archive_at_session_level(tmp_path):
+    s = _session(tmp_path)
+    ref = write_transcript_sidecar(
+        s.project, Transcript(segments=(TranscriptSegment(0, 900, "x"),)),
+        engine="mlx-whisper", model="m", language="de",
+        audio_path=s.project.mic_tracks[0])
+    s.transcript_ref = ref
+    save_project_archive(s)
+    loaded = load_project_archive(
+        material_root(_media_paths(s.project), s.project.keyboard_track),
+        dict(_CFG))
+    assert loaded.transcript_ref == ref
+    assert loaded.transcript is not None      # Sidecar wieder gelesen
+    assert loaded.transcript_error is None

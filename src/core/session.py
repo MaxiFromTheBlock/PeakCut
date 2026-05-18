@@ -62,6 +62,13 @@ class PeakCutSession:
         self.folgenschnitt_camera_assignments = []
         self.clip_candidates = []   # Roadmap #2: ClipCandidate je Peak
         self.peak_decisions = []    # Roadmap #2: redaktioneller Rückkanal
+        # Roadmap #3 Stufe A: Transkript-Zustand formalisiert (nicht
+        # mehr ad-hoc). transcript bleibt None — Stufe B liest das
+        # gespeicherte Sidecar; ref = Referenzblock; error = Hinweis
+        # wenn Sidecar fehlt/kaputt (Smart dann nicht verfügbar).
+        self.transcript = None
+        self.transcript_ref = None
+        self.transcript_error: str | None = None
         self.folgenschnitt_skip_reason: str | None = None
         # True once the user has gone through the assignment step. Then a
         # deliberately empty assignment must NOT silently fall back to
