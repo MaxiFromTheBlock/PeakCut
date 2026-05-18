@@ -365,3 +365,22 @@ def test_v2_clip_candidates_decisions_roundtrip_bitexact(tmp_path):
     assert [d.to_dict() for d in L2.peak_decisions] == \
         [d.to_dict() for d in L1.peak_decisions]
     assert L2.clip_candidates[0].status == SELECTED
+
+
+def test_corrupt_v2_candidate_raises_projectarchiveerror(tmp_path):
+    """Carl P2: semantisch kaputte v2-Akte -> ProjectArchiveError
+    (nicht ClipCandidateError), damit main_window kontrolliert
+    abfängt statt zu crashen."""
+    from core.clip_candidates import ClipCandidateError
+    s, *_ = _session(tmp_path, "Mat")
+    path = save_project_archive(s)
+    data = _json.loads(open(path).read())
+    data["clip_candidates"][0]["status"] = "future_status"  # ungültig
+    open(path, "w").write(_json.dumps(data))
+    try:
+        load_project_archive(str(tmp_path / "Mat"), dict(_CFG))
+        assert False, "sollte ProjectArchiveError werfen"
+    except ProjectArchiveError as e:
+        assert "ClipCandidate-Daten unlesbar" in str(e)
+    except ClipCandidateError:
+        assert False, "ClipCandidateError darf NICHT roh rausfliegen"

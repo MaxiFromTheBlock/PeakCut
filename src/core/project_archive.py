@@ -327,10 +327,20 @@ def load_project_archive(archive_path_or_root, fallback_config):
     # Vorhanden (auch leere Liste) -> exakt aus JSON laden.
     cc = parsed.get("clip_candidates")
     pd = parsed.get("peak_decisions")
-    if cc is not None:
-        from .clip_candidates import ClipCandidate
-        session.clip_candidates = [ClipCandidate.from_dict(d) for d in cc]
-    if pd is not None:
-        from .clip_candidates import PeakDecision
-        session.peak_decisions = [PeakDecision.from_dict(d) for d in pd]
+    # P2 (Carl): semantisch kaputte v2-Daten (unbekannter Status /
+    # illegaler Übergang) werfen ClipCandidateError — als
+    # ProjectArchiveError wrappen, damit die HC-4-Robustheit greift
+    # (kaputte Akte -> kontrollierter Hinweis + Normalflow, kein Crash).
+    from .clip_candidates import (
+        ClipCandidate, PeakDecision, ClipCandidateError)
+    try:
+        if cc is not None:
+            session.clip_candidates = [
+                ClipCandidate.from_dict(d) for d in cc]
+        if pd is not None:
+            session.peak_decisions = [
+                PeakDecision.from_dict(d) for d in pd]
+    except (ClipCandidateError, KeyError, TypeError, ValueError) as e:
+        raise ProjectArchiveError(
+            f"ClipCandidate-Daten unlesbar: {e}") from e
     return session
