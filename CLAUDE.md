@@ -453,7 +453,14 @@ dieses Lernsystem, KEIN Produkt-Feature.
    Font, Untertitel, Safe Areas, Formate). Erst Datenvertrag, dann
    simple Exporte, dann schöner Renderer.
 5. **Hybrid/NAS-Pilot** (s. u.).
-6. **Dann erst** Hub / UI-Revamp.
+6. **Dann erst** Hub / UI-Revamp. UX-Punkte aus dem HC-4-Smoke
+   (2026-05-18, hier geparkt — NICHT HC-4-Scope): (a) Projekt direkt
+   über `.peakcut`-Datei öffnen (Fundament unterstützt es bereits:
+   `load_project_archive` akzeptiert Datei/Ordner/Root); (b) Weg
+   *zurück* aus Review zur Zuordnung, falls Zuordnung falsch war
+   (heutiger Ausweg: `.peakcut` löschen → Normalflow — funktional,
+   nicht elegant); (c) Ignoriert-Status im Review sichtbar machen
+   (vorhandene UI-Lücke, nicht von HC-4 eingeführt).
 7. **Danach** Social-Asset / Opus-artiges Modul.
 
 Bewusst NICHT V3-Start: UI-Revamp, Create Mix. **Opus-Score: als
