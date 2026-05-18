@@ -19,6 +19,10 @@ from utils import get_logger, validate_media_file
 from core.project import PeakCutProject
 from core.session import PeakCutSession
 from core.playback import stop_playback
+from core.project_archive import (
+    find_project_archive_for_files, load_project_archive,
+    save_project_archive, ProjectArchiveError,
+)
 
 _log = get_logger("peakcut.gui")
 _WORKER_SHUTDOWN_WAIT_MS = 3000
@@ -76,6 +80,7 @@ class MainWindow(QMainWindow):
         # Review page (own widget)
         self.review_page = ReviewPage()
         self.review_page.status_message.connect(self._on_status_message)
+        self.review_page.session_changed.connect(self._autosave)
         self.stack.addWidget(self.review_page)  # 3
 
         self.stack.setCurrentIndex(0)
@@ -173,6 +178,11 @@ class MainWindow(QMainWindow):
                 self.statusbar.showMessage(error)
                 return
 
+        # HC-4: vorhandene Projektakte? Dann Analyse überspringen.
+        archive = find_project_archive_for_files(all_files)
+        if archive and self._load_from_archive(archive):
+            return
+
         # Auto-detect guest name, let user confirm/edit
         from core.guest_name import extract_guest_name
         detected_name = extract_guest_name(all_files)
@@ -227,6 +237,43 @@ class MainWindow(QMainWindow):
         self._worker.progress.connect(self._on_analysis_progress)
         self._worker.start()
 
+    def _load_from_archive(self, archive) -> bool:
+        """HC-4: Projektakte laden, Analyse überspringen. Bei Fehler
+        kontrollierter Hinweis + Rückfall auf den normalen Flow (False)."""
+        try:
+            self.session = load_project_archive(archive, config.load())
+        except ProjectArchiveError as e:
+            _log.error("Projektakte nicht ladbar: %s", e)
+            self.statusbar.showMessage(f"Projektakte nicht ladbar: {e}")
+            return False
+        self._video_files = list(self.session.project.videos)
+        if self._cli_export_dir:
+            self.session.project.export_dir = self._cli_export_dir
+        if self.session.folgenschnitt_assignment_applied:
+            self.review_page.set_session(self.session, self._video_files)
+            self.stack.setCurrentIndex(3)
+            self.review_page.navigate_to_peak(0)
+            self.statusbar.showMessage(
+                "Projektakte geladen — Analyse übersprungen")
+        else:
+            self.assignment_page.set_session(self.session, self._video_files)
+            self.stack.setCurrentIndex(2)
+            self.statusbar.showMessage(
+                "Projektakte geladen — Zuordnung prüfen")
+        return True
+
+    def _autosave(self):
+        """Projektakte sichern. Darf NIE Export/Leitplanke/Flow blocken."""
+        session = getattr(self, "session", None)
+        if session is None:
+            return
+        try:
+            save_project_archive(session)
+        except Exception as e:  # bewusst breit: Autosave ist Beiwerk
+            _log.warning("Autosave Projektakte fehlgeschlagen: %s", e)
+            self.statusbar.showMessage(
+                "Hinweis: Projektakte konnte nicht gespeichert werden")
+
     def _on_analysis_progress(self, msg):
         self.analysis_status.setText(msg)
 
@@ -245,6 +292,7 @@ class MainWindow(QMainWindow):
         self.assignment_page.set_session(self.session, self._video_files)
         self.stack.setCurrentIndex(2)
         self.statusbar.showMessage("Zuordnung prüfen")
+        self._autosave()  # HC-4: nach erfolgreicher Analyse sichern
 
     def _on_assignment_continue(self):
         self.assignment_page.apply_to_session()
@@ -252,6 +300,7 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(3)
         self.review_page.navigate_to_peak(0)
         self.statusbar.showMessage(f"{len(self.session.peaks)} Peaks gefunden")
+        self._autosave()  # HC-4: nach Zuordnung sichern
 
     def _on_analysis_error(self, msg):
         _log.error("Analysis error: %s", msg)
@@ -289,6 +338,7 @@ class MainWindow(QMainWindow):
     # ══════════════════════════════════════════════════════════════
 
     def closeEvent(self, event):
+        self._autosave()  # HC-4: letzter Sicherungsanker (guarded)
         self.assignment_page.cleanup()
         self.review_page.cleanup()
 
