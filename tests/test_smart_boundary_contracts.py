@@ -110,6 +110,7 @@ def test_boundary_decision_validation_and_roundtrip():
     d = BoundaryDecision(123000, 171000, "Frage bis Pointe", 0.74)
     assert BoundaryDecision.from_dict(d.to_dict()) == d
     for bad in ((100, 100, "x", 0.5), (200, 100, "x", 0.5),
+                (-1, 10, "x", 0.5),
                 (0, 10, "x", -0.1), (0, 10, "x", 1.1)):
         try:
             BoundaryDecision(*bad)

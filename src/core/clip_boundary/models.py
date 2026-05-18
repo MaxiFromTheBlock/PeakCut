@@ -96,6 +96,8 @@ class BoundaryDecision:
     confidence: float
 
     def __post_init__(self):
+        if self.start_ms < 0:
+            raise ValueError(f"start_ms muss >= 0 sein: {self.start_ms}")
         if self.end_ms <= self.start_ms:
             raise ValueError(
                 f"end_ms muss > start_ms sein: {self.start_ms} >= {self.end_ms}")
