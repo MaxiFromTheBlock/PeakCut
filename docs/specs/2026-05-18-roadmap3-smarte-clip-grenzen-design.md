@@ -1,6 +1,10 @@
 # Roadmap #3 — Smarte Clip-Grenzen (Sinnabschnitt) — Design
 
 > Status: **Design abgenommen von Max (2026-05-18)**, bereit für Carl-Plan.
+> **Erweitert 2026-05-18 (nach Max-Review): Zwei-Stufen-Trennung mit
+> gespeichertem Transkript** (Transkription früh & parallel, Sinnabschnitt
+> später als Konsument) — siehe §3-Prinzip, §4. Ersetzt die frühere
+> Einstufen-Reihenfolge „alles nach dem Export".
 > Methode: 4-Augen — Carl schreibt den Umsetzungsplan, Claude verifiziert
 > ihn gegen den echten Code + baut TDD Schritt für Schritt, Max entscheidet
 > den Merge. Vorgänger: Roadmap #2 (ClipCandidate + Rückweg, Merge d8d9e33).
@@ -60,7 +64,17 @@ Strukturelle Fakten, die die Mechanik bestimmen (von Max bestätigt):
 
 ### In Scope
 
+**Stufe A — früh & parallel (eigener entkoppelter Job):**
+
 1. **Transkription (Whisper lokal)** — gemeinsame Grundschicht.
+   **Startet, sobald die Analyse startet**, läuft parallel und
+   entkoppelt, **bremst Analyse und Keyboardstellen-Export nie**.
+   Ergebnis (das Transkript) wird **in der `.peakcut`-Projektakte
+   gespeichert** → einmal abgetippt, nie wieder; füttert später auch den
+   Track-2-Regisseur.
+
+**Stufe B — später & schnell (Konsument, nach dem Export-Handoff):**
+
 2. **Deterministischer Vorbau** — Suchfenster + natürliche Schnittkanten
    (nutzt vorhandene `speaker_activity`/Pausen-Infrastruktur wieder).
 3. **Semantischer Entscheider (Claude API)** + **Plausibilitätsbremse**
@@ -68,6 +82,12 @@ Strukturelle Fakten, die die Mechanik bestimmen (von Max bestätigt):
 4. **Zusätzliche Ausgabe-Artefakte**: `Sinnabschnitte - {Gast}.xml` +
    `.txt` für **alle** Drücker, neben den unveränderten
    Keyboardstellen-Dateien.
+
+Stufe B nimmt nur das **schon gespeicherte Transkript** und ist dadurch
+schnell (das Langsame ist in Stufe A längst gelaufen).
+
+**Quer zu beiden:**
+
 5. **Kleine Verifizierungs-Vorschau** in der bestehenden Review-Ansicht:
    Sinnabschnitt eines Drückers abspielen, durchsteppen, selbst urteilen
    („passt / passt nicht"). Querformat, bestehende Kamera-Logik. Zweck:
@@ -90,17 +110,41 @@ Strukturelle Fakten, die die Mechanik bestimmen (von Max bestätigt):
 
 ---
 
-## 3. Architektur — drei Bausteine + Vorschau
+## 3. Architektur — zwei Stufen + Vorschau
 
 Jeder Baustein hat eine klare Aufgabe, eine definierte Schnittstelle und
 ist einzeln testbar.
 
-### Baustein 1 — Transkription (`core/transcription.py`, neu)
+> **Architektur-Prinzip (warum zwei Stufen):** PeakCut wird **nicht**
+> durch „Maschine maximal auslasten" schnell/robust, sondern durch
+> *Klugheit darüber, wann und ob Arbeit überhaupt getan wird*. Konkret:
+> (1) das Langsamste (Whisper) so früh wie möglich starten, auf der
+> ohnehin freien Maschinen-Station (Apple-Silicon GPU/Neural Engine —
+> die heutige Analyse läuft auf den CPU-Kernen, also **kein Kampf um
+> dieselbe Ressource**); (2) das Transkript **speichern** → nie zweimal
+> abtippen, derselbe Text füttert später den Track-2-Regisseur;
+> (3) eine Tempo-Schraube (Whisper-Modellgröße) statt roher Parallelität.
+> **Bewusst NICHT weiter zerstückeln/parallelisieren** — die einzige
+> sinnvolle Naht ist Stufe A (Transkription, vorne & allein) vs.
+> Stufe B (Rest, zusammen). Mehr Gleichzeitigkeit = mehr Stellen, an
+> denen der historisch fragile Qt-/Worker-Bereich kracht.
+
+### Stufe A · Baustein 1 — Transkription (`core/transcription.py`, neu)
 
 - **Aufgabe:** Audio (die Mix-/Referenzspur, auf der auch die Drücker
   erkannt werden) → Liste zeitgestempelter Wörter/Segmente
   (`start_ms`, `end_ms`, `text`), Sprache fest Deutsch,
   **wort-genaue Zeitstempel**.
+- **Wann:** **startet mit dem Analyse-Start**, läuft als eigener,
+  entkoppelter Hintergrund-Job parallel zur Analyse. **Harte Regel:
+  der Keyboardstellen-/Analyse-Weg wartet NIE auf Whisper** und wird
+  von ihm nicht ausgebremst (eigener Job, niedrige Priorität, nicht auf
+  dem Analyse-Kritikpfad). Genauer Startzeitpunkt = einstellbare
+  Schraube (§7), an echten Folgen justiert.
+- **Ergebnis wird gespeichert:** das Transkript wird in der
+  `.peakcut`-Projektakte abgelegt (additive, optionale Sektion —
+  s. §4). Projekt erneut geöffnet → Transkript ist da, kein erneutes
+  Abtippen. Stufe B konsumiert nur dieses gespeicherte Transkript.
 - **Engine:** lokales Whisper, Apple-Silicon-Variante (konkrete Lib =
   Plan-Entscheidung mit Carl; Kandidaten: `mlx-whisper` /
   `faster-whisper`). Läuft offline, kostenlos, Gast-Audio bleibt auf
@@ -109,12 +153,23 @@ ist einzeln testbar.
   einem Protocol (gleiches Muster wie die `AnalysisWorker`-Factories aus
   HC-2 und die `FolgenschnittLooseningStrategy` aus Stufe 2). In der
   Testsuite ein Stub; echtes Whisper nur im Hand-Prüfskript.
+- **Lebenszyklus:** echt abbrechbar im **HC-2-Stil (`request_stop()`)** —
+  kein blindes `wait()`. App-Schließen während laufender Transkription
+  darf weder hängen noch unkontrolliert abreißen (langer Job, genau der
+  HC-2-Fall).
 - **Abhängigkeiten:** ffmpeg (vorhanden), Whisper-Lib (neu, in
   `requirements.txt`). Python 3.11 (Produktteil, gepinnt).
 - **Wiederverwendbarkeit:** eigenständig, ohne Clip-Logik — füttert
   später auch den Track-2-Regisseur.
 
-### Baustein 2 — Deterministischer Vorbau (`core/clip_boundary/scaffold.py`, neu)
+### Stufe B (Konsument, nach dem Export-Handoff)
+
+Stufe B liest **ausschließlich das gespeicherte Transkript** aus Stufe A.
+Ist es bei Stufe-B-Start noch nicht fertig, **wartet Stufe B kurz oder
+fällt zurück** — der Keyboardstellen-/Export-Weg wartet trotzdem nie
+(der ist zu diesem Zeitpunkt längst fertig & übergeben, s. §4).
+
+### Stufe B · Baustein 2 — Deterministischer Vorbau (`core/clip_boundary/scaffold.py`, neu)
 
 - **Aufgabe:** pro Drücker (Peak)
   1. Suchfenster spannen: **Peak −3 min / +60 s** (provisorisch,
@@ -177,24 +232,43 @@ ist einzeln testbar.
 
 ## 4. Datenfluss & Integration
 
-- Läuft bei der Analyse **nach** der Drücker-Erkennung, für jeden Peak.
-- Reihenfolge-Garantie: die **gewohnte Keyboardstellen-Ausgabe
-  (XML/MP3/TXT/Screenshots) wird zuerst und vollständig fertiggestellt**
-  (unverändert, gleiche Geschwindigkeit wie heute). Der smarte Durchgang
-  läuft **danach** als zusätzlicher Schritt — er kann die für die
-  Produktion gebrauchte Datei nicht verzögern.
-- Ergebnis füllt den bestehenden **`ClipCandidate`** (Roadmap #2):
-  `boundary` = smarter Sinnabschnitt (statt rohem Bootstrap-Fenster),
-  `transcript_excerpt` = Text der Strecke, `reason` = Ein-Satz-Grund,
-  `score` = Konfidenz. Status bleibt `proposed`. Persistiert in
-  `.peakcut` Schema v2 (kann `clip_candidates` schon).
+**Harte Reihenfolge:**
+
+1. **Analyse-Start** → Stufe A (Transkription) wird als eigener,
+   entkoppelter Hintergrund-Job angestoßen — parallel zur Analyse,
+   niedrige Priorität, **nicht auf dem Analyse-Kritikpfad**.
+2. **Keyboardstellen-/Folgenschnitt-Export** läuft & wird vollständig
+   fertig (unverändert, gleiche Geschwindigkeit wie heute) → `.peakcut_done`
+   geschrieben → `ExportWorker.finished(exported)` → **CheckIn-Handoff
+   darf übernehmen**. Von Whisper **nicht** ausgebremst.
+3. **Stufe B** startet **erst nach** diesem Export-Handoff, aus dem
+   Erfolgspfad (`ReviewPage._on_export_done`, als *letzte* Aktion nach
+   `session_changed.emit()`; **nie** aus `_on_export_error`), als eigener
+   entkoppelter Worker. Liest **nur das gespeicherte Transkript** aus
+   Stufe A; ist es noch nicht fertig → Stufe B **wartet kurz oder fällt
+   zurück**. Der Keyboardstellen-/Export-Weg wartet **nie** (zu diesem
+   Zeitpunkt längst fertig & übergeben).
+4. Stufe B füllt den bestehenden **`ClipCandidate`** (Roadmap #2):
+   `boundary` = smarter Sinnabschnitt (statt rohem Bootstrap-Fenster),
+   `transcript_excerpt` = Text der Strecke, `reason` = Ein-Satz-Grund,
+   `score` = Konfidenz. Status bleibt `proposed`.
+
+- **Persistenz Transkript:** Stufe A legt das Transkript in der
+  `.peakcut`-Projektakte ab. `clip_candidates` existiert dort bereits
+  (kein Bump nötig), das **Transkript ist jedoch eine *neue* Sektion** →
+  als **additive, optionale Sektion** geführt, beim Laden **tolerant**
+  (HC-4-Prinzip: unbekannte Felder/Versionen werden toleriert),
+  bestehende `.peakcut`-/Keyboardstellen-Last bleibt unberührt. Ob ein
+  Schema-Marker minimal hochgezogen wird, entscheidet der **Carl-Plan**;
+  Claude verifiziert die Mechanik gegen den echten `project_archive`-Code.
 - **Zusätzliche Ausgabe-Artefakte** im Export-Ordner, klar getrennt
   benannt: `Sinnabschnitte - {Gast}.xml` und `.txt`, für **alle**
-  Drücker. Eigener Exporter, **nicht** der Keyboardstellen-Exporter.
+  Drücker. Eigener Exporter, **außerhalb** `_build_exporters` und
+  **nicht** Teil der `exported`-Liste / des `.peakcut_done`-Triggers.
 - **Schalter** in `config.json` (z.B. `smart_boundary_enabled`),
-  **Default AN**. Nur als Notbremse: aus → der gesamte neue Pfad läuft
-  gar nicht (kein Whisper, kein Claude), PeakCut verhält sich exakt wie
-  heute.
+  **Default AN**. Nur als Notbremse: aus → der gesamte neue Pfad
+  (Stufe A *und* B) läuft gar nicht (kein Whisper, kein Claude),
+  PeakCut verhält sich exakt wie heute.
 
 ### Harte Leitplanke (regression-gesichert, kein Versprechen)
 
@@ -216,10 +290,17 @@ Jeder Fehlerfall: **nie schlechter als heute, blockiert nie Analyse/Export.**
   Kandidat markiert. App/Analyse laufen normal weiter.
 - Claude offline/Fehler/Timeout → Plausibilitätsbremse-Pfad → sicherer
   Rückfall, niedriger `score`. Kein Block.
-- Schalter aus → kompletter Pfad inaktiv, Verhalten = heute.
-- Whisper-Laufzeit über eine ganze Folge ist real spürbar — deshalb
-  läuft der smarte Durchgang bewusst *nach* der fertigen
-  Keyboardstellen-Ausgabe (§4) und kann die Produktion nicht ausbremsen.
+- Schalter aus → kompletter Pfad (Stufe A *und* B) inaktiv, Verhalten
+  = heute.
+- **Stufe A entkoppelt & ressourcen-schonend:** eigener Job, niedrige
+  Priorität, andere Maschinen-Station (Apple-Silicon GPU/Neural Engine)
+  als die CPU-lastige Analyse → kein Kampf um dieselbe Ressource. Nicht
+  auf dem Analyse-Kritikpfad; bremst Keyboardstellen-Export nie.
+- **Schwächere Maschine degradiert sanft** (PeakCut ist Produkt auch für
+  andere, nicht nur Max' starker Mac): langsameres oder kein Transkript
+  → Stufe B fällt zurück, Keyboardstellen-Ausgabe unberührt.
+- Transkription, die **früh** scheitert, ist sogar sicherer: lange vor
+  dem Export bekannt, Stufe B fällt sauber zurück.
 
 ---
 
@@ -264,6 +345,8 @@ Startwert, dann an echten Folgen justiert:
 | Max-Streckenlänge (Bremse) | ~3 min | > Fenster bzw. unsinnig → Rückfall |
 | Min-Streckenlänge (Bremse) | ~10–15 s | darunter keine Geschichte |
 | Konfidenz-Schwelle (Bremse) | ~0,5 | darunter → sicherer Rückfall |
+| Transkriptions-Start | mit Analyse-Start | später möglich, falls Ressourcen-Konflikt; justiert |
+| Whisper-Modellgröße | schnelles Apple-Silicon-Modell | *die* Tempo-Schraube; Genauigkeit↔Tempo |
 
 Alle in `config.json`. Kalibrierung über das Hand-Prüfskript (§6).
 
@@ -274,15 +357,20 @@ Alle in `config.json`. Kalibrierung über das Hand-Prüfskript (§6).
 - **Neu:** `core/transcription.py`, `core/clip_boundary/scaffold.py`,
   `core/clip_boundary/decider.py`, ein Sinnabschnitte-Exporter (neben
   `core/exporters.py`), `scripts/verify_smart_boundary_real.py`.
-- **Geändert:** `core/session.py` (Sinnabschnitt-Pipeline nach
-  Peak-Detection, füllt `ClipCandidate`), Analyse-Orchestrierung
-  (`gui/workers.py` / `core/analysis_process.py` — Reihenfolge:
-  Keyboardstellen zuerst, smart danach), `gui/review_page.py` /
+- **Geändert:** `core/session.py` (Stufe-B-Pipeline füllt
+  `ClipCandidate`), `core/project_archive.py` (Transkript als additive
+  optionale Sektion speichern/tolerant laden), Stufe-A-Anstoß nahe
+  Analyse-Start als entkoppelter Worker (`gui/workers.py` /
+  `gui/main_window.py` — exakter Ort = Carl-Plan), Stufe-B-Anstoß nach
+  Export-Handoff (`gui/review_page.py` `_on_export_done`, Erfolgspfad),
   `gui/video_preview_peak.py` (Vorschau bekommt `ClipCandidate.boundary`
   + Grund/Konfidenz), `config.py`/`config.json` (Schalter + Parameter),
-  `requirements.txt` (Whisper-Lib).
-- **Unberührt:** Keyboardstellen-Exporter, Folgenschnitt-Leitplanke,
-  `.peakcut`-Schema (v2 reicht).
+  `requirements.txt` (Whisper-Lib). `ExportWorker` bleibt semantisch
+  unverändert (kein Smart darin).
+- **Unberührt:** Keyboardstellen-Exporter, `_build_exporters`/
+  `exported`/`.peakcut_done`-Pfad, Folgenschnitt-Leitplanke. Exakte
+  Schema-Mechanik der neuen Transkript-Sektion = Carl-Plan, Claude
+  verifiziert gegen `project_archive`.
 
 Exakte Pfade/Signaturen legt der Carl-Plan fest; Claude verifiziert sie
 gegen den echten Code, bevor gebaut wird.
