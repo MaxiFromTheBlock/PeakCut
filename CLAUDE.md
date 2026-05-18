@@ -400,7 +400,103 @@ develop  ← Aktive Entwicklung (hier arbeiten)
 
 ---
 
-## V3 Vision — Modulare Production Suite
+## Produkt-Strategie & Roadmap — Assistant Editor für Gesprächsformate
+
+> Konvergenz aus 2 unabhängigen Strategie-Pässen (Carl + Claude,
+> 2026-05-18), von Max abgenommen. Ersetzt die frühere „V3 — Modulare
+> Production Suite". Lebendes Dokument — Identität/Reihenfolge ändert
+> nur Max.
+
+### Identität
+
+PeakCut ist **keine** breite Post-Produktions-Suite. Es ist ein
+**Assistant Editor für lange Gesprächsformate / das Gedächtnis einer
+Produktion**: Raw-Aufnahmeordner rein → editor-ready Paket raus (Sync,
+Marker, sinnvolle Clip-Kandidaten, Multicam-Rohschnitt, XML/Assets/
+Metadaten). PeakCut sitzt **vor** Premiere/Pro Tools/CheckIn/Opus und
+macht aus chaotischem Material strukturierte Entscheidungen — es
+ersetzt sie nicht. Drei Dinge: Material **verstehen** → redaktionelle
+**Absicht erkennen** → **Übergabe-Artefakte** für Profisysteme erzeugen.
+
+**Bewusst NICHT:** NLE, Social-Scheduler, Analytics-Plattform, Pro-
+Tools-Ersatz, generischer „KI macht dir Content"-Kasten. Je näher an
+finaler Kreativentscheidung/Publishing, desto mehr verwässert der
+Vorteil. Das Wort „Suite" ist raus — es verführt zum Alles-Bauen.
+
+### Nutzer
+
+Bester nächster Nutzer = **Team mit wiederkehrenden langen Gesprächs-
+Produktionen** (getrennte Spuren, Multicam, echter Cutter):
+Produktionsfirmen, Podcast-Studios, Producer wie Matze, Cutter-Teams.
+NICHT der Solo-Creator (kommt später). Wertversprechen: „nimm 70 % der
+stumpfen Vorarbeit weg, ohne den Premiere-Workflow kaputtzumachen".
+
+### Kern-Objekt: ClipCandidate
+
+Nicht nur „Peak". Felder: peak_id, Boundary, Transkript-Auszug, Grund,
+Score, Status: vorgeschlagen → ausgewählt → produziert → veröffentlicht
+→ verworfen. Plus `peak_decisions.json` als Rückkanal. Die
+**Negativdaten** (nicht produziert / produziert-nicht-veröffentlicht /
+veröffentlicht-aber-geflopt) sind der Burggraben — genau das haben
+Opus-artige Tools nicht. **Minibar = Max' privates R&D-Labor** für
+dieses Lernsystem, KEIN Produkt-Feature.
+
+### Roadmap-Reihenfolge (Carl/Claude-Konsens — ersetzt alte V3-Liste)
+
+1. **Persistenz + `.peakcut`-Projektakte** (= HC-4, der Schlussstein —
+   IST das Produkt, nicht „kein State" wie früher gedacht).
+2. **ClipCandidate-Modell** inkl. Rückweg-Status.
+3. **Smarte Clip-Grenzen** um Peaks (Transkript/KI: wo beginnt/endet
+   der Gedanke, Hook).
+4. **Profile als Datenmodell** — zweigeteilt: *Production-Profil* (fps,
+   NLE, Kamera/Mic, LUT, Export, Sync) + *Brand/Social-Profil* (Logo,
+   Font, Untertitel, Safe Areas, Formate). Erst Datenvertrag, dann
+   simple Exporte, dann schöner Renderer.
+5. **Hybrid/NAS-Pilot** (s. u.).
+6. **Dann erst** Hub / UI-Revamp. Konkret verankert (Carl-Formulierung,
+   2026-05-18, NICHT HC-4-Scope): **„Projekt öffnen/Hub: Zuordnung
+   bearbeiten, Archiv zurücksetzen/neu analysieren, Ignoriert-Status
+   sichtbar machen."** — d.h. Projekt direkt über `.peakcut` öffnen
+   (`load_project_archive` akzeptiert Datei/Ordner/Root bereits);
+   bestehende Zuordnung voll hydratisieren + editierbar + neu speichern
+   + Review konsistent neu aufsetzen (nur so ist ein „Zurück" sauber,
+   Carl: sonst halbe Hub-Funktion mit Edge-Cases); Archiv
+   zurücksetzen/neu analysieren; Ignoriert-Status im Review sichtbar
+   (vorhandene UI-Lücke, nicht von HC-4 eingeführt).
+7. **Danach** Social-Asset / Opus-artiges Modul.
+
+Bewusst NICHT V3-Start: UI-Revamp, Create Mix. **Opus-Score: als
+Nordstern eine Falle, als spätes Modul auf besseren Rohdaten ok** —
+nicht kopieren, von unten unterlaufen. **Create Mix** kein Flaggschiff
+(HM mischt in Pro Tools via CheckIn), höchstens später Preview-Mix für
+fremde Teams.
+
+### Deployment-Topologie: Hybrid (KEIN Web-Rewrite)
+
+Interaktives (PyQt, Scrubbing, LUT-Preview, NLE-Nähe) bleibt am
+Studio-Mac. NAS = Hintergrund-Rückgrat:
+1. NAS-Projektordner wird Wahrheit: `.peakcut/` = State, relative
+   Pfade, Assignments, Analyse, ClipCandidates, Profile-Refs.
+2. Pro Studio-Mac kleiner Launcher → kein MacBook-Zwang.
+3. Headless Worker: `peakcut analyze/export <ordner>` lokal ODER im
+   Synology-Container.
+4. Web-Hub nur für Status/Queue/Profile/Approval — NICHT Voll-Video-
+   Review.
+5. Web/Electron erst, wenn wirklich externe Teams bedient werden.
+
+### Geparkt (später)
+
+Descript-API, SRT/Untertitel in XML, Auphonic Mix-Polish, In/Out-Clip-
+Editor, voller Social-Renderer, Smart Scan (relevant sobald fremdes
+Material zählt), Marker-Export, Einzel-Clip-MP4, Projekt-Metadaten.
+
+---
+
+## V3 Vision — Modulare Production Suite (HISTORISCH — überholt 2026-05-18)
+
+> Belassen als Kontext. Die Reihenfolge/Identität gilt **nicht** mehr —
+> maßgeblich ist „Produkt-Strategie & Roadmap" oben. Insb. „Kein
+> persistenter State" ist überholt: Persistenz ist jetzt der Kern.
 
 ### Architektur-Prinzip
 
@@ -548,16 +644,16 @@ Carl tiefer bei (1)(2)(3). Genau wofür 4-Augen da ist.
 - [x] ~~`extract_guest_name` aus exporters.py in eigenes Modul~~ — erledigt (v2.9.0, → `core/guest_name.py`)
 - [ ] Code Signing (Apple Developer Account) für Gatekeeper-freie Installation (geparkt — siehe Distribution)
 
-### Strukturell (vor V3)
-- [ ] **UI Revamp** — Redesign in Figma, dann Umsetzung in PyQt6. Figma ist das Design-Tool. Arbeitsteilung: Max/Design-KI designt in Figma → Screenshots an Claude → Claude setzt in PyQt6 um. Gleich den V3 Hub mitdesignen, nicht nur die aktuelle 3-Page-Struktur.
+### V3 / Roadmap
 
-### V3 Module
-- [ ] **Smart Scan** — Ordner scannen, Audio analysieren
-- [ ] **Create Mix** — Sprach-Spuren zusammenmischen (mit Gain-Normalisierung)
-- [ ] **Screenshots Page** — Eigene Page mit Video-Scrubbing, Thumbnail-Grid
-- [ ] Marker-Export (Peaks als Marker statt Clips im XML)
-- [ ] Einzelne Video-Clips pro Peak (MP4 Export)
-- [ ] **Projekt-Metadaten**: Gastname, Aufnahmedatum, Kamera-Zuordnung — ersetzt `extract_guest_name` und Dateinamen-Parsing
+**Maßgeblich = oben „Produkt-Strategie & Roadmap" (Carl/Claude-Konsens
+2026-05-18).** Die frühere Liste (UI-Revamp / Smart Scan / Create Mix
+als V3-Start) ist überholt. Erster echter Schritt = **HC-4
+(.peakcut-Persistenz)**, dann ClipCandidate → Clip-Grenzen → Profile →
+NAS-Pilot → dann Hub/UI → dann Opus-artiges Modul. UI-Revamp, Smart
+Scan, Create Mix, Marker-Export, Einzel-Clip-MP4, Projekt-Metadaten
+bleiben spätere/optionale Punkte (siehe Roadmap-/Geparkt-Liste oben),
+NICHT der Einstieg.
 
 ### Erledigt
 - [x] ~~Multiprocessing für Video-Sync~~ — erledigt (v2.6.0)
@@ -676,6 +772,20 @@ Produkt):**
 ---
 
 ## Changelog
+
+### HC-3 (auf main gelandet 2026-05-18, Merge 7c1bd8e)
+
+Sync liest im schnellen Pfad nur das 10-Min-Fenster statt der vollen
+Datei (`load_audio_as_array` echtes `sf.read(frames=)`); volle
+Referenz/Target nur beim Confidence-Fallback, Referenz lazy + Lock
+(1× bei parallelen Kameras). RAM-Peak bei langen Folgen × N Kameras
+weg. Offsets bit-identisch — Tests (Identität + Fallback==Legacy) UND
+echte HR-Folge (alle 3 Kameras framegenau == akzeptierte alte XML,
+Fallback real geübt, `scripts/verify_hc3_sync_real.py`). Carl-Plan,
+Carl-Schluss-Review grün. `core/session.py` + `calculate_offset` +
+Konstanten/Signatur unberührt. 215 → 221 Tests. Carl-Restnotiz
+(ffmpeg extrahiert weiter volle Temp-WAV) bewusst out-of-scope →
+geparkt an HC-5 (Audio-Schicht).
 
 ### Härtung-Welle (auf main gelandet 2026-05-17, Merge b81d7ab; Versionslabel = Max-Entscheidung)
 
@@ -1060,4 +1170,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-17 (HC-1 + HC-2 + LUT-Feature + CI-Fix auf main gelandet, Merge b81d7ab — 215 Tests grün, CI grün, Max-Smoke-Test bestanden; develop = main)*
+*Zuletzt aktualisiert: 2026-05-18 (HC-4 .peakcut-Projektakte komplett auf develop, Gates A–G, 240 grün, Keyboardstellen-XML byte-identisch nach Save/Load; main = HC-3-Stand 7c1bd8e)*

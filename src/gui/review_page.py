@@ -38,6 +38,7 @@ class ReviewPage(QWidget):
     """Peak Review Page — Video player, navigation, export."""
 
     status_message = pyqtSignal(str)
+    session_changed = pyqtSignal()  # HC-4: Auslöser für Projektakte-Autosave
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -335,6 +336,7 @@ class ReviewPage(QWidget):
         self.status_message.emit(f"Peak {idx + 1} ignoriert")
         if idx < len(self.session.peaks) - 1:
             self.navigate_to_peak(idx + 1)
+        self.session_changed.emit()
 
     def _on_mode_toggle(self):
         if self.session:
@@ -445,6 +447,7 @@ class ReviewPage(QWidget):
         self.status_message.emit(f"Export fertig! {len(exported)} Dateien → {export_dir}")
         self._export_worker.deleteLater()
         self._export_worker = None
+        self.session_changed.emit()
 
     def _on_export_error(self, msg):
         _log.error("Export error: %s", msg)

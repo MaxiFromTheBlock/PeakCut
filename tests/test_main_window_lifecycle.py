@@ -36,6 +36,7 @@ def _fake_self(worker):
     ns.assignment_page = types.SimpleNamespace(cleanup=lambda: None)
     ns.review_page = types.SimpleNamespace(cleanup=lambda: None)
     ns._worker = worker
+    ns._autosave = lambda: None  # HC-4: closeEvent autosaved jetzt (orthogonal)
     return ns
 
 
