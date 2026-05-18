@@ -5,6 +5,12 @@
 > gespeichertem Transkript** (Transkription früh & parallel, Sinnabschnitt
 > später als Konsument) — siehe §3-Prinzip, §4. Ersetzt die frühere
 > Einstufen-Reihenfolge „alles nach dem Export".
+> **Verfeinert 2026-05-18 (Carl-Gegenpass + Max-Workflow-Wissen):**
+> Whisper-Startzeitpunkt ist *kein* Annahme-Streit mehr — Default
+> „parallel zur Analyse + Prioritätsschutz", ein **Mess-Gate** im
+> Hand-Prüfskript entscheidet den finalen Default. Persistenz konkret
+> als referenzierte `transcript.json` (gegen `project_archive`-Code
+> verifiziert, analog `speaker_activity.csv`).
 > Methode: 4-Augen — Carl schreibt den Umsetzungsplan, Claude verifiziert
 > ihn gegen den echten Code + baut TDD Schritt für Schritt, Max entscheidet
 > den Merge. Vorgänger: Roadmap #2 (ClipCandidate + Rückweg, Merge d8d9e33).
@@ -118,11 +124,11 @@ ist einzeln testbar.
 > **Architektur-Prinzip (warum zwei Stufen):** PeakCut wird **nicht**
 > durch „Maschine maximal auslasten" schnell/robust, sondern durch
 > *Klugheit darüber, wann und ob Arbeit überhaupt getan wird*. Konkret:
-> (1) das Langsamste (Whisper) so früh wie möglich starten, auf der
-> ohnehin freien Maschinen-Station (Apple-Silicon GPU/Neural Engine —
-> die heutige Analyse läuft auf den CPU-Kernen, also **kein Kampf um
-> dieselbe Ressource**); (2) das Transkript **speichern** → nie zweimal
-> abtippen, derselbe Text füttert später den Track-2-Regisseur;
+> (1) das Langsamste (Whisper) so früh wie möglich starten — *ob* das
+> die produktionskritische Analyse spürbar bremst, wird **gemessen,
+> nicht angenommen** (Mess-Gate, §6/§7); (2) das Transkript
+> **speichern** → nie zweimal abtippen, derselbe Text füttert später
+> den Track-2-Regisseur;
 > (3) eine Tempo-Schraube (Whisper-Modellgröße) statt roher Parallelität.
 > **Bewusst NICHT weiter zerstückeln/parallelisieren** — die einzige
 > sinnvolle Naht ist Stufe A (Transkription, vorne & allein) vs.
@@ -135,15 +141,24 @@ ist einzeln testbar.
   erkannt werden) → Liste zeitgestempelter Wörter/Segmente
   (`start_ms`, `end_ms`, `text`), Sprache fest Deutsch,
   **wort-genaue Zeitstempel**.
-- **Wann:** **startet mit dem Analyse-Start**, läuft als eigener,
-  entkoppelter Hintergrund-Job parallel zur Analyse. **Harte Regel:
-  der Keyboardstellen-/Analyse-Weg wartet NIE auf Whisper** und wird
-  von ihm nicht ausgebremst (eigener Job, niedrige Priorität, nicht auf
-  dem Analyse-Kritikpfad). Genauer Startzeitpunkt = einstellbare
-  Schraube (§7), an echten Folgen justiert.
-- **Ergebnis wird gespeichert:** das Transkript wird in der
-  `.peakcut`-Projektakte abgelegt (additive, optionale Sektion —
-  s. §4). Projekt erneut geöffnet → Transkript ist da, kein erneutes
+- **Wann:** **provisorischer Default = parallel zur Analyse**
+  (Max-Instinkt; das Workflow-Wissen zeigt: es gibt vor dem Export eh
+  kein freies Fenster — Screenshots dominieren die Zeit nach der
+  Analyse, Review ist kurz). Eigener entkoppelter Hintergrund-Job,
+  **Analyse hat OS-Vorrang, Whisper niedrigste Priorität**, nicht auf
+  dem Analyse-Kritikpfad. **Harte Regel: der Keyboardstellen-/Analyse-
+  Weg wartet NIE auf Whisper.** Der *finale* Default wird **gemessen**
+  (Mess-Gate, §6): bremst paralleles Whisper die Analyse real spürbar
+  → Default kippt auf „nach der Analyse". Einstellbare Schraube (§7).
+- **Ergebnis wird gespeichert (verifiziertes Muster):** das Transkript
+  wird als **referenzierte Beidatei `.peakcut/transcript.json`**
+  abgelegt — exakt analog `.peakcut/speaker_activity.csv`
+  (`project_archive.py`: `ARCHIVE_DIR`/`_CSV_NAME`/`_CSV_REF`, gegen
+  echten Code verifiziert). `project.json` hält nur einen Referenzblock
+  (Pfad + `engine`/`model`/`language`/relativer `audio_path`), **nicht**
+  das Transkript inline. Cache/Arbeitsprodukt, **kein Export**. Fehlt/
+  kaputt → neu transkribieren oder Smart überspringen, **Normalflow
+  nie crashen**. Projekt erneut geöffnet → Transkript da, kein erneutes
   Abtippen. Stufe B konsumiert nur dieses gespeicherte Transkript.
 - **Engine:** lokales Whisper, Apple-Silicon-Variante (konkrete Lib =
   Plan-Entscheidung mit Carl; Kandidaten: `mlx-whisper` /
@@ -253,14 +268,15 @@ fällt zurück** — der Keyboardstellen-/Export-Weg wartet trotzdem nie
    `transcript_excerpt` = Text der Strecke, `reason` = Ein-Satz-Grund,
    `score` = Konfidenz. Status bleibt `proposed`.
 
-- **Persistenz Transkript:** Stufe A legt das Transkript in der
-  `.peakcut`-Projektakte ab. `clip_candidates` existiert dort bereits
-  (kein Bump nötig), das **Transkript ist jedoch eine *neue* Sektion** →
-  als **additive, optionale Sektion** geführt, beim Laden **tolerant**
-  (HC-4-Prinzip: unbekannte Felder/Versionen werden toleriert),
-  bestehende `.peakcut`-/Keyboardstellen-Last bleibt unberührt. Ob ein
-  Schema-Marker minimal hochgezogen wird, entscheidet der **Carl-Plan**;
-  Claude verifiziert die Mechanik gegen den echten `project_archive`-Code.
+- **Persistenz Transkript (verifiziert):** referenzierte Beidatei
+  `.peakcut/transcript.json` analog `.peakcut/speaker_activity.csv`
+  (`project_archive.py` macht das Sidecar-Muster bereits genau so —
+  `ARCHIVE_DIR`/`_CSV_NAME`/`_CSV_REF`, relativierte Pfade, gegen Code
+  verifiziert). `project.json` bekommt nur einen Referenzblock, **nicht**
+  das Transkript inline → `project.json` bleibt schlank, große wachsende
+  Daten daneben. Transkript = Cache/Arbeitsprodukt, kein Export; fehlt/
+  kaputt → neu/überspringen, Normalflow nie crashen. Bestehende
+  `.peakcut`-/Keyboardstellen-Last unberührt.
 - **Zusätzliche Ausgabe-Artefakte** im Export-Ordner, klar getrennt
   benannt: `Sinnabschnitte - {Gast}.xml` und `.txt`, für **alle**
   Drücker. Eigener Exporter, **außerhalb** `_build_exporters` und
@@ -292,10 +308,11 @@ Jeder Fehlerfall: **nie schlechter als heute, blockiert nie Analyse/Export.**
   Rückfall, niedriger `score`. Kein Block.
 - Schalter aus → kompletter Pfad (Stufe A *und* B) inaktiv, Verhalten
   = heute.
-- **Stufe A entkoppelt & ressourcen-schonend:** eigener Job, niedrige
-  Priorität, andere Maschinen-Station (Apple-Silicon GPU/Neural Engine)
-  als die CPU-lastige Analyse → kein Kampf um dieselbe Ressource. Nicht
-  auf dem Analyse-Kritikpfad; bremst Keyboardstellen-Export nie.
+- **Stufe A entkoppelt & prioritäts-geschützt:** eigener Job, Analyse
+  hat OS-Vorrang, Whisper niedrigste Priorität, nicht auf dem Analyse-
+  Kritikpfad. Ob paralleles Whisper die Analyse real bremst, ist
+  **gemessen, nicht angenommen** (Mess-Gate, §6); bremst es → Default
+  „nach der Analyse". Keyboardstellen-Weg wartet so oder so nie.
 - **Schwächere Maschine degradiert sanft** (PeakCut ist Produkt auch für
   andere, nicht nur Max' starker Mac): langsameres oder kein Transkript
   → Stufe B fällt zurück, Keyboardstellen-Ausgabe unberührt.
@@ -330,6 +347,11 @@ Jeder Fehlerfall: **nie schlechter als heute, blockiert nie Analyse/Export.**
   (Zeichen, dass das Fenster zu eng war), wird ein bekannt guter Anfang
   je abgeschnitten. **Grundlage für die Kalibrierung der provisorischen
   Zahlen.**
+- **Mess-Gate Transkriptions-Start (Teil desselben Skripts):** misst
+  die Analyse-Wanduhr-Laufzeit **mit** vs. **ohne** parallel laufendes
+  Whisper an echter HR-Folge. Spürbare Bremse → finaler Default kippt
+  von „parallel zur Analyse" auf „nach der Analyse". Entscheidet die
+  Schraube aus §7 mit Daten statt Annahme.
 
 ---
 
@@ -345,7 +367,7 @@ Startwert, dann an echten Folgen justiert:
 | Max-Streckenlänge (Bremse) | ~3 min | > Fenster bzw. unsinnig → Rückfall |
 | Min-Streckenlänge (Bremse) | ~10–15 s | darunter keine Geschichte |
 | Konfidenz-Schwelle (Bremse) | ~0,5 | darunter → sicherer Rückfall |
-| Transkriptions-Start | mit Analyse-Start | später möglich, falls Ressourcen-Konflikt; justiert |
+| Transkriptions-Start | parallel zur Analyse + Prioritätsschutz | **Mess-Gate** (Analyse-Laufzeit mit/ohne paralleles Whisper, echte HR-Folge) entscheidet finalen Default; kippt auf „nach Analyse" bei spürbarer Bremse |
 | Whisper-Modellgröße | schnelles Apple-Silicon-Modell | *die* Tempo-Schraube; Genauigkeit↔Tempo |
 
 Alle in `config.json`. Kalibrierung über das Hand-Prüfskript (§6).
