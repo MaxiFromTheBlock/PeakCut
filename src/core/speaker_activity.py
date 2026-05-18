@@ -121,6 +121,39 @@ def analyze_speaker_activity(
     return frames
 
 
+def read_speaker_activity_csv(csv_path: str) -> list[ActivityFrame]:
+    """Exakte Umkehr von write_speaker_activity_csv (HC-4 Task 3).
+
+    'unknown'/'' -> None für raw/smoothed_speaker. Speaker-Keys =
+    Spalten auf '_db', die ein passendes '_noise_floor_db' haben
+    (schließt dominance_db aus)."""
+    with open(csv_path, newline="") as f:
+        reader = csv.DictReader(f)
+        fns = reader.fieldnames or []
+        keys = [c[:-3] for c in fns
+                if c.endswith("_db") and not c.endswith("_noise_floor_db")
+                and f"{c[:-3]}_noise_floor_db" in fns]
+        frames: list[ActivityFrame] = []
+        for row in reader:
+            def _spk(v):
+                return None if v in (None, "", "unknown", "None") else v
+            frames.append(ActivityFrame(
+                start_ms=int(row["start_ms"]),
+                end_ms=int(row["end_ms"]),
+                levels_db={k: float(row[f"{k}_db"]) for k in keys
+                           if row.get(f"{k}_db") not in (None, "")},
+                noise_floor_db={k: float(row[f"{k}_noise_floor_db"])
+                                for k in keys
+                                if row.get(f"{k}_noise_floor_db")
+                                not in (None, "")},
+                dominance_db=float(row["dominance_db"] or 0.0),
+                raw_speaker=_spk(row.get("raw_speaker")),
+                smoothed_speaker=_spk(row.get("smoothed_speaker")),
+                confidence=float(row["confidence"] or 0.0),
+            ))
+    return frames
+
+
 def write_speaker_activity_csv(frames: list[ActivityFrame], csv_path: str) -> None:
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
 
