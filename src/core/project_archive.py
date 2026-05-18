@@ -88,6 +88,19 @@ def _to_dict_list(items):
             for it in (items or [])]
 
 
+def _map_assignment_paths(dicts, fn):
+    """Pfad-Feld in Assignment-Dicts (Mic/Camera) transformieren —
+    damit Assignments genauso verschiebbar sind wie Projektpfade
+    (HC-4 P1: sonst zeigen sie nach Ordner-Umzug auf den alten Ort)."""
+    out = []
+    for d in dicts or []:
+        d = dict(d)
+        if d.get("path"):
+            d["path"] = fn(d["path"])
+        out.append(d)
+    return out
+
+
 def analysis_results_from_session(session, speaker_activity_csv_ref=None):
     return {
         "peaks": [peak_to_dict(p) for p in getattr(session, "peaks", []) or []],
@@ -115,6 +128,13 @@ def build_archive_payload(session, material_root, speaker_activity_csv_ref=None)
     vids = [_rel(p, material_root) for p in project.videos]
     external = any(_is_external(p) for p in [kb] + mics + vids if p)
 
+    def _rel_p(p):
+        return _rel(p, material_root)
+
+    analysis = analysis_results_from_session(session, speaker_activity_csv_ref)
+    analysis["speaker_activity_mic_assignments"] = _map_assignment_paths(
+        analysis.get("speaker_activity_mic_assignments"), _rel_p)
+
     return {
         "schema_version": CURRENT_SCHEMA_VERSION,
         "app": "PeakCut",
@@ -128,15 +148,16 @@ def build_archive_payload(session, material_root, speaker_activity_csv_ref=None)
             "path_root_strategy": "common_parent",
             "has_external_paths": external,
         },
-        "analysis_results": analysis_results_from_session(
-            session, speaker_activity_csv_ref),
+        "analysis_results": analysis,
         "assignments": {
             "folgenschnitt_assignment_applied": bool(getattr(
                 session, "folgenschnitt_assignment_applied", False)),
-            "folgenschnitt_mic_assignments": _to_dict_list(
-                getattr(session, "folgenschnitt_mic_assignments", [])),
-            "folgenschnitt_camera_assignments": _to_dict_list(
-                getattr(session, "folgenschnitt_camera_assignments", [])),
+            "folgenschnitt_mic_assignments": _map_assignment_paths(
+                _to_dict_list(getattr(
+                    session, "folgenschnitt_mic_assignments", [])), _rel_p),
+            "folgenschnitt_camera_assignments": _map_assignment_paths(
+                _to_dict_list(getattr(
+                    session, "folgenschnitt_camera_assignments", [])), _rel_p),
         },
     }
 
@@ -249,11 +270,17 @@ def load_project_archive(archive_path_or_root, fallback_config):
 
     session = PeakCutSession(project, parsed["config"])
 
+    def _abs_p(p):
+        return _abs(p, root)
+
     results = dict(parsed["analysis_results"])
     # JSON macht aus Tupeln Listen — exakt zurück (Round-Trip-Treue:
     # Exporter entpacken zwar beides, aber strikte Gleichheit zählt).
     results["video_offsets"] = [
         tuple(vo) for vo in results.get("video_offsets", [])]
+    # P1: Assignment-Pfade gegen den (evtl. neuen) Root absolut machen.
+    results["speaker_activity_mic_assignments"] = _map_assignment_paths(
+        results.get("speaker_activity_mic_assignments"), _abs_p)
     csv_ref = results.get("speaker_activity_csv")
     if csv_ref:
         csv_abs = _abs(csv_ref, root)
@@ -272,8 +299,10 @@ def load_project_archive(archive_path_or_root, fallback_config):
         asg.get("folgenschnitt_assignment_applied", False))
     session.folgenschnitt_mic_assignments = [
         MicAssignment.from_dict(d)
-        for d in asg.get("folgenschnitt_mic_assignments", [])]
+        for d in _map_assignment_paths(
+            asg.get("folgenschnitt_mic_assignments", []), _abs_p)]
     session.folgenschnitt_camera_assignments = [
         CameraAssignment.from_dict(d)
-        for d in asg.get("folgenschnitt_camera_assignments", [])]
+        for d in _map_assignment_paths(
+            asg.get("folgenschnitt_camera_assignments", []), _abs_p)]
     return session

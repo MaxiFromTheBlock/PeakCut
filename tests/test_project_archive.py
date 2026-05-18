@@ -235,3 +235,86 @@ def test_find_archive_for_files(tmp_path):
     save_project_archive(s)
     found = find_project_archive_for_files([kb, m1, cam])
     assert found and found.endswith(".peakcut/project.json")
+
+
+# --- Carl P1: Assignment-Pfade verschiebbar + Folgenschnitt-Roundtrip ---
+
+from core.folgenschnitt_models import MicAssignment, CameraAssignment, SHOT_WIDE
+from core.folgenschnitt_pipeline import prepare_folgenschnitt_for_export
+
+
+def _fs_frames():
+    fr = []
+    t = 0
+    for i in range(40):
+        spk = "mic_1" if (i // 5) % 2 == 0 else "mic_2"
+        fr.append(ActivityFrame(t, t + 200,
+                                {"mic_1": -20.0, "mic_2": -40.0},
+                                {"mic_1": -50.0, "mic_2": -50.0},
+                                20.0, spk, spk, 1.0))
+        t += 200
+    return fr
+
+
+def _fs_session(tmp, root):
+    base = tmp / root
+    kb = _touch(base / "P8" / "KB.wav")
+    m1 = _touch(base / "P8" / "MIC1.wav")
+    m2 = _touch(base / "P8" / "MIC2.wav")
+    c1 = _touch(base / "CAM_A.mp4")
+    c2 = _touch(base / "CAM_B.mp4")
+    proj = PeakCutProject()
+    proj.set_files(kb, [m1, m2], [c1, c2])
+    proj.guest_name = "Hartmut Rosa"
+    s = PeakCutSession(proj, dict(_CFG))
+    s.peaks = [Peak(0, 60000, context_ms=15000)]
+    s.speaker_activity = _fs_frames()
+    s.folgenschnitt_mic_assignments = [
+        MicAssignment(0, m1, "Matze"), MicAssignment(1, m2, "Hartmut Rosa")]
+    s.folgenschnitt_camera_assignments = [
+        CameraAssignment(c1, SHOT_WIDE, "Matze"),
+        CameraAssignment(c2, SHOT_WIDE, "Hartmut Rosa")]
+    s.folgenschnitt_assignment_applied = True
+    return s, base
+
+
+def _cam_paths(session):
+    prepare_folgenschnitt_for_export(session)
+    return sorted({d.camera_path for d in session.folgenschnitt_edit_decisions})
+
+
+def test_assignment_paths_follow_folder_move(tmp_path):
+    s, base = _fs_session(tmp_path, "Mat")
+    save_project_archive(s)
+    moved = tmp_path / "Moved"
+    base.rename(moved)
+    L = load_project_archive(str(moved), dict(_CFG))
+    for a in (L.folgenschnitt_mic_assignments
+              + L.folgenschnitt_camera_assignments):
+        assert a.path.startswith(str(moved)), a.path
+        assert "Mat/" not in a.path or str(moved) in a.path
+    for a in L.speaker_activity_mic_assignments:
+        assert a.path.startswith(str(moved)), a.path
+
+
+def test_folgenschnitt_roundtrip_identical_no_move(tmp_path):
+    s, base = _fs_session(tmp_path, "Mat")
+    before = _cam_paths(s)
+    assert before  # Decisions tragen Kamerapfade
+    save_project_archive(s)
+    L = load_project_archive(str(base), dict(_CFG))
+    after = _cam_paths(L)
+    assert after == before, (before, after)
+
+
+def test_folgenschnitt_roundtrip_new_root_after_move(tmp_path):
+    s, base = _fs_session(tmp_path, "Mat")
+    _cam_paths(s)
+    save_project_archive(s)
+    moved = tmp_path / "Moved"
+    base.rename(moved)
+    L = load_project_archive(str(moved), dict(_CFG))
+    paths = _cam_paths(L)
+    assert paths
+    assert all(p.startswith(str(moved)) for p in paths), paths
+    assert not any((str(tmp_path / "Mat") + os.sep) in p for p in paths), paths
