@@ -113,6 +113,16 @@ schnell (das Langsame ist in Stufe A längst gelaufen).
   sobald es dort ein Auswahl-Signal gibt, das PeakCut sieht. Heute gibt
   es keins (Auswahl passiert nachgelagert bei Matze/Cutter, außerhalb).
 - Matzes Titel als Eingabe.
+- **Andere/zusätzliche API** (Transkription oder Entscheider) = später
+  additiv: neue Implementierung hinter dem bestehenden Protocol-
+  Steckplatz, kein Rückbau. Nicht v1.
+- **Transkript-Upload (z.B. Descript)** = später additiv: alternativer
+  *Lieferant* für dieselbe `transcript.json`, Job B bleibt unberührt
+  (genau dafür die Job-A/B-Trennung). Descript ist in CLAUDE.md eh
+  geparkt. **Bekannte Design-Frage für dann:** ein hochgeladenes
+  Transkript braucht Zeitstempel auf *derselben* Mix-Tonspur, auf der
+  die Drücker erkannt werden — sonst Ausricht-/Prüf-Schritt nötig.
+  Nicht v1; nicht naiv „passt schon" annehmen.
 
 ---
 
