@@ -1161,4 +1161,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-18 (HC-3 auf main 7c1bd8e, 221 grün; Produkt-Strategie/Roadmap neu festgeschrieben — Assistant Editor, Carl/Claude-Konsens, Reihenfolge ab HC-4 .peakcut-Persistenz)*
+*Zuletzt aktualisiert: 2026-05-18 (HC-4 .peakcut-Projektakte komplett auf develop, Gates A–G, 240 grün, Keyboardstellen-XML byte-identisch nach Save/Load; main = HC-3-Stand 7c1bd8e)*
