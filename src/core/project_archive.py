@@ -164,6 +164,10 @@ def build_archive_payload(session, material_root, speaker_activity_csv_ref=None)
             getattr(session, "clip_candidates", [])),
         "peak_decisions": _to_dict_list(
             getattr(session, "peak_decisions", [])),
+        # Roadmap #3 additiv: NUR Referenzblock. transcript.json gehört
+        # dem TranscriptWorker (früh/eigenständig); save fasst die Datei
+        # NIE an. None = kein Transkript -> alte Akten tolerant.
+        "transcript": getattr(session, "transcript_ref", None),
     }
 
 
@@ -187,6 +191,9 @@ def parse_archive_payload(payload, fallback_config):
         # Liste = exakt laden (auch leere).
         "clip_candidates": payload.get("clip_candidates"),
         "peak_decisions": payload.get("peak_decisions"),
+        # Roadmap #3 additiv & optional (NICHT in _REQUIRED_SECTIONS):
+        # fehlt -> None -> alte Akten laden unverändert.
+        "transcript": payload.get("transcript"),
     }
 
 
@@ -343,4 +350,19 @@ def load_project_archive(archive_path_or_root, fallback_config):
     except (ClipCandidateError, KeyError, TypeError, ValueError) as e:
         raise ProjectArchiveError(
             f"ClipCandidate-Daten unlesbar: {e}") from e
+
+    # Roadmap #3: Transkript-Referenz tolerant hydratisieren. transcript
+    # .json gehört dem Worker; hier NUR lesen, nie schreiben. Fehlt/
+    # kaputt -> transcript None + transcript_error, KEIN
+    # ProjectArchiveError (Normalflow bleibt, Smart später unavailable).
+    session.transcript_ref = parsed.get("transcript")
+    session.transcript = None
+    session.transcript_error = None
+    if session.transcript_ref:
+        from .transcript_archive import read_transcript_sidecar
+        session.transcript = read_transcript_sidecar(
+            root, session.transcript_ref)
+        if session.transcript is None:
+            session.transcript_error = (
+                "Transkript fehlt/unlesbar — Smart-Grenzen nicht verfügbar")
     return session
