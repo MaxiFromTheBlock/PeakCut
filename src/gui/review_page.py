@@ -482,8 +482,13 @@ class ReviewPage(QWidget):
             return
         if not getattr(session, "peaks", None):
             return
-        if (getattr(session, "transcript", None) is None
-                and not getattr(session, "transcript_ref", None)):
+        # Carl-Gegenreview Task 6 [P2]: ein vorhandener transcript_ref
+        # zählt nur, wenn das Sidecar beim Laden NICHT als kaputt/fehlend
+        # markiert wurde (sonst Churn in INFRA_FEHLT).
+        has_transcript = getattr(session, "transcript", None) is not None
+        has_ref = bool(getattr(session, "transcript_ref", None))
+        has_error = getattr(session, "transcript_error", None) is not None
+        if not has_transcript and (not has_ref or has_error):
             return
         existing = self._smart_worker
         if existing is not None and getattr(existing, "started", False):

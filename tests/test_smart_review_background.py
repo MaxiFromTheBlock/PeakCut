@@ -127,6 +127,19 @@ def test_blocked_when_worker_already_running():
     assert events.count("smart_start") == 0
 
 
+def test_blocked_when_transcript_error_is_set_even_with_ref():
+    # Carl-Gegenreview [P2]: geladene Akte mit transcript_ref UND
+    # gesetztem transcript_error (kaputtes/fehlendes Sidecar) darf
+    # Job B NICHT anstoßen — sonst Churn in INFRA_FEHLT.
+    events = []
+    fs = _fake_self(events, transcript=False)
+    fs.session.transcript_ref = {"path": "x",
+                                  "audio_fingerprint": {"size": 1}}
+    fs.session.transcript_error = "Sidecar kaputt/fehlt"
+    _try_start(fs, events)
+    assert "smart_start" not in events
+
+
 def test_blocked_when_smart_scores_already_present():
     # Spec/Carl: keine doppelte teure Berechnung — wenn schon Scores
     # in den Candidates stehen, nicht neu starten.
