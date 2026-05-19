@@ -15,7 +15,8 @@ from core.credentials import (  # noqa: E402
     KeychainCredentialProvider, validate_api_key,
     KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, CredentialError,
 )
-from core.clip_boundary.models import BoundaryError  # noqa: E402
+from core.clip_boundary.models import (  # noqa: E402
+    BoundaryError, BoundaryInfraError)
 from core.clip_boundary.decider import ClaudeBoundaryDecider  # noqa: E402
 
 _GOOD = "sk-ant-test-0123456789"
@@ -159,10 +160,12 @@ def test_decider_uses_provider_key_for_client():
     dec = ClaudeBoundaryDecider(
         model="claude-x", credential_provider=_provider(stored=_GOOD),
         client_factory=lambda api_key: _FakeClient(api_key=api_key))
-    # _call baut den Client mit dem Provider-Key (kein echter Call)
+    # _call baut den Client mit dem Provider-Key (kein echter Call).
+    # Task-4-Update: client-Exceptions werden in BoundaryInfraError
+    # gewandelt — der Client wurde aber VORHER mit dem Key gebaut.
     try:
         dec._call("prompt")
-    except AssertionError:
+    except BoundaryInfraError:
         pass
     assert captured["key"] == _GOOD
 

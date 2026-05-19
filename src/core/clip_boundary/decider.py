@@ -8,7 +8,9 @@ heute). Kein echter API-Call in pytest — call_model ist injizierbar.
 
 import json
 
-from .models import BoundaryDecision, BoundaryError
+from .models import (
+    BoundaryDecision, BoundaryError, BoundaryInfraError,
+    BoundaryOutcome, BoundaryDecisionResult)
 
 
 def _cfg(config, key, default):
@@ -83,7 +85,8 @@ class ClaudeBoundaryDecider:
         # Kein Back-compat-Pfad mehr — Provider ist garantiert gesetzt.
         key = self._credential_provider.get_api_key()
         if not key:
-            raise BoundaryError(
+            # #3-Rev Task 4 (R4): Infra-Pfad klar markiert.
+            raise BoundaryInfraError(
                 "Kein gültiger Claude-Key hinterlegt "
                 "(Schlüsselbund/ANTHROPIC_API_KEY)")
         if self._client_factory is not None:
@@ -97,18 +100,29 @@ class ClaudeBoundaryDecider:
         # P2 (Carl): kein verstecktes Default-Modell — der Realpfad
         # MUSS ein explizites Modell bekommen (aus
         # config['smart_boundary_claude_model']), sonst lauter Fehler
-        # statt stiller Falschannahme.
+        # statt stiller Falschannahme. R4: Infra-Pfad.
         if not self._model:
-            raise BoundaryError(
+            raise BoundaryInfraError(
                 "Kein Claude-Modell konfiguriert "
                 "(smart_boundary_claude_model)")
         client = self._client
         if client is None:
             client = self._build_client()
-        msg = client.messages.create(
-            model=self._model, max_tokens=300, temperature=0.0,
-            messages=[{"role": "user", "content": prompt}])
-        return msg.content[0].text
+        try:
+            msg = client.messages.create(
+                model=self._model, max_tokens=300, temperature=0.0,
+                messages=[{"role": "user", "content": prompt}])
+            return msg.content[0].text
+        except BoundaryError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            # R4: Modell/API unerreichbar oder UnicodeEncodeError aus dem
+            # SDK (gemessener Smoke-Test-Fall: korrupter Key) -> Infra.
+            # NUR der Exception-Klassenname kommt in die Meldung — nie
+            # `str(e)` (könnte Key-Fragmente enthalten).
+            raise BoundaryInfraError(
+                f"Claude-API nicht erreichbar / Key ungültig "
+                f"({type(e).__name__})") from e
 
     def decide(self, scaffold):
         raw = self._call(build_decider_prompt(scaffold))
@@ -200,18 +214,50 @@ def _fallback(sc, config):
         confidence=0.0)
 
 
-def decide_with_brake(scaffold, decider, *, config):
-    """Decider aufrufen, Bremse anwenden. Jeder Defekt/Exception ->
-    sicherer Rückfall. Gibt IMMER eine valide BoundaryDecision."""
+def decide_with_brake_result(scaffold, decider, *, config):
+    """#3-Rev Task 4 / Spec §11 R4: Ergebnis-Kategorie statt blankem
+    conf-0.0-Fallback. Drei Ausgänge:
+
+    - INFRA_FEHLT (BoundaryInfraError vom Decider): KEINE Decision.
+      Stufe B liefert keine Pseudo-Candidates, statusbar meldet
+      „API-Key/Modell/Transkript fehlt" (Task 5/8).
+    - DECIDER_VERWORFEN (Claude antwortete, aber die Bremse lehnte
+      berechtigt ab — oder Decider warf einen Nicht-Infra-Fehler):
+      konservativer Fallback mit confidence=0.0 (echtes Signal).
+    - OK: gesnappte, durch die Bremse gegangene Decision.
+    """
     try:
         d = decider.decide(scaffold)
-    except Exception:  # noqa: BLE001 (inkl. BoundaryError -> Rückfall)
-        d = None
+    except BoundaryInfraError as e:
+        return BoundaryDecisionResult(
+            BoundaryOutcome.INFRA_FEHLT, None,
+            str(e) or "Infra-Fehler")
+    except Exception as e:  # noqa: BLE001 — Decider-Defekt, kein Infra
+        return BoundaryDecisionResult(
+            BoundaryOutcome.DECIDER_VERWORFEN,
+            _fallback(scaffold, config),
+            f"Decider-Defekt: {type(e).__name__}")
     if d is None or not isinstance(d, BoundaryDecision):
-        return _fallback(scaffold, config)
+        return BoundaryDecisionResult(
+            BoundaryOutcome.DECIDER_VERWORFEN,
+            _fallback(scaffold, config),
+            "Decider lieferte keine gültige Decision")
     # P1: erst auf Snap-Kanten normalisieren, dann Bremse auf der
     # gesnappten Decision (Spec: Start/Ende auf natürliche Kanten).
     snapped = _snap_decision(d, scaffold, config)
     if snapped is None or not _brake_ok(snapped, scaffold, config):
-        return _fallback(scaffold, config)
-    return snapped
+        return BoundaryDecisionResult(
+            BoundaryOutcome.DECIDER_VERWORFEN,
+            _fallback(scaffold, config),
+            "Bremse lehnte ab")
+    return BoundaryDecisionResult(BoundaryOutcome.OK, snapped, "")
+
+
+def decide_with_brake(scaffold, decider, *, config):
+    """Back-compat-Wrapper: jeder Defekt -> sichere BoundaryDecision.
+    Neue Aufrufer (Pipeline ab Task 5) nutzen decide_with_brake_result
+    für die Kategorie."""
+    res = decide_with_brake_result(scaffold, decider, config=config)
+    if res.decision is not None:
+        return res.decision
+    return _fallback(scaffold, config)
