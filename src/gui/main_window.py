@@ -28,6 +28,25 @@ _log = get_logger("peakcut.gui")
 _WORKER_SHUTDOWN_WAIT_MS = 3000
 
 
+def _on_transcript_finished(ref, *, autosave, review):
+    """#3-Rev Task 6 + Pin 2: TranscriptWorker.finished-Vertrag.
+
+    {} (oder ref ohne path/audio_fingerprint) = kontrollierter Skip
+    (kein Mix/Timeout/Fehler/Stop) -> autosave kümmert sich um den
+    Stand (z. B. transcript_error), aber Job B NICHT anstoßen.
+    Echter Ref mit `path` UND `audio_fingerprint` -> Review
+    benachrichtigen, Job B im Hintergrund starten lassen.
+    Fortschritt/Fehler laufen über `progress`, nicht über Fake-Refs.
+    """
+    autosave()
+    if not isinstance(ref, dict):
+        return
+    if not ref.get("path") or not ref.get("audio_fingerprint"):
+        return
+    if review is not None:
+        review._maybe_start_smart_worker()
+
+
 def default_import_folder() -> str:
     """Import dialog always starts at the Desktop. Each episode is its own
     folder, so remembering the last one was unhelpful (it stuck deep in the
@@ -247,6 +266,12 @@ class MainWindow(QMainWindow):
             self._transcript_worker = TranscriptWorker(self.session)
             self._transcript_worker.progress.connect(
                 self._on_analysis_progress)
+            # #3-Rev Task 6 + Pin 2: bei echtem Ref Autosave anstoßen
+            # UND Review benachrichtigen, damit Job B im Hintergrund
+            # startet. {}/Stub-Ref -> nur Autosave, kein Job B.
+            self._transcript_worker.finished.connect(
+                lambda ref: _on_transcript_finished(
+                    ref, autosave=self._autosave, review=self.review_page))
             self._transcript_worker.start()
 
     def _load_from_archive(self, archive) -> bool:

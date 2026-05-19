@@ -227,6 +227,10 @@ class ReviewPage(QWidget):
             self.video_preview.screenshot_done.connect(self._on_screenshot_done)
 
         self._populate_lut_combo()
+        # #3-Rev Task 6 (R1): Job B im Review-Hintergrund anstoßen,
+        # sobald die Vorbedingungen stimmen (Notbremse, Peaks,
+        # Transkript, kein laufender Worker, keine fertigen Scores).
+        self._maybe_start_smart_worker()
 
     def _populate_lut_combo(self, select_filename=None):
         self.lut_combo.blockSignals(True)
@@ -458,28 +462,54 @@ class ReviewPage(QWidget):
         self._export_worker.deleteLater()
         self._export_worker = None
         self.session_changed.emit()
+        # #3-Rev Task 6 (R1): Job B startet NICHT mehr hier — er läuft
+        # im Review-Hintergrund (_maybe_start_smart_worker, aufgerufen
+        # aus set_session() bzw. nach TranscriptWorker.finished).
 
-        # Roadmap #3 Stufe B — LETZTE Aktion: erst NACH dem vollen
-        # Export-Handoff (.peakcut_done + finished + session_changed),
-        # NUR Erfolgspfad, Notbremse-gated. Verzögert/bricht den
-        # Keyboardstellen-Weg nie.
-        cfg = getattr(self.session, "config", {})
+    def _maybe_start_smart_worker(self):
+        """#3-Rev Task 6 (R1): Job B startet im Review-Hintergrund,
+        sobald die Vorbedingungen stimmen. Gate-Bedingungen (Carl):
+        Notbremse an, Peaks da, Transkript lesbar, kein Worker läuft
+        bereits, KEINE fertigen Smart-Scores (kein teures Doppel-
+        Berechnen). Bricht den Keyboardstellen-Weg NIE."""
+        session = getattr(self, "session", None)
+        if session is None:
+            return
+        cfg = getattr(session, "config", {})
         enabled = (cfg.get("smart_boundary_enabled", True)
                    if hasattr(cfg, "get") else True)
-        if enabled:
-            model = (cfg.get("smart_boundary_claude_model")
-                     if hasattr(cfg, "get") else None)
-            self._smart_worker = SmartBoundaryWorker(
-                self.session, ClaudeBoundaryDecider(model=model))
-            worker = self._smart_worker
-            # P2 (Carl): finished an die KONKRETE Instanz binden —
-            # ein spät fertig werdender Alt-Worker darf den neuen
-            # nicht aufräumen.
-            worker.finished.connect(
-                lambda candidates, w=worker:
-                self._on_smart_boundaries_done(candidates, w))
-            worker.progress.connect(self.status_message.emit)
-            worker.start()
+        if not enabled:
+            return
+        if not getattr(session, "peaks", None):
+            return
+        if (getattr(session, "transcript", None) is None
+                and not getattr(session, "transcript_ref", None)):
+            return
+        existing = self._smart_worker
+        if existing is not None and getattr(existing, "started", False):
+            # Worker läuft bereits (oder ist eben gestartet) — kein
+            # zweiter Anlauf.
+            try:
+                if existing.isRunning():
+                    return
+            except Exception:  # noqa: BLE001
+                return
+        cands = getattr(session, "clip_candidates", []) or []
+        if any(getattr(c, "score", None) is not None for c in cands):
+            # Schon Scores in der Akte — kein doppelter teurer Lauf.
+            return
+        model = (cfg.get("smart_boundary_claude_model")
+                 if hasattr(cfg, "get") else None)
+        self._smart_worker = SmartBoundaryWorker(
+            session, ClaudeBoundaryDecider(model=model))
+        worker = self._smart_worker
+        # P2: finished an die KONKRETE Instanz binden — ein spät
+        # fertig werdender Alt-Worker darf den neuen nicht aufräumen.
+        worker.finished.connect(
+            lambda result, w=worker:
+            self._on_smart_boundaries_done(result, w))
+        worker.progress.connect(self.status_message.emit)
+        worker.start()
 
     def _on_smart_boundaries_done(self, result, worker=None):
         # #3-Rev Task 5: Worker liefert ein SmartBoundaryRunResult.

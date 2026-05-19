@@ -82,27 +82,6 @@ def _patched_smart(events):
     return S
 
 
-def test_smart_starts_after_session_changed_only_when_enabled():
-    events = []
-    fs = _fake_self(events, enabled=True)
-    with patch("gui.review_page.SmartBoundaryWorker", _patched_smart(events)):
-        ReviewPage._on_export_done(fs, ["a.xml"])
-    # Smart startet NACH session_changed (relative Reihenfolge zählt)
-    assert events.count("smart_start") == 1
-    assert events.index("session_changed") < events.index("smart_start")
-    assert fs._smart_worker is not None
-    assert isinstance(fs._smart_worker.decider, ClaudeBoundaryDecider)
-
-
-def test_disabled_notbremse_no_smart_worker():
-    events = []
-    fs = _fake_self(events, enabled=False)
-    with patch("gui.review_page.SmartBoundaryWorker", _patched_smart(events)):
-        ReviewPage._on_export_done(fs, ["a.xml"])
-    assert "smart_start" not in events       # Notbremse: nichts gestartet
-    assert fs._smart_worker is None
-
-
 def test_export_error_never_starts_smart():
     events = []
     fs = _fake_self(events)
@@ -159,12 +138,9 @@ def test_finished_handler_runs_exporters_guarded_and_autosaves():
 # ══════════════════════════════════════════════════════════════════════
 
 
-@pytest.mark.xfail(strict=True,
-                   reason="#3-Rev Task 6 (R1): Job B zieht in den "
-                          "Review-Hintergrund; _on_export_done startet "
-                          "dann keinen SmartBoundaryWorker mehr.")
 def test_rev_on_export_done_does_not_start_smart_worker():
-    """R1: Der Export-Handoff darf Job B nicht (mehr) anstoßen."""
+    """R1 (Task 6 erfüllt): Der Export-Handoff stößt Job B nicht mehr
+    an — Job B läuft im Review-Hintergrund (_maybe_start_smart_worker)."""
     events = []
     fs = _fake_self(events, enabled=True)
     with patch("gui.review_page.SmartBoundaryWorker", _patched_smart(events)):

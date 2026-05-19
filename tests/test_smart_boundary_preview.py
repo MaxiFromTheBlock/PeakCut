@@ -65,31 +65,20 @@ def _fs(events):
 # --- P2: alter Worker darf den neuen nicht aufräumen -------------------
 
 def test_stale_worker_finish_does_not_clear_new_worker():
+    # #3-Rev Task 6 (R1): Smart startet jetzt im Review-Hintergrund,
+    # nicht in _on_export_done. Race-Schutz im Handler bleibt aber
+    # gleich wichtig — Worker direkt setzen und den Handler prüfen.
     events = []
     fs = _fs(events)
-    captured = []
-
-    class _S(_Worker):
-        def __init__(self, *_a):
-            super().__init__()
-            captured.append(self)
-
-    with patch("gui.review_page.SmartBoundaryWorker", _S):
-        ReviewPage._on_export_done(fs, ["a"])      # Worker 1
-        w1 = fs._smart_worker
-        fs._export_worker = types.SimpleNamespace(  # neuer Export-Lauf
-            deleteLater=lambda: None)
-        ReviewPage._on_export_done(fs, ["b"])      # Worker 2 ersetzt
-        w2 = fs._smart_worker
-    assert w1 is not w2 and w2 is captured[-1]
+    w1, w2 = _Worker(), _Worker()
+    # w2 ist aktuell, w1 ist "alt" (spät fertig).
+    fs._smart_worker = w2
 
     with patch("gui.review_page.SinnabschnittTXTExporter"), \
          patch("gui.review_page.SinnabschnittXMLExporter"):
-        # Alter Worker 1 wird SPÄT fertig -> darf w2 NICHT clearen
         ReviewPage._on_smart_boundaries_done(fs, [], w1)
-        assert fs._smart_worker is w2
+        assert fs._smart_worker is w2              # nicht durch alt aufgeräumt
         assert w1.deleted is True                  # alter trotzdem entsorgt
-        # Aktueller Worker 2 fertig -> jetzt clearen
         ReviewPage._on_smart_boundaries_done(fs, [], w2)
         assert fs._smart_worker is None
         assert w2.deleted is True
