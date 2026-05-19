@@ -550,3 +550,35 @@ class TranscriptWorker(QThread):
         self.session.transcript_ref = result["ref"]
         self.session.transcript_error = None
         self.finished.emit(result["ref"])
+
+
+class SmartBoundaryWorker(QThread):
+    """Roadmap #3 Stufe B — läuft NACH dem Export-Handoff (Task 8
+    hängt ihn ein). Konsumiert nur das gespeicherte Transkript, füllt
+    ClipCandidate je Drücker. Kein Subprozess (schnell, da das Schwere
+    in Stufe A lief) — kooperativer Abbruch via request_stop()."""
+    finished = pyqtSignal(list)   # aktualisierte ClipCandidate-Liste
+    progress = pyqtSignal(str)
+
+    def __init__(self, session, decider):
+        super().__init__()
+        self.session = session
+        self._decider = decider
+        self._stop = False
+
+    def request_stop(self):
+        """Kooperativ: die Pipeline prüft zwischen den Peaks."""
+        self._stop = True
+
+    def run(self):
+        from core.clip_boundary.pipeline import prepare_smart_boundaries
+        try:
+            result = prepare_smart_boundaries(
+                self.session, self._decider,
+                config=getattr(self.session, "config", {}),
+                should_stop=lambda: self._stop)
+        except Exception as e:  # noqa: BLE001 — nie den Flow brechen
+            self.progress.emit(
+                f"Sinnabschnitte: übersprungen — {e}")
+            result = getattr(self.session, "clip_candidates", [])
+        self.finished.emit(result)
