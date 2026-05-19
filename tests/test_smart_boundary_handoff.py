@@ -71,6 +71,12 @@ def _fake_self(events, enabled=True):
     ns._export_worker = types.SimpleNamespace(deleteLater=lambda: None)
     ns._smart_worker = None
     ns._on_smart_boundaries_done = lambda c: None  # echte Methode separat getestet
+    # #3-Rev Task 7: Riegel-Flags + Helfer als Unbound-Auflösung.
+    ns._base_export_done_for_run = False
+    ns._smart_ready = False
+    ns._sinnabschnitt_artifacts_written = False
+    ns._maybe_write_sinnabschnitt_artifacts = \
+        lambda: ReviewPage._maybe_write_sinnabschnitt_artifacts(ns)
     return ns
 
 
@@ -106,8 +112,13 @@ def test_cleanup_stops_smart_worker_bounded():
 
 
 def test_finished_handler_runs_exporters_guarded_and_autosaves():
+    # Task-7-Riegel: Smart fertig + Basis-Export schon durch
+    # -> Zusatzdateien schreiben + autosave.
     events = []
     fs = _fake_self(events)
+    fs._base_export_done_for_run = True
+    fs._smart_ready = False
+    fs._sinnabschnitt_artifacts_written = False
     calls = []
     with patch("gui.review_page.SinnabschnittTXTExporter") as T, \
          patch("gui.review_page.SinnabschnittXMLExporter") as X:
@@ -120,6 +131,9 @@ def test_finished_handler_runs_exporters_guarded_and_autosaves():
     # Exporter-Fehler darf den Flow nie brechen
     events2 = []
     fs2 = _fake_self(events2)
+    fs2._base_export_done_for_run = True
+    fs2._smart_ready = False
+    fs2._sinnabschnitt_artifacts_written = False
     with patch("gui.review_page.SinnabschnittTXTExporter") as T2, \
          patch("gui.review_page.SinnabschnittXMLExporter"):
         T2.return_value.export = lambda s: (_ for _ in ()).throw(
@@ -166,11 +180,6 @@ def test_rev_sinnabschnitt_never_in_base_export_handoff():
     assert fs._smart_worker is None
 
 
-@pytest.mark.xfail(strict=True,
-                   reason="#3-Rev Task 7: Zwei-Bedingungen-Barriere "
-                          "(_maybe_write_sinnabschnitt_artifacts) — "
-                          "Sinnabschnitt-Dateien erst NACH erfolgreichem "
-                          "Basis-Export, egal wann Smart fertig wird.")
 def test_rev_no_sinnabschnitt_artifact_before_base_export():
     """Gate 0: Wird Smart fertig BEVOR der Basis-Export durch ist, darf
     noch keine Sinnabschnitt-Datei entstehen."""

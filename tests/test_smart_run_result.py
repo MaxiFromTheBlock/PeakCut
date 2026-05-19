@@ -25,6 +25,7 @@ from core.clip_candidates import PROPOSED  # noqa: E402
 from core.transcription import Transcript, TranscriptSegment  # noqa: E402
 from core.project import PeakCutProject  # noqa: E402
 from core.session import PeakCutSession  # noqa: E402
+from gui.review_page import ReviewPage  # noqa: E402
 
 _CFG = {"fps": 25, "context_duration_ms": 15000,
         "smart_boundary_min_duration_ms": 12000,
@@ -190,6 +191,12 @@ def _fake_self(events):
     ns.status_message = _Sig("status", events)
     ns.session_changed = _Sig("session_changed", events)
     ns._smart_worker = None
+    # #3-Rev Task 7: Riegel-Flags + Helfer als Unbound-Auflösung.
+    ns._base_export_done_for_run = False
+    ns._smart_ready = False
+    ns._sinnabschnitt_artifacts_written = False
+    ns._maybe_write_sinnabschnitt_artifacts = \
+        lambda: ReviewPage._maybe_write_sinnabschnitt_artifacts(ns)
     return ns
 
 
@@ -197,6 +204,9 @@ def test_handler_runs_exporters_on_ok_and_persists():
     from gui.review_page import ReviewPage
     events = []
     fs = _fake_self(events)
+    # Task-7-Riegel: Basis-Export ist schon durch (zweite Bedingung
+    # kommt aus dem OK-Result selbst).
+    fs._base_export_done_for_run = True
     calls = []
     res = SmartBoundaryRunResult(
         (), BoundaryOutcome.OK, "", 1, 0)

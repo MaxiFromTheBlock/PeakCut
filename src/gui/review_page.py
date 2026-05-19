@@ -51,6 +51,10 @@ class ReviewPage(QWidget):
         self._is_playing = False
         self._export_worker = None
         self._smart_worker = None   # Roadmap #3 Stufe B (nach Handoff)
+        # #3-Rev Task 7: Zwei-Bedingungen-Barriere für Sinnabschnitte.
+        self._base_export_done_for_run = False
+        self._smart_ready = False
+        self._sinnabschnitt_artifacts_written = False
 
         # Playback poll timer
         self._play_timer = QTimer()
@@ -214,6 +218,10 @@ class ReviewPage(QWidget):
         """Initialize the review page with analysis results."""
         self.session = session
         self._video_files = video_files
+        # #3-Rev Task 7: neuer Stand -> Riegel-Flags zurück.
+        self._base_export_done_for_run = False
+        self._smart_ready = False
+        self._sinnabschnitt_artifacts_written = False
 
         # Populate camera combo
         self.camera_combo.clear()
@@ -465,6 +473,9 @@ class ReviewPage(QWidget):
         # #3-Rev Task 6 (R1): Job B startet NICHT mehr hier — er läuft
         # im Review-Hintergrund (_maybe_start_smart_worker, aufgerufen
         # aus set_session() bzw. nach TranscriptWorker.finished).
+        # #3-Rev Task 7: Zwei-Bedingungen-Riegel — Basis-Export fertig.
+        self._base_export_done_for_run = True
+        self._maybe_write_sinnabschnitt_artifacts()
 
     def _maybe_start_smart_worker(self):
         """#3-Rev Task 6 (R1): Job B startet im Review-Hintergrund,
@@ -503,6 +514,11 @@ class ReviewPage(QWidget):
         if any(getattr(c, "score", None) is not None for c in cands):
             # Schon Scores in der Akte — kein doppelter teurer Lauf.
             return
+        # #3-Rev Task 7: neuer Smart-Lauf -> Riegel-Hälfte „Smart" und
+        # "schon geschrieben" zurücksetzen. Ein bewusst neuer Lauf
+        # (z. B. nach Key-Reparatur) darf wieder neu schreiben.
+        self._smart_ready = False
+        self._sinnabschnitt_artifacts_written = False
         model = (cfg.get("smart_boundary_claude_model")
                  if hasattr(cfg, "get") else None)
         self._smart_worker = SmartBoundaryWorker(
@@ -518,23 +534,18 @@ class ReviewPage(QWidget):
 
     def _on_smart_boundaries_done(self, result, worker=None):
         # #3-Rev Task 5: Worker liefert ein SmartBoundaryRunResult.
-        # Spec §11 R4: bei INFRA_FEHLT KEINE Sinnabschnitt-Dateien
-        # schreiben — stattdessen LAUTER Status. Bei OK (oder
-        # DECIDER_VERWORFEN-Counts >0) Exporter laufen lassen.
+        # Spec §11 R4: bei INFRA_FEHLT KEINE Sinnabschnitt-Dateien —
+        # LAUTER Status. Bei OK (oder DECIDER_VERWORFEN-Counts >0)
+        # Smart-Seite des Riegels öffnen und schreiben prüfen
+        # (Task 7: Zwei-Bedingungen-Barriere).
         from core.clip_boundary.models import BoundaryOutcome
         if getattr(result, "category", None) is BoundaryOutcome.INFRA_FEHLT:
             self.status_message.emit(
                 getattr(result, "message", None)
                 or "Sinnabschnitte: nicht berechnet (Infrastruktur fehlt).")
         else:
-            # Zusatzdateien schreiben — guarded, bricht den Flow NIE.
-            for exp in (SinnabschnittTXTExporter(),
-                         SinnabschnittXMLExporter()):
-                try:
-                    exp.export(self.session)
-                except Exception as e:  # noqa: BLE001
-                    self.status_message.emit(
-                        f"Sinnabschnitte-Export übersprungen: {e}")
+            self._smart_ready = True
+            self._maybe_write_sinnabschnitt_artifacts()
         # P2: nur clearen, wenn DIESER Worker noch der aktuelle ist;
         # ein veralteter Sender wird entsorgt, ohne den neuen zu fassen.
         if worker is not None and self._smart_worker is not worker:
@@ -546,6 +557,24 @@ class ReviewPage(QWidget):
         # Autosave: aktualisierte ClipCandidates + transcript_ref in
         # die .peakcut-Akte (MainWindow lauscht auf session_changed).
         self.session_changed.emit()
+
+    def _maybe_write_sinnabschnitt_artifacts(self):
+        """#3-Rev Task 7: Zusatzdateien (TXT/XML) GENAU dann schreiben,
+        wenn der Basis-Export fertig UND der Smart-Lauf bereit ist UND
+        noch nicht geschrieben wurde. Bricht den Flow NIE."""
+        if not getattr(self, "_base_export_done_for_run", False):
+            return
+        if not getattr(self, "_smart_ready", False):
+            return
+        if getattr(self, "_sinnabschnitt_artifacts_written", False):
+            return
+        for exp in (SinnabschnittTXTExporter(), SinnabschnittXMLExporter()):
+            try:
+                exp.export(self.session)
+            except Exception as e:  # noqa: BLE001
+                self.status_message.emit(
+                    f"Sinnabschnitte-Export übersprungen: {e}")
+        self._sinnabschnitt_artifacts_written = True
 
     def _on_play_sinnabschnitt(self):
         """Verifizierungs-Vorschau: spielt den smarten Sinnabschnitt

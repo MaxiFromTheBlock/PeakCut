@@ -59,6 +59,12 @@ def _fs(events):
     ns.video_preview = types.SimpleNamespace(
         play_from=lambda a, b: events.append(("play_from", a, b)))
     ns._stop_play_state = lambda: events.append(("stop_play_state",))
+    # #3-Rev Task 7: Riegel-Flags + Helfer als Unbound-Auflösung.
+    ns._base_export_done_for_run = False
+    ns._smart_ready = False
+    ns._sinnabschnitt_artifacts_written = False
+    ns._maybe_write_sinnabschnitt_artifacts = \
+        lambda: ReviewPage._maybe_write_sinnabschnitt_artifacts(ns)
     return ns
 
 
