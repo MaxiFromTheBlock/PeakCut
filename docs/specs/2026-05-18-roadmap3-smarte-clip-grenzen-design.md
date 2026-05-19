@@ -437,3 +437,108 @@ Thread, die App fährt `TranscriptWorker` per spawn-Prozess mit
 Prioritätsschutz — die 1.15-Schwelle ist ein **grober Kompass**, bis
 sie gegen den echten Worker-Pfad gegengeprüft ist (Carl-P3). v1-Zahlen
 bleiben provisorisch, Kalibrierung über echte Folgen.
+
+---
+
+## 11. Design-Revision 2026-05-19 (nach App-Smoke) — MASSGEBLICH
+
+> Ergebnis aus 2 **unabhängigen** Reviews (Carl + Claude) + Max-
+> Produkt-Steuerung + gemessener Descript-Realität. **Supersedet**:
+> §3/§4 „Stufe B läuft NACH dem Export-Handoff" und §3/§4/§7 „Key via
+> Env-Var / `smart_boundary_claude_model` als blanker Wert". Der schon
+> gebaute, getestete Kern (Verträge Gate A, Scaffold, Decider+Bremse,
+> Exporter, Bugfixes, Drift-Fix, Sidecar/Cache) **bleibt**; geändert
+> werden Hook-Platzierung, Quelle, Credential-Schicht, Bremsen-
+> Semantik, Status-UX. Kein Merge bis diese Revision via Carl-Plan →
+> TDD umgesetzt + erneut Smoke-verifiziert ist.
+
+**App-Smoke-Befunde (gemessen):** (a) ohne Smart-Deps sauberer Skip
+(Bugfix `e9f6d0d` verifiziert). (b) Modell-ID-Provisorium war ungültig
+→ `mlx-community/whisper-large-v3-turbo` verifiziert (`aa80e8f`),
+Worker-Fallback an `config.DEFAULTS` gebunden (`043ffd5`). (c) Whisper
+auf 2,8-h-Folge ~90 % GPU/~22 GB RAM (lang/laut; 64 GB trug es). (d)
+100 % conf-0.0 Rückfall: Ursache **kaputter/Nicht-ASCII-Key**, kein
+Code-Bug — aber **unsichtbarer Systemausfall** (37 Pseudo-Einträge
+ununterscheidbar von echtem „unbrauchbar"). (e) UX: „erst Export,
+dann Vorschau" ist falsch platziert.
+
+### R1 — Job B in den Review-Hintergrund (supersedet §3/§4-Hook)
+Job A (Transkript) unverändert: früh/parallel, gecacht, Sidecar. **Job
+B (Scaffold→Decider→Bremse→ClipCandidate) startet, sobald Analyse +
+Peaks + Transkript vorliegen — im Review-Zustand, NICHT erst nach
+Export.** Invariante bleibt „Job B blockiert/verzögert Keyboardstellen
+NIE" (eigener Worker, kooperativ abbrechbar, **nie** in
+`_build_exporters`/`exported`/`.peakcut_done`). Sinnabschnitte-Zusatz-
+dateien werden weiterhin additiv geschrieben (bei Job-B-Abschluss
+und/oder am Export — *ein* klar definierter Trigger, kein Doppel-
+Write/Race). Carls + Claudes unabhängiger Konsens.
+
+### R2 — Transkript-Quelle pluggbar (Descript-Upload optional)
+Quelle hinter dem bestehenden `TranscriptionEngine`-Steckplatz:
+1. **Lokales Whisper** = „nichts-anderes-da"-Fallback (offline, kein
+   Key, langsam bei langen Folgen).
+2. **Descript-`.docx`-Upload** (Max-Quick-Win, **optional**) — gemessen
+   am echten `Transkript - Sheila de Liz.docx`: sprecher-zugeordnet
+   (`Name:`), Zeitstempel **nur minutengrob** (`[HH:MM:00]`/Minute,
+   keine Wort-Stempel). Parser → **dieselbe** interne `Transcript`-
+   Struktur (Gate-A-Vertrag hält), nur segment-/minutengrob. **Bekannte
+   v1-Eigenschaft (in Spec dokumentiert): Sinnabschnitte aus Upload
+   sind ~±30–60 s grob** vs. Whisper wort-präzise — ok für „Cutter
+   bekommt brauchbare Region", er trimmt fein.
+3. **Schnelle Transkriptions-API** (Max-Strategie) = spätere Engine
+   am selben Steckplatz; Datenschutz-Abwägung „Gast-Audio verlässt
+   Mac" bewusst, eigener Entscheid.
+**Harte Constraint (Max):** Upload ist **optional**; PeakCut bleibt
+für alle ohne Descript voll nutzbar — Upload nie Pflicht/Default.
+**Ausricht-Schutz:** Transkript-Gesamtspanne gegen Mix-Dauer prüfen
+(Toleranz); Abweichung → lauter Hinweis, **keine** still verschobenen
+Sinnabschnitte. *Offen (Max bestätigt bei Review):* startet der
+Descript-Export bei 0:00 = Mix-Start (kein Vorlauf/Trim)? Safeguard
+fängt es defensiv ab.
+
+### R3 — Credential-Provider-Abstraktion (supersedet Env-Var-Key)
+**Nicht** „Keychain" festschreiben, sondern ein einziger Claude-
+Zugang-Steckplatz (wie Engine-Protocols). **v1-Implementierung =
+sicherer macOS-Keychain-BYOK**: Key einmal in Einstellungen,
+Vorab-Validierung (ASCII/printable, trimmen, keine Steuer-/typografi-
+schen Zeichen/Clipboard-Whitespace), nie in Repo/config.json/Log,
+Laufzeit-Lesen aus Keychain (Env-Var nur Dev/CLI-Notnagel),
+Status „✓/✗ fehlt/✗ ungültig", optional Test-Call.
+**Eigener Roadmap-Punkt (Max-Geschäftsentscheidung, V4-Cloud-Tier,
+NICHT #3):** Managed/Proxy-Modell (PeakCut-Backend hält den Key,
+Kosten im Abo, Nutzer sieht nie einen Key) — derselbe Steckplatz,
+nur andere Implementierung → späterer Austausch, kein Neubau. Bezug:
+CLAUDE.md V4 „FastAPI Cloud / Accounts / Abo".
+
+### R4 — Bremsen-Semantik: Infra ≠ Decider
+Ergebnis-Kategorie statt blankem Fallback: `INFRA_FEHLT`
+(kein/ungültiger Key, Modell unerreichbar, Transkript fehlt) /
+`DECIDER_VERWORFEN` (Claude antwortete, Bremse lehnte berechtigt ab)
+/ `OK`. **`INFRA_FEHLT` → KEINE conf-0.0-Kandidaten, KEINE
+Sinnabschnitte-Datei**, sondern *eine* klare Statusmeldung
+(„Sinnabschnitte nicht berechnet: API-Key ungültig"). `DECIDER_
+VERWORFEN` → conf-0.0-Fallback bleibt (echtes Signal). Behebt den
+unsichtbaren Systemausfall (Befund d).
+
+### R5 — Status/Sichtbarkeit
+Immer sichtbare Smart-Statuszeile im Review (aus vorhandenen
+Signalen): „Transkription läuft – Vorschau noch nicht verfügbar" →
+„berechne Sinnabschnitte…" → „Sinnabschnitte bereit (N)" → bzw.
+R4-Infra-Meldung. „Sinnabschnitt ▶" **ausgegraut + Tooltip**, solange
+nicht bereit (statt mehrdeutig „Kein Sinnabschnitt"). Behebt „ich
+klicke zu früh".
+
+### R6 — Cache + Modell-Default
+Sidecar-Referenzblock + **Audio-Fingerprint** (Größe+mtime/Hash des
+Mix) → nie neu transkribieren, wenn gecachter Text zum aktuellen Mix
+passt; nur bei geändertem Mix/Engine. Macht Upload-Cache trivial.
+Whisper-Modellgröße **nicht** überoptimieren (echter Speed-Hebel =
+Quelle, nicht Modell); Default bleibt provisorisch, Entscheid erst
+nach 2–3 echten Folgen, lokales Whisper = Fallback-Engine.
+
+### Prozess
+Diese Revision → Max liest gegen → **Carl-Plan** (4-Augen) → Claude
+verifiziert gegen Code + TDD Gate für Gate → erneuter App-Smoke →
+Max-Merge-Entscheidung. Phasing-Alt-Bug (`MP3Exporter` summiert Mix +
+Einzelmics) bleibt **separates** Thema NACH #3 (eigener Brainstorm→
+Carl-Plan), kein #3-Blocker.
