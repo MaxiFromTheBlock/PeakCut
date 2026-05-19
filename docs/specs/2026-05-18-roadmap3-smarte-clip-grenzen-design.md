@@ -496,6 +496,24 @@ Sinnabschnitte. *Offen (Max bestätigt bei Review):* startet der
 Descript-Export bei 0:00 = Mix-Start (kein Vorlauf/Trim)? Safeguard
 fängt es defensiv ab.
 
+**Bekannte v1-Grenzen (Descript-Parser, Claude-Review von d00b4fc,
+2026-05-19) — bewusst akzeptiert, kein Rückbau, da Upload optional/grob
+und vom Cutter feingetrimmt:**
+1. *Sprecher-Fehlerkennung:* ein allein stehender Absatz, der auf `:`
+   endet (≤80 Zeichen, kein Zeitstempel), wird als Sprecher gewertet
+   und der Text dabei verworfen — ein normaler Satz mit Doppelpunkt am
+   Zeilenende („… das Wichtigste:") würde missdeutet. Optionale spätere
+   Verschärfung (nur name-artige Labels) = eigener Mini-Slice für Carl,
+   kein Blocker. **Größere defensive Lösung „Sprecher-Gegencheck über
+   die Mics" ist ein eigener geparkter Roadmap-Punkt (eigener
+   Brainstorm), NICHT #3-Scope.**
+2. *XML-Härtung:* `ElementTree.fromstring` ist nicht gegen
+   Entity-Expansion/XXE geschützt (stdlib-Doku-Warnung). Bedrohungs-
+   modell niedrig (nutzer-gewählte eigene Transkriptdatei, kein Netz).
+   Sauber lösen hieße `defusedxml` → verstößt gegen die „nur stdlib"-
+   Vorgabe → **bewusst akzeptiert + hier dokumentiert, KEINE
+   Dependency** (bewusste Entscheidung, kein Versehen).
+
 ### R3 — Credential-Provider-Abstraktion (supersedet Env-Var-Key)
 **Nicht** „Keychain" festschreiben, sondern ein einziger Claude-
 Zugang-Steckplatz (wie Engine-Protocols). **v1-Implementierung =

@@ -490,6 +490,13 @@ Descript-API, SRT/Untertitel in XML, Auphonic Mix-Polish, In/Out-Clip-
 Editor, voller Social-Renderer, Smart Scan (relevant sobald fremdes
 Material zählt), Marker-Export, Einzel-Clip-MP4, Projekt-Metadaten.
 
+**Sprecher-Gegencheck über die Mics** (Max-Idee 2026-05-19, eigener
+Roadmap-Punkt, NICHT #3-Scope): Descript-Sprecher-Label gegen
+tatsächliche Mic-Aktivität (speaker_activity) abgleichen → fängt
+mis-attribuierte/kaputte Sprecher-Labels automatisch ab (defensiv,
+„Vertrauen durch Tooling"). PeakCut hat die Mic-Aktivitätsdaten schon.
+Eigener kleiner Brainstorm → Spec, bevor gebaut wird.
+
 ---
 
 ## V3 Vision — Modulare Production Suite (HISTORISCH — überholt 2026-05-18)
