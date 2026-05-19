@@ -99,6 +99,30 @@ def test_default_factories_use_spawn_context():
     assert _TRANSCRIPT_MP_CONTEXT.get_start_method() == "spawn"
 
 
+def test_worker_fallback_matches_config_defaults_no_drift(tmp_path):
+    # Carl-Gegencheck: fehlt der Key in session.config, MUSS der Worker
+    # auf config.DEFAULTS zurückfallen — NICHT auf ein hartcodiertes
+    # (veraltetes) Literal. Drift DEFAULTS<->Worker strukturell aus.
+    import config as appcfg
+    s = _session(tmp_path)
+    s.config = {}                              # keine smart_* Keys
+    captured = {}
+
+    def _pf(**kw):
+        captured["req"] = kw["args"][0]
+        return _FakeMpProc(alive_seq=[False])
+
+    w = TranscriptWorker(
+        s, process_factory=_pf,
+        queue_factory=lambda: _FakeQueue(), monotonic=lambda: 0.0)
+    w.run()
+    req = captured["req"]
+    assert req["model"] == appcfg.DEFAULTS["smart_boundary_whisper_model"]
+    assert req["engine"] == appcfg.DEFAULTS["smart_boundary_whisper_engine"]
+    assert req["language"] == appcfg.DEFAULTS["smart_boundary_language"]
+    assert req["model"] == "mlx-community/whisper-large-v3-turbo"
+
+
 # --- Lifecycle (HC-2-Stil) ----------------------------------------------
 
 def test_request_stop_terminates_without_blind_wait(tmp_path):

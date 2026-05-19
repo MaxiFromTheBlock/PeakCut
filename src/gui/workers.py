@@ -11,6 +11,7 @@ import time
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
+import config
 from utils import FROZEN, TEMP_DIR
 from core.exporters import MP3Exporter, XMLExporter, TXTExporter
 from core.folgenschnitt_exporter import FolgenschnittXMLExporter
@@ -466,9 +467,16 @@ class TranscriptWorker(QThread):
             self.finished.emit({})
             return
 
-        engine = self._cfg("smart_boundary_whisper_engine", "mlx-whisper")
-        model = self._cfg("smart_boundary_whisper_model", "large-v3-turbo")
-        language = self._cfg("smart_boundary_language", "de")
+        # Fallback = config.DEFAULTS (Single Source of Truth) — KEIN
+        # zweites Literal mehr (Carl-Gegencheck: Drift DEFAULTS<->Worker
+        # strukturell ausgeschlossen).
+        _D = config.DEFAULTS
+        engine = self._cfg("smart_boundary_whisper_engine",
+                           _D["smart_boundary_whisper_engine"])
+        model = self._cfg("smart_boundary_whisper_model",
+                          _D["smart_boundary_whisper_model"])
+        language = self._cfg("smart_boundary_language",
+                             _D["smart_boundary_language"])
 
         # Parent löst Root/Pfad + Referenzblock auf (kein project-
         # Pickling ins Child); das Child schreibt das Sidecar selbst
