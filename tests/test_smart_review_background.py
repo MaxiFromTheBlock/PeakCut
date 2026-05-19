@@ -74,6 +74,12 @@ def _fake_self(events, *, enabled=True, peaks=True, transcript=True,
     if running:
         ns._smart_worker.started = True
         ns._smart_worker._running = True       # tut wirklich laufen
+    # #3-Rev Task 7: Riegel-Flags + Helfer als Unbound-Auflösung.
+    ns._base_export_done_for_run = False
+    ns._smart_ready = False
+    ns._sinnabschnitt_artifacts_written = False
+    ns._maybe_write_sinnabschnitt_artifacts = \
+        lambda: ReviewPage._maybe_write_sinnabschnitt_artifacts(ns)
     return ns
 
 

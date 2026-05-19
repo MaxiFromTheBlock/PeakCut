@@ -162,6 +162,49 @@ def test_starting_new_smart_worker_resets_artifacts_flag():
 
 # --- set_session setzt die Flags zurück (neuer Stand, neuer Lauf) -----
 
+def test_persisted_smart_results_open_barrier_without_new_worker():
+    # Carl-Gegenreview [P2]: lädt man eine .peakcut mit schon
+    # berechneten Smart-Scores, startet (richtig) kein neuer Worker —
+    # aber der Riegel muss trotzdem aufgehen, sonst schreibt der
+    # nächste Basis-Export keine TXT/XML obwohl alles bereit wäre.
+    events, written = [], []
+    fs = _fs(events)
+    fs.session.peaks = [1, 2]
+    fs.session.transcript = "T"
+    fs.session.transcript_error = None
+    # Bereits berechneter Stand (z. B. aus geladener Akte).
+    fs.session.clip_candidates = [
+        types.SimpleNamespace(score=0.8),
+        types.SimpleNamespace(score=None)]
+
+    class _FakeSmart:
+        def __init__(self, *_a):
+            self.started = False
+            self.finished = types.SimpleNamespace(connect=lambda cb: None)
+            self.progress = types.SimpleNamespace(connect=lambda cb: None)
+
+        def start(self):
+            self.started = True
+
+        def isRunning(self):
+            return False
+
+    txt, xml = _patched_exporters(written)
+    with patch("gui.review_page.SmartBoundaryWorker", _FakeSmart), \
+         patch("gui.review_page.SinnabschnittTXTExporter", txt), \
+         patch("gui.review_page.SinnabschnittXMLExporter", xml):
+        ReviewPage._maybe_start_smart_worker(fs)
+        # KEIN neuer Worker — und Smart-Seite des Riegels offen.
+        assert fs._smart_worker is None
+        assert fs._smart_ready is True
+        # Bisher kein Export -> noch nicht geschrieben.
+        assert written == []
+        # Basis-Export folgt -> jetzt einmal schreiben.
+        ReviewPage._on_export_done(fs, ["a.xml"])
+        assert written == ["txt", "xml"]
+        assert fs._sinnabschnitt_artifacts_written is True
+
+
 def test_set_session_resets_barrier_flags():
     events = []
     fs = types.SimpleNamespace(

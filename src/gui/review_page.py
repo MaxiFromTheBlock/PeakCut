@@ -512,7 +512,12 @@ class ReviewPage(QWidget):
                 return
         cands = getattr(session, "clip_candidates", []) or []
         if any(getattr(c, "score", None) is not None for c in cands):
-            # Schon Scores in der Akte — kein doppelter teurer Lauf.
+            # Carl-Gegenreview Task 7 [P2]: schon berechneter Stand aus
+            # einer geladenen Akte — kein teurer Doppellauf, aber den
+            # Riegel auf der Smart-Seite öffnen, damit der nächste
+            # Basis-Export die Zusatzdateien tatsächlich schreibt.
+            self._smart_ready = True
+            self._maybe_write_sinnabschnitt_artifacts()
             return
         # #3-Rev Task 7: neuer Smart-Lauf -> Riegel-Hälfte „Smart" und
         # "schon geschrieben" zurücksetzen. Ein bewusst neuer Lauf
