@@ -97,6 +97,32 @@ def test_pipeline_no_transcript_is_infra_no_pseudo():
     assert "Transkript" in res.message
 
 
+def test_pipeline_infra_mid_run_is_all_or_nothing():
+    # Carl-Gegenreview [P2]: ein erstes OK-Ergebnis darf NICHT in
+    # session.clip_candidates landen, wenn der zweite Peak Infra
+    # signalisiert. UI sagt sonst "nicht berechnet", aber Autosave
+    # persistiert ein Teil-Ergebnis als heimliche Wahrheit.
+    class _OkThenInfra:
+        def __init__(self):
+            self.n = 0
+
+        def decide(self, sc):
+            self.n += 1
+            if self.n == 1:
+                return BoundaryDecision(sc.window_start_ms,
+                                         sc.window_end_ms, "ok", 0.9)
+            raise BoundaryInfraError("API erst spät verloren")
+
+    s = _session([_peak(0, 60_000), _peak(2, 100_000)])
+    res = prepare_smart_boundaries(s, _OkThenInfra(), config=_CFG)
+    assert res.category is BoundaryOutcome.INFRA_FEHLT
+    assert res.ready_count == 0 and res.fallback_count == 0
+    # ALLE Scores None — auch der "erfolgreiche" erste Peak bleibt
+    # unverändert. All-or-nothing.
+    for c in s.clip_candidates:
+        assert c.score is None
+
+
 def test_pipeline_infra_decider_aborts_run_no_pseudo_candidates():
     s = _session([_peak(0, 120_000), _peak(1, 200_000), _peak(2, 300_000)])
     res = prepare_smart_boundaries(s, _InfraDecider(), config=_CFG)

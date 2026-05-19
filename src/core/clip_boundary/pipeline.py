@@ -87,6 +87,11 @@ def prepare_smart_boundaries(session, decider, *, config,
     activity = getattr(session, "speaker_activity", []) or []
     by_id = {c.peak_id: i for i, c in enumerate(cands)}
 
+    # Carl-Gegenreview [P2] (Task 5): all-or-nothing — Updates erst
+    # nach erfolgreichem Lauf in session.clip_candidates spiegeln; bei
+    # INFRA_FEHLT mid-run werden sie verworfen, damit Autosave keine
+    # Teil-Ergebnisse heimlich persistiert.
+    pending = {}
     ready = 0
     fallback = 0
 
@@ -111,7 +116,7 @@ def prepare_smart_boundaries(session, decider, *, config,
                 config=config, total_duration_ms=total)
         except Exception:  # noqa: BLE001
             try:
-                cands[i] = replace(
+                pending[p.index] = replace(
                     c,
                     boundary=_safe_fallback_boundary(
                         p.position_ms, total, config),
@@ -128,9 +133,8 @@ def prepare_smart_boundaries(session, decider, *, config,
         res = decide_with_brake_result(sc, decider, config=config)
 
         if res.category is BoundaryOutcome.INFRA_FEHLT:
-            # Run abbrechen, KEINE Pseudo-Candidates (Spec §11 R4).
-            # Counts auf 0 gesetzt -> Frozen-Validator erfüllt; die
-            # Wahrheit für diesen Lauf steht in den (echten) Candidates.
+            # All-or-Nothing: pending verwerfen, Originale unverändert,
+            # keine Pseudo-Candidates (Spec §11 R4 + Carl-Gegenreview).
             return SmartBoundaryRunResult(
                 tuple(cands), BoundaryOutcome.INFRA_FEHLT,
                 res.message or
@@ -139,7 +143,7 @@ def prepare_smart_boundaries(session, decider, *, config,
 
         # OK oder DECIDER_VERWORFEN tragen beide eine gültige Decision.
         d = res.decision
-        cands[i] = replace(
+        pending[p.index] = replace(
             c, boundary=ClipBoundary(d.start_ms, d.end_ms),
             transcript_excerpt=sc.transcript_excerpt,
             reason=d.reason, score=d.confidence)
@@ -147,6 +151,12 @@ def prepare_smart_boundaries(session, decider, *, config,
             ready += 1
         else:
             fallback += 1
+
+    # Lauf erfolgreich (kein Infra-Abbruch) -> jetzt erst committen.
+    for pid, new_c in pending.items():
+        idx = by_id.get(pid)
+        if idx is not None:
+            cands[idx] = new_c
 
     return SmartBoundaryRunResult(
         tuple(cands), BoundaryOutcome.OK, "", ready, fallback)
