@@ -111,3 +111,42 @@ def read_transcript_sidecar(root, ref):
         return Transcript.from_dict(data)
     except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
         return None
+
+
+# ── #3-Revision Task 2 (Teil A) — Cache + Ausricht-Schutz ──────────────
+
+
+def transcript_span_ms(transcript):
+    """Gesamtspanne eines Transkripts (größtes Segment-Ende). Leeres
+    Transkript -> 0. Eingabe ist der eingefrorene Gate-A-Vertrag."""
+    segs = getattr(transcript, "segments", ()) or ()
+    return max((s.end_ms for s in segs), default=0)
+
+
+def alignment_drift(span_ms, duration_ms, tolerance_ms):
+    """True, wenn Text-Gesamtspanne und Audiodauer um mehr als die
+    Toleranz auseinanderliegen (symmetrisch, Spec §11 R2). Audiodauer
+    unbekannt -> False (kein Fehlalarm; der Worker meldet 'Dauer
+    unbekannt' separat)."""
+    if duration_ms is None:
+        return False
+    return abs(int(span_ms) - int(duration_ms)) > int(tolerance_ms)
+
+
+def cache_reusable_ref(prev_ref, *, current_fingerprint, engine, model,
+                       language, root):
+    """Spec §11 R6: ein gespeicherter Transkript-Verweis ist nur dann
+    wiederverwendbar (kein Whisper), wenn der Mix-Fingerabdruck und
+    Engine/Modell/Sprache passen UND das Sidecar lesbar ist. Sonst None
+    (-> neu transkribieren). Rein, kein Qt, voll testbar."""
+    if not isinstance(prev_ref, dict):
+        return None
+    if prev_ref.get("audio_fingerprint") != current_fingerprint:
+        return None
+    if (prev_ref.get("engine") != engine
+            or prev_ref.get("model") != model
+            or prev_ref.get("language") != language):
+        return None
+    if read_transcript_sidecar(root, prev_ref) is None:
+        return None
+    return prev_ref

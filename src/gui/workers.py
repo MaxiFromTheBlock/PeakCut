@@ -14,6 +14,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 import config
 from utils import FROZEN, TEMP_DIR
 from core.exporters import MP3Exporter, XMLExporter, TXTExporter
+from core.media_probe import probe_duration_ms
 from core.folgenschnitt_exporter import FolgenschnittXMLExporter
 from core.folgenschnitt_pipeline import SKIP_REASON, prepare_folgenschnitt_for_export
 
@@ -482,10 +483,30 @@ class TranscriptWorker(QThread):
         # Pickling ins Child); das Child schreibt das Sidecar selbst
         # (P1: nicht das volle Transcript durch die Queue).
         from core.transcript_archive import (
-            transcript_sidecar_path, build_transcript_ref)
+            transcript_sidecar_path, build_transcript_ref,
+            transcript_root, cache_reusable_ref, alignment_drift)
         ref = build_transcript_ref(
             project, engine=engine, model=model, language=language,
             audio_path=reference)
+
+        # #3-Revision R6 — Cache: passt ein gespeicherter Verweis zum
+        # aktuellen Mix (Fingerabdruck + Engine/Modell/Sprache) und ist
+        # das Sidecar lesbar -> KEIN Whisper.
+        cached = cache_reusable_ref(
+            getattr(self.session, "transcript_ref", None),
+            current_fingerprint=ref.get("audio_fingerprint"),
+            engine=engine, model=model, language=language,
+            root=transcript_root(project))
+        if cached is not None:
+            self.session.transcript = None
+            self.session.transcript_ref = cached
+            self.session.transcript_error = None
+            self.progress.emit(
+                "Sinnabschnitte: Transkript aus Cache übernommen — "
+                "kein Whisper")
+            self.finished.emit(cached)
+            return
+
         req = {
             "audio_path": reference,
             "engine": engine,
@@ -554,10 +575,33 @@ class TranscriptWorker(QThread):
         # save_project_archive (project.json-Referenz erst durch
         # späteres Autosave). transcript bleibt None — Stufe B liest
         # laut Spec ohnehin nur das gespeicherte Sidecar.
+        final_ref = dict(result["ref"])
+
+        # #3-Revision R2 — Ausricht-Schutz: Text-Gesamtspanne (vom
+        # Child) gegen Mix-Dauer (gemeinsamer ffprobe-Helfer). Drift
+        # -> LAUTER Hinweis; Sinnabschnitte werden nicht still
+        # berechnet (Stufe B konsumiert die Felder).
+        duration_ms = probe_duration_ms(reference)
+        if duration_ms is not None:
+            final_ref["audio_duration_ms"] = duration_ms
+        span_ms = final_ref.get("transcript_span_ms")
+        tol = self._cfg("smart_boundary_alignment_tolerance_ms",
+                        _D["smart_boundary_alignment_tolerance_ms"])
+        if duration_ms is None:
+            self.progress.emit(
+                "Sinnabschnitte: Audiodauer nicht ermittelbar — "
+                "Ausrichtung ungeprüft")
+        elif span_ms is not None and alignment_drift(span_ms, duration_ms,
+                                                     tol):
+            self.progress.emit(
+                f"Sinnabschnitte: Transkript passt nicht zur Audiodauer "
+                f"(Text {int(span_ms) // 1000}s vs Audio "
+                f"{duration_ms // 1000}s) — werden NICHT still berechnet")
+
         self.session.transcript = None
-        self.session.transcript_ref = result["ref"]
+        self.session.transcript_ref = final_ref
         self.session.transcript_error = None
-        self.finished.emit(result["ref"])
+        self.finished.emit(final_ref)
 
 
 class SmartBoundaryWorker(QThread):

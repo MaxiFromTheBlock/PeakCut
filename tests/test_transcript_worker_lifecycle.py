@@ -185,8 +185,13 @@ def test_child_writes_sidecar_and_returns_small_ref(tmp_path):
     req = {"audio_path": "x.wav", "engine": "mlx-whisper", "model": "m",
            "language": "de", "sidecar_path": sidecar, "transcript_ref": ref}
     out = tp._emit_into_sidecar(req, engine=_FakeEngine())
-    assert out == {"ref": ref}                # klein, kein "transcript"
-    assert "transcript" not in out
+    # #3-Rev Task 2: der kleine Ref trägt zusätzlich die Text-Spanne
+    # (für den Ausricht-Schutz, Gate-A-Vertrag). Invariante bleibt:
+    # KEIN volles Transcript durch die Queue.
+    assert out["ref"]["path"] == ".peakcut/transcript.json"
+    assert out["ref"]["engine"] == "mlx-whisper"
+    assert out["ref"]["transcript_span_ms"] == 1200   # _FakeEngine: 0..1200
+    assert "transcript" not in out and "transcript" not in out["ref"]
     assert os.path.isfile(sidecar)
 
 

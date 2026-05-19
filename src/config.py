@@ -34,7 +34,10 @@ DEFAULTS = {
     "smart_boundary_claude_model": "claude-opus-4-7",
     "smart_boundary_whisper_engine": "mlx-whisper",
     "smart_boundary_whisper_model": "mlx-community/whisper-large-v3-turbo",
-    "smart_boundary_language": "de"
+    "smart_boundary_language": "de",
+    # #3-Revision R2: Transkriptspanne vs. Mix-Dauer; Abweichung
+    # darüber -> lauter Hinweis, Sinnabschnitte nicht still berechnen.
+    "smart_boundary_alignment_tolerance_ms": 120000,
 }
 
 _config = None

@@ -6,7 +6,8 @@ from xml.sax.saxutils import escape
 
 from pydub import AudioSegment
 
-from utils import TEMP_DIR, ASSETS_DIR, FFPROBE_BIN, parse_timecode_to_ms, ms_to_timecode, ms_to_frames, get_logger
+from utils import TEMP_DIR, ASSETS_DIR, parse_timecode_to_ms, ms_to_timecode, ms_to_frames, get_logger
+from core.media_probe import run_ffprobe
 
 _log = get_logger("peakcut.export")
 
@@ -66,19 +67,16 @@ _ms_to_frames = ms_to_frames  # Local alias for readability in XML generation
 
 def _probe_video_info(video_path):
     """Probe video file for resolution using ffprobe. Returns (width, height) or (3840, 2160) as fallback."""
-    try:
-        result = subprocess.run(
-            [FFPROBE_BIN, "-v", "quiet", "-select_streams", "v:0",
-             "-show_entries", "stream=width,height",
-             "-of", "csv=p=0", video_path],
-            capture_output=True, text=True, timeout=10
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            parts = result.stdout.strip().split(",")
-            if len(parts) >= 2:
+    out = run_ffprobe(["-v", "quiet", "-select_streams", "v:0",
+                       "-show_entries", "stream=width,height",
+                       "-of", "csv=p=0", video_path])
+    if out and out.strip():
+        parts = out.strip().split(",")
+        if len(parts) >= 2:
+            try:
                 return int(parts[0]), int(parts[1])
-    except Exception:
-        pass
+            except (ValueError, IndexError):
+                pass
     return 3840, 2160
 
 
@@ -88,25 +86,20 @@ def _probe_audio_info(audio_path):
     Returns (sample_rate, bit_depth, channels) with fallbacks (48000, 16, 2).
     """
     sample_rate, bit_depth, channels = 48000, 16, 2
-    try:
-        result = subprocess.run(
-            [FFPROBE_BIN, "-v", "quiet", "-select_streams", "a:0",
-             "-show_entries", "stream=sample_rate,bits_per_sample,channels",
-             "-of", "flat", audio_path],
-            capture_output=True, text=True, timeout=10
-        )
-        if result.returncode == 0:
-            for line in result.stdout.strip().splitlines():
-                key, _, val = line.partition("=")
-                val = val.strip('"')
-                if key.endswith("sample_rate") and val.isdigit():
-                    sample_rate = int(val)
-                elif key.endswith("bits_per_sample") and val.isdigit() and int(val) > 0:
-                    bit_depth = int(val)
-                elif key.endswith("channels") and val.isdigit():
-                    channels = int(val)
-    except Exception:
-        pass
+    out = run_ffprobe(["-v", "quiet", "-select_streams", "a:0",
+                       "-show_entries",
+                       "stream=sample_rate,bits_per_sample,channels",
+                       "-of", "flat", audio_path])
+    if out:
+        for line in out.strip().splitlines():
+            key, _, val = line.partition("=")
+            val = val.strip('"')
+            if key.endswith("sample_rate") and val.isdigit():
+                sample_rate = int(val)
+            elif key.endswith("bits_per_sample") and val.isdigit() and int(val) > 0:
+                bit_depth = int(val)
+            elif key.endswith("channels") and val.isdigit():
+                channels = int(val)
     return sample_rate, bit_depth, channels
 
 

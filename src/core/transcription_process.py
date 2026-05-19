@@ -76,13 +76,18 @@ def _emit_into_sidecar(req, engine=None):
     if "error" in out:
         return {"error": out["error"]}
     from core.transcription import Transcript
-    from core.transcript_archive import write_transcript_json
+    from core.transcript_archive import (
+        write_transcript_json, transcript_span_ms)
     try:
-        write_transcript_json(req["sidecar_path"],
-                              Transcript.from_dict(out["transcript"]))
+        t = Transcript.from_dict(out["transcript"])
+        write_transcript_json(req["sidecar_path"], t)
     except Exception as e:  # noqa: BLE001
         return {"error": f"Sidecar-Write fehlgeschlagen: {e}"}
-    return {"ref": req["transcript_ref"]}
+    # Span aus dem Transcript, das das Child ohnehin hat (kein volles
+    # Transcript durch die Queue, kein Re-Read im Parent — Gate-A P1).
+    ref = dict(req["transcript_ref"])
+    ref["transcript_span_ms"] = transcript_span_ms(t)
+    return {"ref": ref}
 
 
 def _transcribe_worker_target(req, result_queue, progress_queue):
