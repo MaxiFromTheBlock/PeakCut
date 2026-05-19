@@ -415,3 +415,25 @@ Diese Spec → **Carl** schreibt den Umsetzungsplan → **Claude**
 verifiziert den Plan gegen den echten Code und baut TDD Schritt für
 Schritt mit Gates → **Max** entscheidet den Merge. Bewährte
 4-Augen-Methode (wie HC-2/3/4, Roadmap #2).
+
+---
+
+## 10. Stand & App-Smoke (2026-05-19)
+
+Tasks 1–10 + Schluss-Gate-Lock TDD gebaut, Gates A–G Carl-gegen-
+gecheckt + alle P-Befunde eingearbeitet, Carl-Schluss-Review grün,
+343 grün, CI grün. Offen: Max-App-Smoke an echtem Material → Merge.
+
+**App-Smoke-Voraussetzung (sonst nur Skip-/Fallback-Pfad getestet):**
+`./venv311/bin/pip install -r requirements-smart.txt` (Apple-Silicon-
+only `mlx-whisper` + `anthropic`; bewusst NICHT in `requirements.txt`/
+CI) **und** Umgebungsvariable `ANTHROPIC_API_KEY`. Ohne das läuft
+PeakCut unverändert (Stufe A/B → Skip/Fallback, Keyboardstellen
+unberührt).
+
+**Offene Real-Verifikation (kein Code-Gate, kalibrierbar):** das
+Mess-Gate (`scripts/verify_smart_boundary_real.py`) misst Whisper im
+Thread, die App fährt `TranscriptWorker` per spawn-Prozess mit
+Prioritätsschutz — die 1.15-Schwelle ist ein **grober Kompass**, bis
+sie gegen den echten Worker-Pfad gegengeprüft ist (Carl-P3). v1-Zahlen
+bleiben provisorisch, Kalibrierung über echte Folgen.
