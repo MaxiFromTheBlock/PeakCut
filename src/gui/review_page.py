@@ -159,6 +159,12 @@ class ReviewPage(QWidget):
         self.next_btn.clicked.connect(self.on_next)
         controls.addWidget(self.next_btn)
 
+        # Roadmap #3 Verifizierungs-Vorschau (Gate G: nice-to-have)
+        self.sinn_btn = QPushButton("Sinnabschnitt ▶")
+        self.sinn_btn.setMinimumWidth(120)
+        self.sinn_btn.clicked.connect(self._on_play_sinnabschnitt)
+        controls.addWidget(self.sinn_btn)
+
         controls.addSpacing(20)
 
         sep = QFrame()
@@ -465,12 +471,17 @@ class ReviewPage(QWidget):
                      if hasattr(cfg, "get") else None)
             self._smart_worker = SmartBoundaryWorker(
                 self.session, ClaudeBoundaryDecider(model=model))
-            self._smart_worker.finished.connect(
-                self._on_smart_boundaries_done)
-            self._smart_worker.progress.connect(self.status_message.emit)
-            self._smart_worker.start()
+            worker = self._smart_worker
+            # P2 (Carl): finished an die KONKRETE Instanz binden —
+            # ein spät fertig werdender Alt-Worker darf den neuen
+            # nicht aufräumen.
+            worker.finished.connect(
+                lambda candidates, w=worker:
+                self._on_smart_boundaries_done(candidates, w))
+            worker.progress.connect(self.status_message.emit)
+            worker.start()
 
-    def _on_smart_boundaries_done(self, candidates):
+    def _on_smart_boundaries_done(self, candidates, worker=None):
         # Zusatzdateien schreiben — guarded, bricht den Flow NIE.
         for exp in (SinnabschnittTXTExporter(), SinnabschnittXMLExporter()):
             try:
@@ -478,12 +489,40 @@ class ReviewPage(QWidget):
             except Exception as e:  # noqa: BLE001
                 self.status_message.emit(
                     f"Sinnabschnitte-Export übersprungen: {e}")
-        if self._smart_worker is not None:
-            self._smart_worker.deleteLater()
+        # P2: nur clearen, wenn DIESER Worker noch der aktuelle ist;
+        # ein veralteter Sender wird entsorgt, ohne den neuen zu fassen.
+        if worker is not None and self._smart_worker is not worker:
+            worker.deleteLater()
+        else:
+            if self._smart_worker is not None:
+                self._smart_worker.deleteLater()
             self._smart_worker = None
         # Autosave: aktualisierte ClipCandidates + transcript_ref in
         # die .peakcut-Akte (MainWindow lauscht auf session_changed).
         self.session_changed.emit()
+
+    def _on_play_sinnabschnitt(self):
+        """Verifizierungs-Vorschau: spielt den smarten Sinnabschnitt
+        des aktuellen Drückers. Kein Kandidat -> Hinweis, kein Crash
+        (Gate G: nice-to-have, bricht nie etwas)."""
+        if not self.session or not getattr(self.session, "peaks", None):
+            return
+        idx = self.session.current_peak
+        if not (0 <= idx < len(self.session.peaks)):
+            return
+        pid = self.session.peaks[idx].index
+        cand = next((c for c in getattr(self.session, "clip_candidates", [])
+                     if c.peak_id == pid and c.score is not None), None)
+        if cand is None:
+            self.status_message.emit(
+                "Kein Sinnabschnitt für diesen Drücker — Standard-Fenster.")
+            return
+        b = cand.boundary
+        dur_s = (b.end_ms - b.start_ms) // 1000
+        self.video_preview.play_from(b.start_ms, b.end_ms)
+        self.status_message.emit(
+            f"Sinnabschnitt: {dur_s}s · Konfidenz {cand.score} · "
+            f"{cand.reason}")
 
     def _on_export_error(self, msg):
         _log.error("Export error: %s", msg)
