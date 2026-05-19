@@ -1,16 +1,25 @@
-"""Roadmap #3 Task 6 — Stufe-B-Pipeline (nach dem Export-Handoff).
+"""Roadmap #3 Task 5/6 — Stufe-B-Pipeline.
 
-Konsumiert NUR das gespeicherte Transkript (Spec-Rework: kein
-transcriber-Param — bewusste Abweichung von Carls Ur-Signatur).
-Pro nicht-ignoriertem Peak: Scaffold -> Decider -> Bremse -> vorhandene
-ClipCandidate aktualisieren (Status bleibt proposed). Fehler pro Peak
-isoliert; kein Transkript / Totalfehler -> Skip (Bootstrap bleibt).
+#3-Revision Task 5 + Spec §11 R4: prepare_smart_boundaries gibt jetzt
+ein SmartBoundaryRunResult zurück (Pin 3: einzige semantische
+Vertragsänderung). Nutzt im Smart-Pfad NUR decide_with_brake_result —
+der alte decide_with_brake-Wrapper bleibt für Legacy-Aufrufer, ist hier
+aber ausgemustert (Carl Task-4-Caveat).
+
+Konsumiert NUR das gespeicherte Transkript. Drei Run-Ausgänge:
+- INFRA_FEHLT  -> Lauf abbrechen, KEINE Pseudo-Candidates.
+- DECIDER_VERWORFEN pro Peak -> Candidate bekommt sicheren Fallback
+  (score=0.0, echtes Signal); Lauf insgesamt bleibt OK.
+- OK pro Peak -> Candidate mit Score; Lauf insgesamt OK.
+
+Status der Candidates bleibt proposed; Ignorierte/DISCARDED unangetastet.
 """
 
 from dataclasses import replace
 
 from .scaffold import build_scaffold
-from .decider import decide_with_brake
+from .decider import decide_with_brake_result
+from .models import BoundaryOutcome, SmartBoundaryRunResult
 from ..clip_candidates import ClipBoundary, DISCARDED
 
 
@@ -50,26 +59,36 @@ def _resolve_transcript(session):
         from ..transcript_archive import read_transcript_sidecar
         from ..project_archive import material_root, _media_paths
         root = material_root(_media_paths(session.project),
-                             session.project.keyboard_track)
+                              session.project.keyboard_track)
         return read_transcript_sidecar(root, ref)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 
 def prepare_smart_boundaries(session, decider, *, config,
-                             should_stop=None):
-    """Gibt IMMER session.clip_candidates zurück (in-place
-    aktualisiert). Kein Transkript -> unverändert (Bootstrap)."""
+                              should_stop=None):
+    """Aktualisiert session.clip_candidates IN PLACE und gibt
+    SmartBoundaryRunResult zurück (Spec §11 R4)."""
     cands = session.clip_candidates
     transcript = _resolve_transcript(session)
     peaks = list(getattr(session, "peaks", []) or [])
-    if transcript is None or not peaks:
-        return cands
+
+    if transcript is None:
+        return SmartBoundaryRunResult(
+            tuple(cands), BoundaryOutcome.INFRA_FEHLT,
+            "Sinnabschnitte nicht berechnet: Transkript fehlt.", 0, 0)
+
+    if not peaks:
+        return SmartBoundaryRunResult(tuple(cands), BoundaryOutcome.OK,
+                                       "", 0, 0)
 
     after = _cfg(config, "smart_boundary_search_after_ms", 60000)
     total = max(p.position_ms for p in peaks) + after + 1000
     activity = getattr(session, "speaker_activity", []) or []
     by_id = {c.peak_id: i for i, c in enumerate(cands)}
+
+    ready = 0
+    fallback = 0
 
     for p in peaks:
         if should_stop is not None and should_stop():
@@ -82,19 +101,15 @@ def prepare_smart_boundaries(session, decider, *, config,
         c = cands[i]
         if c.status == DISCARDED:
             continue
+
+        # Scaffold-Bau ist KEIN Decider-Aufruf — Fehler hier sind kein
+        # Infra-Signal (Carl Gate-E P1): unsicherer Fallback, weiter.
         try:
             sc = build_scaffold(
                 peak_id=p.index, peak_ms=p.position_ms,
                 transcript=transcript, activity_frames=activity,
                 config=config, total_duration_ms=total)
-            d = decide_with_brake(sc, decider, config=config)
-            cands[i] = replace(
-                c, boundary=ClipBoundary(d.start_ms, d.end_ms),
-                transcript_excerpt=sc.transcript_excerpt,
-                reason=d.reason, score=d.confidence)
-        except Exception:  # noqa: BLE001 — Fehler pro Peak isoliert
-            # P1: NICHT stumm überspringen — unsicheren Fallback
-            # markieren, andere Peaks laufen weiter.
+        except Exception:  # noqa: BLE001
             try:
                 cands[i] = replace(
                     c,
@@ -103,6 +118,35 @@ def prepare_smart_boundaries(session, decider, *, config,
                     reason="Scaffold/Verarbeitung fehlgeschlagen — "
                            "unsicherer Rückfall.",
                     score=0.0)
+                fallback += 1
             except Exception:  # noqa: BLE001 — letzte Absicherung
-                continue
-    return cands
+                pass
+            continue
+
+        # #3-Rev Task 5: Result-Variante, keine Legacy-Wrapper im
+        # Smart-Pfad (Carl Task-4-Caveat).
+        res = decide_with_brake_result(sc, decider, config=config)
+
+        if res.category is BoundaryOutcome.INFRA_FEHLT:
+            # Run abbrechen, KEINE Pseudo-Candidates (Spec §11 R4).
+            # Counts auf 0 gesetzt -> Frozen-Validator erfüllt; die
+            # Wahrheit für diesen Lauf steht in den (echten) Candidates.
+            return SmartBoundaryRunResult(
+                tuple(cands), BoundaryOutcome.INFRA_FEHLT,
+                res.message or
+                "Sinnabschnitte nicht berechnet: Infrastruktur fehlt.",
+                0, 0)
+
+        # OK oder DECIDER_VERWORFEN tragen beide eine gültige Decision.
+        d = res.decision
+        cands[i] = replace(
+            c, boundary=ClipBoundary(d.start_ms, d.end_ms),
+            transcript_excerpt=sc.transcript_excerpt,
+            reason=d.reason, score=d.confidence)
+        if res.category is BoundaryOutcome.OK:
+            ready += 1
+        else:
+            fallback += 1
+
+    return SmartBoundaryRunResult(
+        tuple(cands), BoundaryOutcome.OK, "", ready, fallback)

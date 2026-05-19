@@ -107,10 +107,14 @@ def test_no_transcript_skips_all_candidates_unchanged():
         assert c.status == PROPOSED
 
 
-def test_returns_candidate_list():
+def test_returns_run_result_with_candidates_tuple():
+    # #3-Rev Task 5 (Pin 3): einzige semantische Vertragsänderung —
+    # prepare_smart_boundaries gibt SmartBoundaryRunResult (kein list).
+    from core.clip_boundary.models import SmartBoundaryRunResult
     s = _session([_peak(0, 120000)])
     out = prepare_smart_boundaries(s, _GoodDecider(), config=_CFG)
-    assert out is s.clip_candidates
+    assert isinstance(out, SmartBoundaryRunResult)
+    assert out.candidates == tuple(s.clip_candidates)
 
 
 def test_scaffold_failure_yields_unsafe_fallback_not_silent_skip():
@@ -159,7 +163,8 @@ def test_smart_boundary_worker_runs_and_finishes():
     s = _session([_peak(0, 120000)])
     done = {}
     w = SmartBoundaryWorker(s, _GoodDecider())
-    w.finished.connect(lambda lst: done.setdefault("n", len(lst)))
+    # #3-Rev Task 5: finished emittiert jetzt SmartBoundaryRunResult.
+    w.finished.connect(lambda res: done.setdefault("n", len(res.candidates)))
     w.run()
     assert done.get("n") == 1
     assert _cand(s, 0).score is not None

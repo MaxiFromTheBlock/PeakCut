@@ -614,7 +614,10 @@ class SmartBoundaryWorker(QThread):
     hängt ihn ein). Konsumiert nur das gespeicherte Transkript, füllt
     ClipCandidate je Drücker. Kein Subprozess (schnell, da das Schwere
     in Stufe A lief) — kooperativer Abbruch via request_stop()."""
-    finished = pyqtSignal(list)   # aktualisierte ClipCandidate-Liste
+    # #3-Rev Task 5 (Pin 3): einzige semantische Vertragsänderung —
+    # finished trägt jetzt ein SmartBoundaryRunResult (object) statt
+    # einer blanken Liste, damit Status/Kategorie ans UI durchkommen.
+    finished = pyqtSignal(object)
     progress = pyqtSignal(str)
 
     def __init__(self, session, decider):
@@ -629,13 +632,17 @@ class SmartBoundaryWorker(QThread):
 
     def run(self):
         from core.clip_boundary.pipeline import prepare_smart_boundaries
+        from core.clip_boundary.models import (
+            SmartBoundaryRunResult, BoundaryOutcome)
         try:
             result = prepare_smart_boundaries(
                 self.session, self._decider,
                 config=getattr(self.session, "config", {}),
                 should_stop=lambda: self._stop)
         except Exception as e:  # noqa: BLE001 — nie den Flow brechen
-            self.progress.emit(
-                f"Sinnabschnitte: übersprungen — {e}")
-            result = getattr(self.session, "clip_candidates", [])
+            self.progress.emit(f"Sinnabschnitte: übersprungen — {e}")
+            cands = tuple(getattr(self.session, "clip_candidates", []) or ())
+            result = SmartBoundaryRunResult(
+                cands, BoundaryOutcome.INFRA_FEHLT,
+                f"Sinnabschnitte übersprungen: {type(e).__name__}", 0, 0)
         self.finished.emit(result)

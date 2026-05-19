@@ -481,14 +481,25 @@ class ReviewPage(QWidget):
             worker.progress.connect(self.status_message.emit)
             worker.start()
 
-    def _on_smart_boundaries_done(self, candidates, worker=None):
-        # Zusatzdateien schreiben — guarded, bricht den Flow NIE.
-        for exp in (SinnabschnittTXTExporter(), SinnabschnittXMLExporter()):
-            try:
-                exp.export(self.session)
-            except Exception as e:  # noqa: BLE001
-                self.status_message.emit(
-                    f"Sinnabschnitte-Export übersprungen: {e}")
+    def _on_smart_boundaries_done(self, result, worker=None):
+        # #3-Rev Task 5: Worker liefert ein SmartBoundaryRunResult.
+        # Spec §11 R4: bei INFRA_FEHLT KEINE Sinnabschnitt-Dateien
+        # schreiben — stattdessen LAUTER Status. Bei OK (oder
+        # DECIDER_VERWORFEN-Counts >0) Exporter laufen lassen.
+        from core.clip_boundary.models import BoundaryOutcome
+        if getattr(result, "category", None) is BoundaryOutcome.INFRA_FEHLT:
+            self.status_message.emit(
+                getattr(result, "message", None)
+                or "Sinnabschnitte: nicht berechnet (Infrastruktur fehlt).")
+        else:
+            # Zusatzdateien schreiben — guarded, bricht den Flow NIE.
+            for exp in (SinnabschnittTXTExporter(),
+                         SinnabschnittXMLExporter()):
+                try:
+                    exp.export(self.session)
+                except Exception as e:  # noqa: BLE001
+                    self.status_message.emit(
+                        f"Sinnabschnitte-Export übersprungen: {e}")
         # P2: nur clearen, wenn DIESER Worker noch der aktuelle ist;
         # ein veralteter Sender wird entsorgt, ohne den neuen zu fassen.
         if worker is not None and self._smart_worker is not worker:
