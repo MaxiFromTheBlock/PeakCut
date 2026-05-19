@@ -113,6 +113,31 @@ def test_returns_candidate_list():
     assert out is s.clip_candidates
 
 
+def test_scaffold_failure_yields_unsafe_fallback_not_silent_skip():
+    # Carl Gate-E P1: build_scaffold knallt für Peak 1 -> dieser Peak
+    # bekommt einen UNSICHEREN Fallback (score 0.0), NICHT stilles None;
+    # die anderen laufen normal weiter.
+    from unittest.mock import patch
+    import core.clip_boundary.pipeline as pl
+    real = pl.build_scaffold
+
+    def flaky(*a, **kw):
+        if kw.get("peak_ms") == 300000:        # Peak mit index 1
+            raise RuntimeError("kaputtes Scaffold / speaker_activity")
+        return real(*a, **kw)
+
+    s = _session([_peak(0, 120000), _peak(1, 300000), _peak(2, 480000)])
+    with patch.object(pl, "build_scaffold", side_effect=flaky):
+        prepare_smart_boundaries(s, _GoodDecider(), config=_CFG)
+    bad = _cand(s, 1)
+    assert bad.score == 0.0                     # unsicher, NICHT None
+    assert bad.status == PROPOSED
+    assert bad.reason != ""
+    assert bad.boundary.end_ms > bad.boundary.start_ms
+    assert _cand(s, 0).score is not None        # andere unberührt
+    assert _cand(s, 2).score is not None
+
+
 def test_cooperative_stop_between_peaks():
     s = _session([_peak(0, 120000), _peak(2, 300000)])
     calls = {"n": 0}

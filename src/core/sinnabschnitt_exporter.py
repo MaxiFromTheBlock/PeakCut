@@ -15,6 +15,10 @@ import os
 from xml.sax.saxutils import escape
 
 from utils import ms_to_timecode, ms_to_frames
+# Geteilter URL-Helfer (Carl Gate-E P2): import ist ok — "eigener
+# Codepfad" = nicht in _build_exporters / Keyboardstellen-Exporter
+# unangetastet, NICHT "keine gemeinsame Util".
+from .exporters import _file_url
 from .clip_candidates import DISCARDED
 
 
@@ -73,6 +77,7 @@ class SinnabschnittXMLExporter:
                or (session.project.mic_tracks[0]
                    if session.project.mic_tracks else "audio.wav"))
         ref_name = escape(os.path.basename(ref))
+        ref_url = _file_url(ref)
         rate = (f"<rate><timebase>{fps}</timebase>"
                 f"<ntsc>FALSE</ntsc></rate>")
 
@@ -93,7 +98,7 @@ class SinnabschnittXMLExporter:
                 f'          <out>{out_f}</out>\n'
                 f'          <file id="sinn-audio">\n'
                 f'            <name>{ref_name}</name>\n'
-                f'            <pathurl>{ref_name}</pathurl>\n'
+                f'            <pathurl>{ref_url}</pathurl>\n'
                 f'            {rate}\n'
                 f'          </file>\n'
                 f'        </clipitem>\n')

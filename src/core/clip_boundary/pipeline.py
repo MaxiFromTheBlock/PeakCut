@@ -22,6 +22,23 @@ def _cfg(config, key, default):
     return default if val is None else val
 
 
+def _safe_fallback_boundary(peak_ms, total, config):
+    """Carl Gate-E P1: Scaffold-/Verarbeitungs-Fehler -> NICHT stilles
+    Skip, sondern ein unsicherer, deterministischer Rückfall (Peak
+    garantiert drin, in [0,total])."""
+    fb_b = _cfg(config, "smart_boundary_fallback_before_ms", 45000)
+    fb_a = _cfg(config, "smart_boundary_fallback_after_ms", 30000)
+    start = max(0, peak_ms - fb_b)
+    end = min(total, peak_ms + fb_a)
+    if start >= peak_ms:
+        start = max(0, peak_ms - 1)
+    if end <= peak_ms:
+        end = peak_ms + 1
+    if end <= start:
+        start, end = max(0, peak_ms - 1), peak_ms + 1
+    return ClipBoundary(start, end)
+
+
 def _resolve_transcript(session):
     t = getattr(session, "transcript", None)
     if t is not None:
@@ -76,5 +93,16 @@ def prepare_smart_boundaries(session, decider, *, config,
                 transcript_excerpt=sc.transcript_excerpt,
                 reason=d.reason, score=d.confidence)
         except Exception:  # noqa: BLE001 — Fehler pro Peak isoliert
-            continue
+            # P1: NICHT stumm überspringen — unsicheren Fallback
+            # markieren, andere Peaks laufen weiter.
+            try:
+                cands[i] = replace(
+                    c,
+                    boundary=_safe_fallback_boundary(
+                        p.position_ms, total, config),
+                    reason="Scaffold/Verarbeitung fehlgeschlagen — "
+                           "unsicherer Rückfall.",
+                    score=0.0)
+            except Exception:  # noqa: BLE001 — letzte Absicherung
+                continue
     return cands

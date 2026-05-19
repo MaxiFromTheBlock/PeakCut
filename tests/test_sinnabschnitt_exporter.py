@@ -69,6 +69,8 @@ def test_xml_uses_smart_boundary_valid_xmeml(tmp_path):
     # Smart-Boundary in Frames (100000ms@25fps = 2500, 160000 = 4000)
     assert "2500" in xml and "4000" in xml
     assert "330000" not in xml              # discarded nicht enthalten
+    # Carl Gate-E P2: echte file://-URL als pathurl, nicht Basename
+    assert "<pathurl>file://" in xml
 
 
 def test_only_writes_own_files_never_keyboardstellen(tmp_path):
