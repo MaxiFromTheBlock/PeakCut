@@ -18,6 +18,16 @@ from core.clip_boundary.models import (  # noqa: E402
     BoundarySnapCandidate, BoundaryScaffold, BoundaryDecision,
     BoundaryDecider, BoundaryError,
 )
+# #3-Revision Gate A — NEUE Verträge NEBEN den eingefrorenen (Pin 3:
+# die obigen Kernmodelle bleiben byte-/feldstabil und werden NICHT
+# angefasst).
+from core.clip_boundary.models import (  # noqa: E402
+    BoundaryInfraError, BoundaryOutcome,
+    BoundaryDecisionResult, SmartBoundaryRunResult,
+)
+from core.credentials import (  # noqa: E402
+    CredentialStatus, ClaudeCredentialProvider,
+)
 
 
 # --- Transcript-Verträge --------------------------------------------------
@@ -130,3 +140,83 @@ def test_boundary_decider_protocol_is_runtime_checkable():
 
 def test_boundary_error_exists():
     assert issubclass(BoundaryError, Exception)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# #3-Revision Gate A — neue Ergebnis-/Credential-Verträge (Spec §11
+# R3/R4, Carl Task 1 + Pin 3). NEU NEBEN den eingefrorenen Modellen;
+# nach Freigabe nicht mehr beiläufig drehen.
+# ══════════════════════════════════════════════════════════════════════
+
+
+def test_boundary_infra_error_is_a_boundary_error():
+    # Subklasse: bestehendes `except BoundaryError` fängt es weiter,
+    # aber Infra ist gezielt unterscheidbar (R4).
+    assert issubclass(BoundaryInfraError, BoundaryError)
+    assert issubclass(BoundaryInfraError, Exception)
+
+
+def test_boundary_outcome_categories():
+    assert {o.value for o in BoundaryOutcome} == {
+        "OK", "DECIDER_VERWORFEN", "INFRA_FEHLT"}
+    # str-Enum -> serialisierbar/vergleichbar wie ein String
+    assert BoundaryOutcome.OK == "OK"
+    assert BoundaryOutcome("INFRA_FEHLT") is BoundaryOutcome.INFRA_FEHLT
+
+
+def test_boundary_decision_result_shape_and_rules():
+    d = BoundaryDecision(1000, 2000, "ok", 0.8)
+    ok = BoundaryDecisionResult(BoundaryOutcome.OK, d, "")
+    assert ok.category is BoundaryOutcome.OK and ok.decision is d
+    # DECIDER_VERWORFEN trägt den conf-0.0-Rückfall (echtes Signal)
+    fb = BoundaryDecision(1000, 2000, "Bremse: unplausibel", 0.0)
+    verw = BoundaryDecisionResult(BoundaryOutcome.DECIDER_VERWORFEN, fb, "x")
+    assert verw.decision.confidence == 0.0
+    # INFRA_FEHLT -> KEINE Decision (kein Pseudo-Ergebnis)
+    infra = BoundaryDecisionResult(BoundaryOutcome.INFRA_FEHLT, None,
+                                   "API-Key ungültig")
+    assert infra.decision is None
+    for bad in ((BoundaryOutcome.OK, None, ""),               # OK ohne Decision
+                (BoundaryOutcome.INFRA_FEHLT, d, "")):        # Infra mit Decision
+        try:
+            BoundaryDecisionResult(*bad)
+            assert False, f"ungültig: {bad}"
+        except ValueError:
+            pass
+
+
+def test_smart_boundary_run_result_no_pseudo_on_infra():
+    cands = (object(), object())
+    ok = SmartBoundaryRunResult(cands, BoundaryOutcome.OK, "", 2, 0)
+    assert ok.candidates == cands and ok.ready_count == 2
+    # INFRA_FEHLT: keine Pseudo-Candidates -> beide Zähler 0
+    infra = SmartBoundaryRunResult((), BoundaryOutcome.INFRA_FEHLT,
+                                   "kein Key", 0, 0)
+    assert infra.ready_count == 0 and infra.fallback_count == 0
+    for bad in ((cands, BoundaryOutcome.OK, "", -1, 0),       # negativ
+                ((), BoundaryOutcome.INFRA_FEHLT, "", 1, 0),   # Infra + Zähler
+                ((), BoundaryOutcome.INFRA_FEHLT, "", 0, 3)):
+        try:
+            SmartBoundaryRunResult(*bad)
+            assert False, f"ungültig: {bad}"
+        except ValueError:
+            pass
+
+
+def test_credential_status_shape():
+    ok = CredentialStatus(True, "", "Key ok")
+    bad = CredentialStatus(False, "missing", "Kein Key hinterlegt")
+    assert ok.ok is True and bad.ok is False
+    assert bad.reason == "missing"
+
+
+def test_claude_credential_provider_protocol_runtime_checkable():
+    class FakeProvider:
+        def get_api_key(self):
+            return "sk-test"
+
+        def status(self):
+            return CredentialStatus(True, "", "ok")
+
+    assert isinstance(FakeProvider(), ClaudeCredentialProvider)
+    assert not isinstance(object(), ClaudeCredentialProvider)

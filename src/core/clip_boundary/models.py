@@ -6,7 +6,8 @@ Gate A STOPP: nach Freigabe nicht mehr an diesen Contracts drehen.
 """
 
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from enum import Enum
+from typing import Any, Optional, Protocol, runtime_checkable
 
 
 class BoundaryError(Exception):
@@ -122,3 +123,73 @@ class BoundaryDecider(Protocol):
 
     def decide(self, scaffold: BoundaryScaffold) -> BoundaryDecision:
         ...
+
+
+# ══════════════════════════════════════════════════════════════════════
+# #3-Revision Gate A — Ergebnis-Verträge (Spec §11 R4, Carl Task 1).
+# NEU NEBEN den eingefrorenen Modellen oben (Pin 3: die bleiben byte-/
+# feldstabil). STOPP nach Freigabe: nicht mehr beiläufig drehen.
+# ══════════════════════════════════════════════════════════════════════
+
+
+class BoundaryInfraError(BoundaryError):
+    """Infrastruktur-Ausfall (kein/ungültiger Key, Modell/API nicht
+    erreichbar, Transkript fehlt) — gezielt unterscheidbar von einer
+    *fachlichen* Ablehnung durch die Plausibilitätsbremse. Subklasse,
+    damit bestehendes `except BoundaryError` es weiter fängt."""
+
+
+class BoundaryOutcome(str, Enum):
+    """Ergebnis-Kategorie statt blankem conf-0.0-Rückfall (R4)."""
+    OK = "OK"
+    DECIDER_VERWORFEN = "DECIDER_VERWORFEN"
+    INFRA_FEHLT = "INFRA_FEHLT"
+
+
+@dataclass(frozen=True)
+class BoundaryDecisionResult:
+    """Ein Decider-Lauf für *einen* Drücker mit Kategorie.
+
+    - OK: `decision` ist die gültige (gesnappte) Entscheidung.
+    - DECIDER_VERWORFEN: Claude antwortete, die Bremse lehnte berechtigt
+      ab -> `decision` ist der conf-0.0-Rückfall (echtes Signal).
+    - INFRA_FEHLT: kein/ungültiger Key, Modell/API/Transkript fehlt ->
+      `decision` ist None (KEIN Pseudo-Ergebnis).
+    """
+    category: BoundaryOutcome
+    decision: Optional[BoundaryDecision]
+    message: str = ""
+
+    def __post_init__(self):
+        if self.category is BoundaryOutcome.INFRA_FEHLT:
+            if self.decision is not None:
+                raise ValueError(
+                    "INFRA_FEHLT darf keine Decision tragen "
+                    "(kein Pseudo-Ergebnis)")
+        elif self.decision is None:
+            raise ValueError(
+                f"{self.category.value} erfordert eine Decision")
+
+
+@dataclass(frozen=True)
+class SmartBoundaryRunResult:
+    """Ergebnis eines ganzen Smart-Boundary-Laufs (statt blanker Liste).
+
+    Bei INFRA_FEHLT bleiben die Candidates unverändert und es gibt
+    KEINE Pseudo-Einträge -> beide Zähler 0 (behebt den unsichtbaren
+    Systemausfall, Spec §11 R4)."""
+    candidates: tuple = ()
+    category: BoundaryOutcome = BoundaryOutcome.OK
+    message: str = ""
+    ready_count: int = 0
+    fallback_count: int = 0
+
+    def __post_init__(self):
+        if not isinstance(self.candidates, tuple):
+            object.__setattr__(self, "candidates", tuple(self.candidates))
+        if self.ready_count < 0 or self.fallback_count < 0:
+            raise ValueError("Zähler müssen >= 0 sein")
+        if (self.category is BoundaryOutcome.INFRA_FEHLT
+                and (self.ready_count or self.fallback_count)):
+            raise ValueError(
+                "INFRA_FEHLT erzeugt keine Candidates -> Zähler müssen 0 sein")

@@ -34,15 +34,44 @@ def transcript_sidecar_path(project):
                         TRANSCRIPT_NAME)
 
 
-def build_transcript_ref(project, *, engine, model, language, audio_path):
+def audio_fingerprint(path):
+    """Billiger Mix-Fingerprint für den Transkript-Cache (Spec §11 R6):
+    size + mtime_ns, KEIN teurer Hash im UI-Pfad. Fehlende Datei ->
+    None (tolerant, nie werfen)."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return {"size": st.st_size, "mtime_ns": st.st_mtime_ns}
+
+
+def build_transcript_ref(project, *, engine, model, language, audio_path,
+                         source="whisper", source_path=None,
+                         transcript_span_ms=None, audio_duration_ms=None):
+    """#3-Revision Gate A: additiv erweitert (Spec §11 R2/R6).
+
+    `source` + `audio_fingerprint` sind immer dabei (Cache + pluggbare
+    Quelle). `source_path`/`transcript_span_ms`/`audio_duration_ms` nur
+    wenn bekannt -> alte Akten ohne diese Felder bleiben gültig und
+    werden weiter sauber gelesen (read_transcript_sidecar ist tolerant
+    und nutzt nur `path`)."""
     root = transcript_root(project)
-    return {
+    ref = {
         "path": TRANSCRIPT_REF,
         "engine": engine,
         "model": model,
         "language": language,
         "audio_path": _rel(audio_path, root),
+        "source": source,
+        "audio_fingerprint": audio_fingerprint(audio_path),
     }
+    if source_path is not None:
+        ref["source_path"] = source_path
+    if transcript_span_ms is not None:
+        ref["transcript_span_ms"] = transcript_span_ms
+    if audio_duration_ms is not None:
+        ref["audio_duration_ms"] = audio_duration_ms
+    return ref
 
 
 def write_transcript_json(path, transcript):

@@ -22,7 +22,7 @@ from core.transcription import Transcript, TranscriptSegment, TranscriptWord  # 
 from core.transcript_archive import (  # noqa: E402
     TRANSCRIPT_NAME, TRANSCRIPT_REF,
     transcript_sidecar_path, write_transcript_sidecar,
-    read_transcript_sidecar,
+    read_transcript_sidecar, build_transcript_ref, audio_fingerprint,
 )
 from core.project import PeakCutProject  # noqa: E402
 from core.session import PeakCutSession  # noqa: E402
@@ -199,3 +199,64 @@ def test_transcript_ref_roundtrips_through_archive_at_session_level(tmp_path):
     assert loaded.transcript_ref == ref
     assert loaded.transcript is not None      # Sidecar wieder gelesen
     assert loaded.transcript_error is None
+
+
+# ══════════════════════════════════════════════════════════════════════
+# #3-Revision Gate A — transcript_ref additiv erweitert (Spec §11 R2/R6,
+# Carl Task 1). source + audio_fingerprint immer; source_path /
+# transcript_span_ms / audio_duration_ms optional. Alte Akten ohne
+# diese Felder laden weiter sauber.
+# ══════════════════════════════════════════════════════════════════════
+
+
+def test_audio_fingerprint_size_and_mtime(tmp_path):
+    f = tmp_path / "mix.wav"
+    f.write_bytes(b"\x00" * 17)
+    fp = audio_fingerprint(str(f))
+    assert fp["size"] == 17
+    assert isinstance(fp["mtime_ns"], int) and fp["mtime_ns"] > 0
+    # kein teurer Hash im UI-Pfad -> nur size + mtime_ns
+    assert set(fp) == {"size", "mtime_ns"}
+    # fehlende Datei -> None (tolerant, kein Wurf)
+    assert audio_fingerprint(str(tmp_path / "weg.wav")) is None
+
+
+def test_build_transcript_ref_has_source_and_fingerprint(tmp_path):
+    s = _session(tmp_path)
+    ref = build_transcript_ref(
+        s.project, engine="mlx-whisper", model="m", language="de",
+        audio_path=s.project.mic_tracks[0])
+    assert ref["source"] == "whisper"            # Default-Quelle
+    assert ref["audio_fingerprint"]["size"] == 1  # b"\x00" Mediafile
+    assert "mtime_ns" in ref["audio_fingerprint"]
+    # Optionale Felder NICHT vorhanden solange nicht übergeben
+    for opt in ("source_path", "transcript_span_ms", "audio_duration_ms"):
+        assert opt not in ref
+
+
+def test_build_transcript_ref_optional_fields_only_when_given(tmp_path):
+    s = _session(tmp_path)
+    ref = build_transcript_ref(
+        s.project, engine="descript", model="-", language="de",
+        audio_path=s.project.mic_tracks[0],
+        source="descript", source_path="/x/Transkript.docx",
+        transcript_span_ms=4_200_000, audio_duration_ms=4_260_000)
+    assert ref["source"] == "descript"
+    assert ref["source_path"] == "/x/Transkript.docx"
+    assert ref["transcript_span_ms"] == 4_200_000
+    assert ref["audio_duration_ms"] == 4_260_000
+
+
+def test_old_ref_without_new_fields_still_reads_sidecar(tmp_path):
+    # Akte aus der Zeit VOR der Revision: ref hat nur path/engine/...
+    s = _session(tmp_path)
+    write_transcript_sidecar(
+        s.project, _transcript(), engine="mlx-whisper", model="m",
+        language="de", audio_path=s.project.mic_tracks[0])
+    root = material_root(_media_paths(s.project), s.project.keyboard_track)
+    old_ref = {"path": TRANSCRIPT_REF, "engine": "mlx-whisper",
+               "model": "m", "language": "de", "audio_path": "material/MIC1 mix.wav"}
+    # kein source / kein audio_fingerprint -> trotzdem lesbar, kein Wurf
+    t = read_transcript_sidecar(root, old_ref)
+    assert t is not None
+    assert t.segments[0].text == "Das System"
