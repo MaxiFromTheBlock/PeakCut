@@ -22,6 +22,7 @@ _CFG = {
     "smart_boundary_confidence_threshold": 0.5,
     "smart_boundary_fallback_before_ms": 45000,
     "smart_boundary_fallback_after_ms": 30000,
+    "smart_boundary_snap_tolerance_ms": 1500,
 }
 
 
@@ -136,3 +137,58 @@ def test_claude_decider_bad_json_then_brake_fallback():
     sc = _scaffold()
     dec = ClaudeBoundaryDecider(call_model=lambda p: "kein json")
     _fallback_ok(decide_with_brake(sc, dec, config=_CFG), sc)
+
+
+# --- P1: Bremse erzwingt Snap-Kanten -----------------------------------
+
+def test_exact_snap_decision_unchanged():
+    sc = _scaffold()                                  # snaps: 0,95k,150k,240k
+    good = BoundaryDecision(95000, 150000, "exakt auf Kanten", 0.8)
+    assert decide_with_brake(sc, _FixedDecider(good), config=_CFG) == good
+
+
+def test_near_snap_is_corrected_then_passes():
+    sc = _scaffold()
+    near = BoundaryDecision(94321, 149876, "knapp daneben", 0.9)
+    out = decide_with_brake(sc, _FixedDecider(near), config=_CFG)
+    assert out.start_ms == 95000          # auf Snap korrigiert (<=1500ms)
+    assert out.end_ms == 150000
+    assert out.confidence == 0.9
+
+
+def test_far_from_snap_falls_back():
+    sc = _scaffold()
+    far = BoundaryDecision(95000, 160000, "Ende 10s neben Snap", 0.9)
+    _fallback_ok(decide_with_brake(sc, _FixedDecider(far), config=_CFG), sc)
+
+
+def test_snapped_but_too_short_falls_back():
+    # Snaps direkt um den Peak -> nach Snap < min_duration -> Rückfall
+    sc = BoundaryScaffold(
+        peak_id=9, peak_ms=120000, window_start_ms=0, window_end_ms=240000,
+        transcript_excerpt="[PEAK]",
+        snap_candidates=(
+            BoundarySnapCandidate(0, "window_edge"),
+            BoundarySnapCandidate(119000, "sentence_end"),
+            BoundarySnapCandidate(122000, "pause"),
+            BoundarySnapCandidate(240000, "window_edge")))
+    d = BoundaryDecision(119200, 121800, "winzig", 0.9)  # snap -> 119k..122k
+    _fallback_ok(decide_with_brake(sc, _FixedDecider(d), config=_CFG), sc)
+
+
+# --- P2: kein verstecktes Default-Modell im Realpfad -------------------
+
+def test_claude_decider_without_model_raises_boundary_error():
+    from core.clip_boundary.models import BoundaryError
+    dec = ClaudeBoundaryDecider()        # kein call_model, kein model
+    try:
+        dec.decide(_scaffold())
+        assert False, "ohne Modell muss BoundaryError kommen"
+    except BoundaryError:
+        pass
+
+
+def test_missing_model_falls_back_via_brake():
+    sc = _scaffold()
+    _fallback_ok(decide_with_brake(sc, ClaudeBoundaryDecider(), config=_CFG),
+                 sc)

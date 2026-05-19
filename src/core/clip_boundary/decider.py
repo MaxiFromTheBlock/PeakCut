@@ -60,8 +60,7 @@ class ClaudeBoundaryDecider:
     str(prompt) -> str(roh). In Tests injiziert; produktiv lazy
     Anthropic-Client (niedrige Temperatur, strukturiertes JSON)."""
 
-    def __init__(self, *, call_model=None, model="claude-opus-4-7",
-                 client=None):
+    def __init__(self, *, call_model=None, model=None, client=None):
         self._call_model = call_model
         self._model = model
         self._client = client
@@ -69,6 +68,14 @@ class ClaudeBoundaryDecider:
     def _call(self, prompt):
         if self._call_model is not None:
             return self._call_model(prompt)
+        # P2 (Carl): kein verstecktes Default-Modell — der Realpfad
+        # MUSS ein explizites Modell bekommen (aus
+        # config['smart_boundary_claude_model']), sonst lauter Fehler
+        # statt stiller Falschannahme.
+        if not self._model:
+            raise BoundaryError(
+                "Kein Claude-Modell konfiguriert "
+                "(smart_boundary_claude_model)")
         client = self._client
         if client is None:
             import anthropic  # lazy: nie in pytest
@@ -118,6 +125,27 @@ def _nearest_snap(targets, target_ms, lo, hi):
     return min(cands, key=lambda t: abs(t - target_ms))
 
 
+def _snap_decision(d, sc, config):
+    """P1 (Carl): Decider-Output deterministisch auf Snap-Kanten
+    normalisieren BEVOR die Bremse läuft (Spec: Start/Ende auf
+    gelieferte natürliche Kanten gesnappt). Start = nächster Snap
+    <= peak nahe start; Ende = nächster Snap > peak nahe end. Kein
+    Snap innerhalb Toleranz -> None (Rückfall)."""
+    tol = _cfg(config, "smart_boundary_snap_tolerance_ms", 1500)
+    snaps = [c.time_ms for c in sc.snap_candidates]
+    s = _nearest_snap(snaps, d.start_ms, sc.window_start_ms, sc.peak_ms)
+    e = _nearest_snap(snaps, d.end_ms, sc.peak_ms + 1, sc.window_end_ms)
+    if s is None or e is None:
+        return None
+    if abs(s - d.start_ms) > tol or abs(e - d.end_ms) > tol:
+        return None
+    try:
+        return BoundaryDecision(start_ms=s, end_ms=e, reason=d.reason,
+                                confidence=d.confidence)
+    except ValueError:
+        return None
+
+
 def _fallback(sc, config):
     """Deterministisches, sicheres Rückfall-Fenster — auf Fenster und
     Snap-Kanten geklemmt, Peak garantiert drin, als unsicher markiert."""
@@ -154,7 +182,11 @@ def decide_with_brake(scaffold, decider, *, config):
         d = decider.decide(scaffold)
     except Exception:  # noqa: BLE001 (inkl. BoundaryError -> Rückfall)
         d = None
-    if d is None or not isinstance(d, BoundaryDecision) or \
-            not _brake_ok(d, scaffold, config):
+    if d is None or not isinstance(d, BoundaryDecision):
         return _fallback(scaffold, config)
-    return d
+    # P1: erst auf Snap-Kanten normalisieren, dann Bremse auf der
+    # gesnappten Decision (Spec: Start/Ende auf natürliche Kanten).
+    snapped = _snap_decision(d, scaffold, config)
+    if snapped is None or not _brake_ok(snapped, scaffold, config):
+        return _fallback(scaffold, config)
+    return snapped
