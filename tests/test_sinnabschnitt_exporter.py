@@ -83,6 +83,30 @@ def test_only_writes_own_files_never_keyboardstellen(tmp_path):
     assert not any(f.startswith("Keyboardstellen") for f in files)
 
 
+def test_bootstrap_only_no_smart_writes_nothing(tmp_path):
+    # Schritt-1-Realbefund: ohne Transkript bleiben alle Kandidaten
+    # Bootstrap (proposed, score=None). KEINE Sinnabschnitte-Datei als
+    # leeres Nebenprodukt (Carl-Checkliste). Konsistent zur Gate-G-
+    # Vorschau-Semantik: score is not None == smarter Abschnitt.
+    s = _session(tmp_path, [
+        ClipCandidate(peak_id=0, boundary=ClipBoundary(105000, 135000),
+                      status=PROPOSED, score=None),
+        ClipCandidate(peak_id=1, boundary=ClipBoundary(285000, 315000),
+                      status=PROPOSED, score=None)])
+    assert SinnabschnittTXTExporter().export(s) == ""
+    assert SinnabschnittXMLExporter().export(s) == ""
+    assert not os.path.isdir(s.project.export_dir) or \
+        os.listdir(s.project.export_dir) == []
+
+
+def test_fallback_score_zero_still_exported(tmp_path):
+    # Fallback (score=0.0) ist ECHTES Smart-Ergebnis -> sichtbar.
+    s = _session(tmp_path, [ClipCandidate(
+        peak_id=0, boundary=ClipBoundary(100000, 160000), status=PROPOSED,
+        reason="Rückfall", score=0.0)])
+    assert SinnabschnittTXTExporter().export(s).endswith(".txt")
+
+
 def test_empty_or_all_discarded_writes_nothing(tmp_path):
     s = _session(tmp_path, [ClipCandidate(
         peak_id=0, boundary=ClipBoundary(1, 2), status=DISCARDED)])

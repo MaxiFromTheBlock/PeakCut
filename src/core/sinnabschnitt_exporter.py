@@ -23,8 +23,13 @@ from .clip_candidates import DISCARDED
 
 
 def _active(session):
+    # Nur ECHTE Smart-Ergebnisse exportieren: status != discarded UND
+    # score is not None. Bootstrap-Kandidaten (kein Transkript/kein
+    # Smart-Lauf) haben score=None -> KEINE leere Nebenprodukt-Datei
+    # (Schritt-1-Realbefund / Carl-Checkliste). Konsistent zur
+    # Gate-G-Vorschau-Semantik; Fallback score=0.0 bleibt sichtbar.
     return [c for c in getattr(session, "clip_candidates", []) or []
-            if c.status != DISCARDED]
+            if c.status != DISCARDED and c.score is not None]
 
 
 def _paths(session, ext):
