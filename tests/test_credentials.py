@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from core.credentials import (  # noqa: E402
     CredentialStatus, ClaudeCredentialProvider,
     KeychainCredentialProvider, validate_api_key,
-    KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT,
+    KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, CredentialError,
 )
 from core.clip_boundary.models import BoundaryError  # noqa: E402
 from core.clip_boundary.decider import ClaudeBoundaryDecider  # noqa: E402
@@ -165,6 +165,47 @@ def test_decider_uses_provider_key_for_client():
     except AssertionError:
         pass
     assert captured["key"] == _GOOD
+
+
+# --- Carl-Gegenreview Findings (zwei P2) -------------------------------
+
+def test_store_raises_on_security_failure_without_key_leak():
+    # [P2] store() ignorierte den security-Returncode -> Aufrufer sah
+    # "ok", obwohl gesperrt/permission/etc.
+    class _FailingSec:
+        stored = None
+        calls = []
+        def __call__(self, args):
+            self.calls.append(args)
+            if args[0] == "add-generic-password":
+                return (1, "")            # security schlug fehl
+            return (44, "")
+    fake = _FailingSec()
+    p = KeychainCredentialProvider(runner=fake, env={})
+    try:
+        p.store("sk-ant-secret-xyz")
+        assert False, "muss bei security-Fehler werfen"
+    except CredentialError as e:
+        assert "secret" not in str(e)         # KEIN Key im Text
+        assert "xyz" not in str(e)
+    assert fake.stored is None                 # nichts gespeichert
+
+
+def test_decider_production_path_has_provider_by_default():
+    # [P2] Decider ohne Provider fiel still auf anthropic.Anthropic()
+    # zurück (SDK/Env, ohne Validierung/Keychain-Priorität). Im
+    # Produktionspfad MUSS ein Provider gesetzt sein.
+    dec = ClaudeBoundaryDecider(model="claude-x")
+    assert dec._credential_provider is not None
+    assert isinstance(dec._credential_provider, ClaudeCredentialProvider)
+
+
+def test_env_invalid_with_empty_keychain_returns_none_and_invalid_status():
+    p = _provider(stored=None, env={"ANTHROPIC_API_KEY": "kaputt mit space"})
+    assert p.get_api_key() is None
+    st = p.status()
+    assert st.ok is False and st.reason == "invalid"
+    assert "kaputt" not in st.message and "space" not in st.message
 
 
 def test_decider_without_key_raises_boundary_error_not_silent():

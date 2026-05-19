@@ -53,6 +53,11 @@ KEYCHAIN_ACCOUNT = "default"
 _ENV_KEY = "ANTHROPIC_API_KEY"
 
 
+class CredentialError(Exception):
+    """Kontrollierter Fehler in der Credential-Schicht. Meldungen
+    enthalten NIE den Key-Wert."""
+
+
 def validate_api_key(raw: str) -> str:
     """Trimmt und prüft (Carl Task 3): nicht leer, druckbares ASCII,
     keine Steuerzeichen, KEIN Whitespace im Key. Gibt den bereinigten
@@ -152,11 +157,20 @@ class KeychainCredentialProvider:
     def store(self, raw: str) -> None:
         """Validiert ZUERST (ungültig -> ValueError, nichts gespeichert),
         dann in die Keychain (`-U` = vorhandenen Eintrag aktualisieren).
-        Der Key geht nie nach config.json/Log."""
+        Der Key geht nie nach config.json/Log. Carl-Gegenreview [P2]:
+        security-Returncode prüfen — bei Fehler (gesperrt, fehlt,
+        Berechtigungen) sanitizte CredentialError werfen, KEINE
+        Key-/CLI-Details im Text."""
         key = validate_api_key(raw)
-        self._runner(
+        rc, _ = self._runner(
             ["add-generic-password", "-U", "-s", KEYCHAIN_SERVICE,
              "-a", KEYCHAIN_ACCOUNT, "-w", key])
+        if rc != 0:
+            raise CredentialError(
+                "Konnte Claude-Key nicht im Schlüsselbund speichern "
+                "(security lieferte einen Fehlercode zurück — Schlüssel-"
+                "bund gesperrt, Berechtigung fehlt oder `security` ist "
+                "nicht verfügbar).")
 
 
 def default_credential_provider() -> "KeychainCredentialProvider":

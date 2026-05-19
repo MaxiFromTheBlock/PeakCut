@@ -528,6 +528,15 @@ Kosten im Abo, Nutzer sieht nie einen Key) — derselbe Steckplatz,
 nur andere Implementierung → späterer Austausch, kein Neubau. Bezug:
 CLAUDE.md V4 „FastAPI Cloud / Accounts / Abo".
 
+**Bekannte v1-Grenze (Carl-Security-Gegenreview von 47eead5,
+2026-05-19, bewusst akzeptiert):** Der Key wird per `security
+add-generic-password -w <key>` an die macOS-CLI übergeben — d. h.
+kurz in der Prozess-Argumentliste sichtbar. Für v1 auf einem
+Einzelnutzer-Mac akzeptiert. **Bei Team-/Managed-/Cloud-Topologie
+(V4) NICHT mehr akzeptabel:** dann Apple-Security.framework /
+Keychain-API statt CLI-Argv. Ebenfalls aus dem Review bestätigt:
+kein Key-Leak nach config.json / Git / Log / Exception-Text.
+
 ### R4 — Bremsen-Semantik: Infra ≠ Decider
 Ergebnis-Kategorie statt blankem Fallback: `INFRA_FEHLT`
 (kein/ungültiger Key, Modell unerreichbar, Transkript fehlt) /

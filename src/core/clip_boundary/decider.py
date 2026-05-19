@@ -65,26 +65,31 @@ class ClaudeBoundaryDecider:
         self._call_model = call_model
         self._model = model
         self._client = client
+        # Carl-Gegenreview [P2]: Provider IMMER setzen — die alte
+        # Back-compat (anthropic.Anthropic() ohne unsere Validierung)
+        # war umgehbar. Default ist der Keychain-BYOK-Provider; der
+        # Constructor löst keine Systemaufrufe aus, der erste
+        # tatsächliche Aufruf passiert erst beim Bauen des Clients
+        # (Tests mit call_model/client/Modell-None erreichen das nie).
+        if credential_provider is None:
+            from core.credentials import default_credential_provider
+            credential_provider = default_credential_provider()
         self._credential_provider = credential_provider
         self._client_factory = client_factory
 
     def _build_client(self):
         # #3-Rev Task 3: Key kommt über den Credential-Provider
         # (Keychain primär, Env nur Dev) — nie aus config.json/Log.
-        if self._credential_provider is not None:
-            key = self._credential_provider.get_api_key()
-            if not key:
-                raise BoundaryError(
-                    "Kein gültiger Claude-Key hinterlegt "
-                    "(Schlüsselbund/ANTHROPIC_API_KEY)")
-            if self._client_factory is not None:
-                return self._client_factory(api_key=key)
-            import anthropic  # lazy: nie in pytest
-            return anthropic.Anthropic(api_key=key)
-        # Back-compat: kein Provider gesetzt -> bisheriges Verhalten.
-        # Task 4 schärft das in die INFRA_FEHLT-Kategorie.
+        # Kein Back-compat-Pfad mehr — Provider ist garantiert gesetzt.
+        key = self._credential_provider.get_api_key()
+        if not key:
+            raise BoundaryError(
+                "Kein gültiger Claude-Key hinterlegt "
+                "(Schlüsselbund/ANTHROPIC_API_KEY)")
+        if self._client_factory is not None:
+            return self._client_factory(api_key=key)
         import anthropic  # lazy: nie in pytest
-        return anthropic.Anthropic()
+        return anthropic.Anthropic(api_key=key)
 
     def _call(self, prompt):
         if self._call_model is not None:
