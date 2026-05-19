@@ -456,6 +456,36 @@ class TranscriptWorker(QThread):
         val = getter(key, default)
         return default if val is None else val
 
+    def _finalize_ref(self, ref, reference):
+        """Gemeinsamer Abschluss für Cache-Hit UND Frisch-Whisper
+        (Carl-Gegenreview [P2]): Mix-Dauer proben, Ref um
+        audio_duration_ms ergänzen, Ausricht-Schutz IMMER laufen
+        lassen, dann session setzen + finished. So kann ein gecachter,
+        falsch ausgerichteter Ref nicht mehr still durchgehen."""
+        from core.transcript_archive import alignment_drift
+        final_ref = dict(ref)
+        duration_ms = probe_duration_ms(reference)
+        if duration_ms is not None:
+            final_ref["audio_duration_ms"] = duration_ms
+        span_ms = final_ref.get("transcript_span_ms")
+        tol = self._cfg(
+            "smart_boundary_alignment_tolerance_ms",
+            config.DEFAULTS["smart_boundary_alignment_tolerance_ms"])
+        if duration_ms is None:
+            self.progress.emit(
+                "Sinnabschnitte: Audiodauer nicht ermittelbar — "
+                "Ausrichtung ungeprüft")
+        elif span_ms is not None and alignment_drift(span_ms, duration_ms,
+                                                     tol):
+            self.progress.emit(
+                f"Sinnabschnitte: Transkript passt nicht zur Audiodauer "
+                f"(Text {int(span_ms) // 1000}s vs Audio "
+                f"{duration_ms // 1000}s) — werden NICHT still berechnet")
+        self.session.transcript = None
+        self.session.transcript_ref = final_ref
+        self.session.transcript_error = None
+        self.finished.emit(final_ref)
+
     def run(self):
         # Notbremse-Doppelsicherung (Start-Gate sitzt in MainWindow).
         if not self._cfg("smart_boundary_enabled", True):
@@ -484,7 +514,7 @@ class TranscriptWorker(QThread):
         # (P1: nicht das volle Transcript durch die Queue).
         from core.transcript_archive import (
             transcript_sidecar_path, build_transcript_ref,
-            transcript_root, cache_reusable_ref, alignment_drift)
+            transcript_root, cache_reusable_ref)
         ref = build_transcript_ref(
             project, engine=engine, model=model, language=language,
             audio_path=reference)
@@ -498,13 +528,13 @@ class TranscriptWorker(QThread):
             engine=engine, model=model, language=language,
             root=transcript_root(project))
         if cached is not None:
-            self.session.transcript = None
-            self.session.transcript_ref = cached
-            self.session.transcript_error = None
             self.progress.emit(
                 "Sinnabschnitte: Transkript aus Cache übernommen — "
                 "kein Whisper")
-            self.finished.emit(cached)
+            # Carl-Gegenreview [P2]: Cache-Hit läuft denselben
+            # Finalize-Pfad wie Frisch-Whisper -> Ausricht-Schutz
+            # greift auch hier (kein still durchgehender Fehl-Ref).
+            self._finalize_ref(cached, reference)
             return
 
         req = {
@@ -574,34 +604,9 @@ class TranscriptWorker(QThread):
         # kleinen Referenzblock zurück. Besitz-Vertrag: KEIN
         # save_project_archive (project.json-Referenz erst durch
         # späteres Autosave). transcript bleibt None — Stufe B liest
-        # laut Spec ohnehin nur das gespeicherte Sidecar.
-        final_ref = dict(result["ref"])
-
-        # #3-Revision R2 — Ausricht-Schutz: Text-Gesamtspanne (vom
-        # Child) gegen Mix-Dauer (gemeinsamer ffprobe-Helfer). Drift
-        # -> LAUTER Hinweis; Sinnabschnitte werden nicht still
-        # berechnet (Stufe B konsumiert die Felder).
-        duration_ms = probe_duration_ms(reference)
-        if duration_ms is not None:
-            final_ref["audio_duration_ms"] = duration_ms
-        span_ms = final_ref.get("transcript_span_ms")
-        tol = self._cfg("smart_boundary_alignment_tolerance_ms",
-                        _D["smart_boundary_alignment_tolerance_ms"])
-        if duration_ms is None:
-            self.progress.emit(
-                "Sinnabschnitte: Audiodauer nicht ermittelbar — "
-                "Ausrichtung ungeprüft")
-        elif span_ms is not None and alignment_drift(span_ms, duration_ms,
-                                                     tol):
-            self.progress.emit(
-                f"Sinnabschnitte: Transkript passt nicht zur Audiodauer "
-                f"(Text {int(span_ms) // 1000}s vs Audio "
-                f"{duration_ms // 1000}s) — werden NICHT still berechnet")
-
-        self.session.transcript = None
-        self.session.transcript_ref = final_ref
-        self.session.transcript_error = None
-        self.finished.emit(final_ref)
+        # laut Spec ohnehin nur das gespeicherte Sidecar. Gleicher
+        # Finalize-Pfad wie der Cache-Hit (Ausricht-Schutz IMMER).
+        self._finalize_ref(result["ref"], reference)
 
 
 class SmartBoundaryWorker(QThread):

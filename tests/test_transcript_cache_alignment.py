@@ -200,6 +200,28 @@ def test_worker_alignment_drift_emits_loud_status_and_fields(tmp_path):
     assert fin["ref"]["transcript_span_ms"] == 600_000
 
 
+def test_worker_cache_hit_still_runs_alignment_guard(tmp_path):
+    # Carl-Gegenreview [P2]: ein gecachter, falsch ausgerichteter Ref
+    # darf NICHT still als "aus Cache" durchgehen — der Ausricht-Schutz
+    # muss auch den Cache-Pfad treffen (gemeinsamer Finalize-Pfad).
+    s, prev, _ = _persist_prev(tmp_path)
+    prev = dict(prev)
+    prev["transcript_span_ms"] = 600_000          # Text 10 min
+    s.transcript_ref = prev
+    msgs, fin = [], {}
+    w = TranscriptWorker(
+        s, process_factory=lambda **kw: _FakeProc(),
+        queue_factory=lambda: _FakeQueue(), monotonic=lambda: 0.0)
+    w.progress.connect(lambda m: msgs.append(m))
+    w.finished.connect(lambda r: fin.setdefault("ref", r))
+    with patch("gui.workers.probe_duration_ms", return_value=4_200_000):
+        w.run()                                    # Audio 70 min -> Drift
+    assert any("aus Cache" in m for m in msgs)            # Cache genutzt
+    assert any("passt nicht zur Audiodauer" in m for m in msgs)  # UND geprüft
+    assert fin["ref"]["audio_duration_ms"] == 4_200_000
+    assert s.transcript_ref["audio_duration_ms"] == 4_200_000
+
+
 def test_worker_no_drift_finishes_clean(tmp_path):
     s = _session(tmp_path)
     ref_from_child = {"path": ".peakcut/transcript.json",
