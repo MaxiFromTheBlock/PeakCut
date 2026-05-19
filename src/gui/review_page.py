@@ -519,6 +519,10 @@ class ReviewPage(QWidget):
             return
         b = cand.boundary
         dur_s = (b.end_ms - b.start_ms) // 1000
+        # Laufende Audio-Vorschau stoppen, bevor die Video-Vorschau
+        # startet (sonst doppelte Wiedergabe) — Carl-UX-Notiz Gate G.
+        stop_playback()
+        self._stop_play_state()
         self.video_preview.play_from(b.start_ms, b.end_ms)
         self.status_message.emit(
             f"Sinnabschnitt: {dur_s}s · Konfidenz {cand.score} · "

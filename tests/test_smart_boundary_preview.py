@@ -58,6 +58,7 @@ def _fs(events):
     ns._smart_worker = None
     ns.video_preview = types.SimpleNamespace(
         play_from=lambda a, b: events.append(("play_from", a, b)))
+    ns._stop_play_state = lambda: events.append(("stop_play_state",))
     return ns
 
 
@@ -108,6 +109,22 @@ def test_preview_plays_candidate_boundary_and_shows_meta():
     assert ("play_from", 95000, 150000) in events
     txt = " ".join(str(a) for n, *a in events if n == "status")
     assert "0.82" in txt and "Frage bis Pointe" in txt
+
+
+def test_preview_stops_running_audio_before_video(tmp_path=None):
+    events = []
+    fs = _fs(events)
+    fs.session.peaks = [types.SimpleNamespace(index=7, position_ms=120000)]
+    fs.session.current_peak = 0
+    fs.session.clip_candidates = [ClipCandidate(
+        peak_id=7, boundary=ClipBoundary(95000, 150000), status=PROPOSED,
+        reason="r", score=0.5)]
+    with patch("gui.review_page.stop_playback") as sp:
+        ReviewPage._on_play_sinnabschnitt(fs)
+    sp.assert_called_once()
+    names = [e[0] for e in events]
+    # Audio-Stop + Play-State-Reset VOR play_from
+    assert names.index("stop_play_state") < names.index("play_from")
 
 
 def test_preview_without_candidate_is_graceful_no_play():
