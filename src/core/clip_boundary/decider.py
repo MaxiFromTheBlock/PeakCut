@@ -60,10 +60,31 @@ class ClaudeBoundaryDecider:
     str(prompt) -> str(roh). In Tests injiziert; produktiv lazy
     Anthropic-Client (niedrige Temperatur, strukturiertes JSON)."""
 
-    def __init__(self, *, call_model=None, model=None, client=None):
+    def __init__(self, *, call_model=None, model=None, client=None,
+                 credential_provider=None, client_factory=None):
         self._call_model = call_model
         self._model = model
         self._client = client
+        self._credential_provider = credential_provider
+        self._client_factory = client_factory
+
+    def _build_client(self):
+        # #3-Rev Task 3: Key kommt über den Credential-Provider
+        # (Keychain primär, Env nur Dev) — nie aus config.json/Log.
+        if self._credential_provider is not None:
+            key = self._credential_provider.get_api_key()
+            if not key:
+                raise BoundaryError(
+                    "Kein gültiger Claude-Key hinterlegt "
+                    "(Schlüsselbund/ANTHROPIC_API_KEY)")
+            if self._client_factory is not None:
+                return self._client_factory(api_key=key)
+            import anthropic  # lazy: nie in pytest
+            return anthropic.Anthropic(api_key=key)
+        # Back-compat: kein Provider gesetzt -> bisheriges Verhalten.
+        # Task 4 schärft das in die INFRA_FEHLT-Kategorie.
+        import anthropic  # lazy: nie in pytest
+        return anthropic.Anthropic()
 
     def _call(self, prompt):
         if self._call_model is not None:
@@ -78,8 +99,7 @@ class ClaudeBoundaryDecider:
                 "(smart_boundary_claude_model)")
         client = self._client
         if client is None:
-            import anthropic  # lazy: nie in pytest
-            client = anthropic.Anthropic()
+            client = self._build_client()
         msg = client.messages.create(
             model=self._model, max_tokens=300, temperature=0.0,
             messages=[{"role": "user", "content": prompt}])
