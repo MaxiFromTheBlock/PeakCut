@@ -13,6 +13,8 @@ import sys
 import types
 from unittest.mock import patch
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from gui.review_page import ReviewPage  # noqa: E402
@@ -145,3 +147,64 @@ def test_finished_handler_runs_exporters_guarded_and_autosaves():
             RuntimeError("kaputt"))
         ReviewPage._on_smart_boundaries_done(fs2, [])
     assert "session_changed" in events2       # trotzdem persistiert
+
+
+# ══════════════════════════════════════════════════════════════════════
+# #3-Revision Task 0 — Safety-Harness: Soll-Zustand des Handoffs (Spec
+# §11 R1 / Gate 0) als ausführbare Spezifikation einfrieren. Absichtlich
+# VOR der Umsetzung geschrieben. xfail(strict) markiert genau das, was
+# erst der jeweilige Revisions-Task grün macht — so bleibt jeder Commit
+# grün (kein roter Test auf develop), die Invariante ist aber sofort
+# dokumentiert und schlägt automatisch zu, sobald ihr Task sie erfüllt.
+# ══════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.xfail(strict=True,
+                   reason="#3-Rev Task 6 (R1): Job B zieht in den "
+                          "Review-Hintergrund; _on_export_done startet "
+                          "dann keinen SmartBoundaryWorker mehr.")
+def test_rev_on_export_done_does_not_start_smart_worker():
+    """R1: Der Export-Handoff darf Job B nicht (mehr) anstoßen."""
+    events = []
+    fs = _fake_self(events, enabled=True)
+    with patch("gui.review_page.SmartBoundaryWorker", _patched_smart(events)):
+        ReviewPage._on_export_done(fs, ["a.xml"])
+    assert "smart_start" not in events
+    assert fs._smart_worker is None
+
+
+def test_rev_sinnabschnitt_never_in_base_export_handoff():
+    """Gate 0 (durabel grün): die an _on_export_done übergebene
+    exported-Liste ist der reine Basis-Export; _on_export_done schreibt
+    selbst nie eine Sinnabschnitt-Datei und ergänzt die Liste nicht."""
+    events = []
+    fs = _fake_self(events, enabled=False)   # Notbremse: nur Basis-Pfad
+    exported = ["Keyboardstellen - X.xml", "Keyboardstellen - X.mp3",
+                "Keyboardstellen - X.txt"]
+    with patch("gui.review_page.SinnabschnittTXTExporter") as T, \
+         patch("gui.review_page.SinnabschnittXMLExporter") as X:
+        ReviewPage._on_export_done(fs, exported)
+        T.assert_not_called()
+        X.assert_not_called()
+    assert not any("Sinnabschnitt" in p for p in exported)
+    assert fs._smart_worker is None
+
+
+@pytest.mark.xfail(strict=True,
+                   reason="#3-Rev Task 7: Zwei-Bedingungen-Barriere "
+                          "(_maybe_write_sinnabschnitt_artifacts) — "
+                          "Sinnabschnitt-Dateien erst NACH erfolgreichem "
+                          "Basis-Export, egal wann Smart fertig wird.")
+def test_rev_no_sinnabschnitt_artifact_before_base_export():
+    """Gate 0: Wird Smart fertig BEVOR der Basis-Export durch ist, darf
+    noch keine Sinnabschnitt-Datei entstehen."""
+    events = []
+    fs = _fake_self(events)
+    fs._base_export_done_for_run = False     # Basis-Export NICHT fertig
+    written = []
+    with patch("gui.review_page.SinnabschnittTXTExporter") as T, \
+         patch("gui.review_page.SinnabschnittXMLExporter") as X:
+        T.return_value.export = lambda s: written.append("txt")
+        X.return_value.export = lambda s: written.append("xml")
+        ReviewPage._on_smart_boundaries_done(fs, fs.session.clip_candidates)
+    assert written == []
