@@ -12,7 +12,10 @@ from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from .apple_style import COLORS
 from .video_preview_peak import PeakVideoPreview
 from .review_camera_labels import camera_display_label
-from .workers import ExportWorker
+from .workers import ExportWorker, SmartBoundaryWorker
+from core.clip_boundary.decider import ClaudeBoundaryDecider
+from core.sinnabschnitt_exporter import (
+    SinnabschnittTXTExporter, SinnabschnittXMLExporter)
 
 import config
 from utils import LUTS_DIR, ms_to_mmss, get_logger
@@ -47,6 +50,7 @@ class ReviewPage(QWidget):
         self._video_files = []
         self._is_playing = False
         self._export_worker = None
+        self._smart_worker = None   # Roadmap #3 Stufe B (nach Handoff)
 
         # Playback poll timer
         self._play_timer = QTimer()
@@ -449,6 +453,38 @@ class ReviewPage(QWidget):
         self._export_worker = None
         self.session_changed.emit()
 
+        # Roadmap #3 Stufe B — LETZTE Aktion: erst NACH dem vollen
+        # Export-Handoff (.peakcut_done + finished + session_changed),
+        # NUR Erfolgspfad, Notbremse-gated. Verzögert/bricht den
+        # Keyboardstellen-Weg nie.
+        cfg = getattr(self.session, "config", {})
+        enabled = (cfg.get("smart_boundary_enabled", True)
+                   if hasattr(cfg, "get") else True)
+        if enabled:
+            model = (cfg.get("smart_boundary_claude_model")
+                     if hasattr(cfg, "get") else None)
+            self._smart_worker = SmartBoundaryWorker(
+                self.session, ClaudeBoundaryDecider(model=model))
+            self._smart_worker.finished.connect(
+                self._on_smart_boundaries_done)
+            self._smart_worker.progress.connect(self.status_message.emit)
+            self._smart_worker.start()
+
+    def _on_smart_boundaries_done(self, candidates):
+        # Zusatzdateien schreiben — guarded, bricht den Flow NIE.
+        for exp in (SinnabschnittTXTExporter(), SinnabschnittXMLExporter()):
+            try:
+                exp.export(self.session)
+            except Exception as e:  # noqa: BLE001
+                self.status_message.emit(
+                    f"Sinnabschnitte-Export übersprungen: {e}")
+        if self._smart_worker is not None:
+            self._smart_worker.deleteLater()
+            self._smart_worker = None
+        # Autosave: aktualisierte ClipCandidates + transcript_ref in
+        # die .peakcut-Akte (MainWindow lauscht auf session_changed).
+        self.session_changed.emit()
+
     def _on_export_error(self, msg):
         _log.error("Export error: %s", msg)
         self.export_btn.setEnabled(True)
@@ -466,3 +502,7 @@ class ReviewPage(QWidget):
         self.video_preview.cleanup()
         if self._export_worker and self._export_worker.isRunning():
             self._export_worker.wait(3000)
+        if self._smart_worker:
+            self._smart_worker.request_stop()
+            if self._smart_worker.isRunning():
+                self._smart_worker.wait(3000)
