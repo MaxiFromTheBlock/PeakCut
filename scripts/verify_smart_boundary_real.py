@@ -134,6 +134,52 @@ def format_handoff_summary(rows, run_result):
         f"{len(rows)}")
 
 
+def classify_media_files(files):
+    """Carl-Gegenreview [P2]: Endungs-Klassifikation case-insensitiv —
+    .WAV/.MOV (Recorder-Default) fielen sonst aus mics/vids."""
+    lower = [(f, os.path.basename(f).lower()) for f in files]
+    kb = next((f for f, n in lower
+               if "keyboard" in n or "keys" in n or "klavier" in n), None)
+    if kb is None and lower:
+        kb = lower[0][0]
+    mics = [f for f, n in lower
+            if n.endswith((".wav", ".mp3")) and f != kb]
+    vids = [f for f, n in lower if n.endswith((".mp4", ".mov"))]
+    return kb, mics, vids
+
+
+def compose_report_summary(*, rows, t_alone, t_with, mess_gate_decision,
+                            run_result, key_status, cache_label,
+                            source_label, fingerprint_str):
+    """Pure: baut die Schluss-Gate-Diagnosezeilen aus den vorhandenen
+    Helfern (Carl-Gegenreview [P2]). main() nutzt nur dieses Resultat,
+    damit jede Diagnose immer im Report landet."""
+    rs = summarize_run_result(run_result) if run_result is not None else \
+        {"category": "—", "message": "", "ready_count": 0,
+         "fallback_count": 0}
+    n_fallback = sum(1 for r in rows if r.get("fallback"))
+    lines = [format_report_line(r) for r in rows]
+    lines += [
+        "",
+        f"Transkriptquelle: {source_label}",
+        f"Cache: {cache_label}",
+        f"Audio-Fingerprint: {fingerprint_str}",
+        format_key_status(key_status),
+        f"Run-Kategorie: {rs['category']}"
+        + (f"  — {rs['message']}" if rs['message'] else ""),
+        format_handoff_summary(rows, run_result),
+        "",
+        f"Analyse allein:           {t_alone:6.1f}s",
+        (f"Analyse + paralleles WS:  {t_with:6.1f}s "
+         f"(x{t_with / t_alone:.2f})  — Näherung (Carl [P3]: nicht "
+         f"identisch zum Worker-Spawn-Pfad)") if t_alone > 0 else "",
+        f"MESS-GATE -> smart_boundary_transcription_start = "
+        f"{mess_gate_decision}",
+        f"Drücker: {len(rows)} | Fallback: {n_fallback}",
+    ]
+    return [ln for ln in lines if ln is not None]
+
+
 def format_report_line(r):
     def tc(ms):
         return "-" if ms is None else f"{ms // 60000}:{(ms // 1000) % 60:02d}"
@@ -169,10 +215,8 @@ def main():  # pragma: no cover — Hand-Werkzeug, echte Engines
              for f in os.listdir(args.project_dir)
              if f.lower().endswith((".wav", ".mp4", ".mov", ".mp3"))]
     project = PeakCutProject()
-    kb = next((f for f in files if "keyboard" in f.lower()
-               or "keys" in f.lower()), files[0])
-    mics = [f for f in files if f.endswith((".wav", ".mp3")) and f != kb]
-    vids = [f for f in files if f.endswith((".mp4", ".mov"))]
+    # Carl-Gegenreview [P2]: case-insensitive Klassifikation.
+    kb, mics, vids = classify_media_files(files)
     project.set_files(kb, mics, vids)
     session = PeakCutSession(project, cfg)
     reference = project.get_reference_track() or (mics[0] if mics else kb)
@@ -207,6 +251,9 @@ def main():  # pragma: no cover — Hand-Werkzeug, echte Engines
 
     decision = decide_transcription_start(t_alone, t_with)
 
+    # --- Vorlauf-Ref (für Cache-Diagnose) merken ---
+    prev_ref = getattr(session, "transcript_ref", None)
+
     # --- Echtes Whisper-Sidecar + Pipeline mit echtem Claude ---
     out = holder.get("t", {})
     if "transcript" in out:
@@ -218,26 +265,31 @@ def main():  # pragma: no cover — Hand-Werkzeug, echte Engines
             language=cfg.get("smart_boundary_language"),
             audio_path=reference)
     session.load_analysis_results(results)
-    prepare_smart_boundaries(
+    # Carl-Gegenreview [P2]: Run-Result speichern + Provider für
+    # Key-Status verwenden (kein versteckter SDK-Default).
+    from core.credentials import default_credential_provider
+    provider = default_credential_provider()
+    run_result = prepare_smart_boundaries(
         session,
-        ClaudeBoundaryDecider(model=cfg.get("smart_boundary_claude_model")),
+        ClaudeBoundaryDecider(
+            model=cfg.get("smart_boundary_claude_model"),
+            credential_provider=provider),
         config=cfg)
 
     rows = build_peak_report(session.peaks, session.clip_candidates,
                              cfg.get("context_duration_ms", 15000))
-    lines = [format_report_line(r) for r in rows]
-    n_fb = sum(1 for r in rows if r["fallback"])
-    summary = [
-        "",
-        f"Analyse allein:           {t_alone:6.1f}s",
-        f"Analyse + paralleles WS:  {t_with:6.1f}s "
-        f"(x{t_with / t_alone:.2f})" if t_alone > 0 else "",
-        f"MESS-GATE -> smart_boundary_transcription_start = {decision}",
-        f"Drücker: {len(rows)} | Fallback: {n_fb} | "
-        f"an Fenster-Decke: "
-        f"{sum(1 for r in rows if r['new_start_ms'] == 0)}",
-    ]
-    text = "\n".join(lines + summary)
+
+    # Diagnose-Helfer einbinden (Carl Task 9): Key-Status, Quelle,
+    # Cache, Fingerprint, Run-Kategorie/INFRA-Message, Handoff.
+    current_ref = getattr(session, "transcript_ref", None) or {}
+    current_fp = current_ref.get("audio_fingerprint")
+    text = "\n".join(compose_report_summary(
+        rows=rows, t_alone=t_alone, t_with=t_with,
+        mess_gate_decision=decision, run_result=run_result,
+        key_status=provider.status(),
+        cache_label=cache_hit_label(prev_ref, current_fp),
+        source_label=transcript_source_label(current_ref),
+        fingerprint_str=format_fingerprint(current_fp)))
     print(text)
     if args.report:
         with open(args.report, "w", encoding="utf-8") as f:

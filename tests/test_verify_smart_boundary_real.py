@@ -121,6 +121,61 @@ def test_cache_hit_label_three_states():
         "MISS (Fingerprint geändert)"
 
 
+def test_classify_media_files_handles_uppercase_extensions():
+    # Carl-Gegenreview [P2]: echte Recorder-Dateien tragen .WAV/.MOV.
+    files = ["/x/Keyboard.WAV", "/x/MIC1 mix.WAV", "/x/CAM_A.MOV",
+             "/x/song.MP3", "/x/talk.MP4"]
+    kb, mics, vids = vsbr.classify_media_files(files)
+    assert kb == "/x/Keyboard.WAV"
+    assert "/x/MIC1 mix.WAV" in mics and "/x/song.MP3" in mics
+    assert "/x/CAM_A.MOV" in vids and "/x/talk.MP4" in vids
+
+
+def test_classify_media_files_keyboard_keywords_case_insensitive():
+    files = ["/x/Mein KEYBOARD Take.wav", "/x/mix.wav", "/x/Cam.mov"]
+    kb, mics, vids = vsbr.classify_media_files(files)
+    assert "Keyboard".lower() in os.path.basename(kb).lower()
+    assert "/x/mix.wav" in mics
+    assert "/x/Cam.mov" in vids
+
+
+def test_compose_report_summary_contains_all_diagnostic_fields():
+    # Carl-Gegenreview [P2]: Schluss-Gate darf nicht blind sein —
+    # Key-Status, Quelle, Cache, Fingerprint, Run-Kategorie/Message,
+    # Handoff müssen alle in der Zusammenfassung landen.
+    from core.clip_boundary.models import (
+        SmartBoundaryRunResult, BoundaryOutcome)
+    from core.credentials import CredentialStatus
+    rows = [
+        {"peak_id": 0, "old_start_ms": 0, "old_end_ms": 30000,
+         "new_start_ms": 5000, "new_end_ms": 25000, "duration_s": 20,
+         "score": 0.8, "fallback": False, "reason": "ok"},
+        {"peak_id": 1, "old_start_ms": 60000, "old_end_ms": 90000,
+         "new_start_ms": None, "new_end_ms": None, "duration_s": None,
+         "score": None, "fallback": None, "reason": ""},
+    ]
+    res = SmartBoundaryRunResult(
+        (), BoundaryOutcome.INFRA_FEHLT, "API-Key ungültig", 0, 0)
+    lines = vsbr.compose_report_summary(
+        rows=rows, t_alone=100.0, t_with=110.0,
+        mess_gate_decision="parallel_analysis", run_result=res,
+        key_status=CredentialStatus(False, "invalid", ""),
+        cache_label="MISS (Fingerprint geändert)",
+        source_label="descript",
+        fingerprint_str="size=42 mtime_ns=99")
+    text = "\n".join(lines)
+    assert "Transkriptquelle: descript" in text
+    assert "Cache: MISS (Fingerprint geändert)" in text
+    assert "size=42 mtime_ns=99" in text
+    assert "Key-Status: ✗ Key ungültig" in text
+    assert "Run-Kategorie: INFRA_FEHLT" in text
+    assert "API-Key ungültig" in text
+    assert "Handoff:" in text
+    assert "MESS-GATE" in text and "parallel_analysis" in text
+    # Näherungs-Hinweis fürs Mess-Gate (Carl [P3]).
+    assert "Näherung" in text
+
+
 def test_format_handoff_summary_includes_counts_and_peaks_with_score():
     from core.clip_boundary.models import (
         SmartBoundaryRunResult, BoundaryOutcome)
