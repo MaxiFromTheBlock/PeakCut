@@ -65,3 +65,68 @@ def test_mess_gate_decision_parallel_vs_after():
     assert vsbr.decide_transcription_start(100.0, 115.0) == "parallel_analysis"
     # keine Baseline -> sicher parallel (keine Fehlentscheidung)
     assert vsbr.decide_transcription_start(0.0, 50.0) == "parallel_analysis"
+
+
+# --- #3-Rev Task 9 — neue Report-Felder ---------------------------------
+
+def test_summarize_run_result_categories_and_counts():
+    from core.clip_boundary.models import (
+        SmartBoundaryRunResult, BoundaryOutcome)
+    res = SmartBoundaryRunResult((), BoundaryOutcome.OK, "", 3, 1)
+    s = vsbr.summarize_run_result(res)
+    assert s["category"] == "OK"
+    assert s["ready_count"] == 3 and s["fallback_count"] == 1
+
+    res2 = SmartBoundaryRunResult(
+        (), BoundaryOutcome.INFRA_FEHLT, "API-Key ungültig", 0, 0)
+    s2 = vsbr.summarize_run_result(res2)
+    assert s2["category"] == "INFRA_FEHLT"
+    assert "ungültig" in s2["message"]
+
+
+def test_format_key_status_never_includes_key_value():
+    from core.credentials import CredentialStatus
+    s = vsbr.format_key_status(
+        CredentialStatus(True, "ok", "ignored detail with sk-ant-secret"))
+    assert "sk-ant" not in s and "secret" not in s
+    assert "✓" in s
+    assert vsbr.format_key_status(
+        CredentialStatus(False, "missing", "")).startswith("Key-Status: ✗")
+    assert "kein Key" in vsbr.format_key_status(
+        CredentialStatus(False, "missing", ""))
+    assert "ungültig" in vsbr.format_key_status(
+        CredentialStatus(False, "invalid", ""))
+    assert "Dev-Fallback" in vsbr.format_key_status(
+        CredentialStatus(True, "env", ""))
+
+
+def test_format_fingerprint_compact_and_tolerant():
+    assert vsbr.format_fingerprint({"size": 17, "mtime_ns": 42}) == \
+        "size=17 mtime_ns=42"
+    assert vsbr.format_fingerprint(None) == "—"
+    assert vsbr.format_fingerprint({}) == "—"
+
+
+def test_transcript_source_label():
+    assert vsbr.transcript_source_label({"source": "descript"}) == "descript"
+    assert vsbr.transcript_source_label({"path": "x"}) == "whisper"
+    assert vsbr.transcript_source_label(None) == "—"
+
+
+def test_cache_hit_label_three_states():
+    fp = {"size": 1, "mtime_ns": 100}
+    assert vsbr.cache_hit_label(None, fp) == "MISS (kein Vorlauf)"
+    assert vsbr.cache_hit_label({"audio_fingerprint": fp}, fp) == "HIT"
+    assert vsbr.cache_hit_label({"audio_fingerprint": {"size": 9}}, fp) == \
+        "MISS (Fingerprint geändert)"
+
+
+def test_format_handoff_summary_includes_counts_and_peaks_with_score():
+    from core.clip_boundary.models import (
+        SmartBoundaryRunResult, BoundaryOutcome)
+    rows = [{"score": 0.8}, {"score": 0.0}, {"score": None}]
+    res = SmartBoundaryRunResult((), BoundaryOutcome.OK, "", 1, 1)
+    line = vsbr.format_handoff_summary(rows, res)
+    assert "Transkript -> Decider -> Bremse -> Sinnabschnitte" in line
+    assert "ready=1" in line and "fallback=1" in line
+    assert "peaks_mit_score=2/3" in line

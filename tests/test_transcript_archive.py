@@ -23,6 +23,7 @@ from core.transcript_archive import (  # noqa: E402
     TRANSCRIPT_NAME, TRANSCRIPT_REF,
     transcript_sidecar_path, write_transcript_sidecar,
     read_transcript_sidecar, build_transcript_ref, audio_fingerprint,
+    import_descript_transcript,
 )
 from core.project import PeakCutProject  # noqa: E402
 from core.session import PeakCutSession  # noqa: E402
@@ -245,6 +246,34 @@ def test_build_transcript_ref_optional_fields_only_when_given(tmp_path):
     assert ref["source_path"] == "/x/Transkript.docx"
     assert ref["transcript_span_ms"] == 4_200_000
     assert ref["audio_duration_ms"] == 4_260_000
+
+
+def test_import_descript_transcript_writes_sidecar_and_full_ref(tmp_path):
+    # #3-Rev Schluss-Gate (R2): Descript-Upload schreibt Sidecar +
+    # source='descript' + transcript_span_ms (für Ausricht-Schutz).
+    # Drift selbst wird von Stufe B/Statuszeile aus dem ref abgeleitet.
+    import zipfile
+    from xml.sax.saxutils import escape
+    s = _session(tmp_path)
+    docx = tmp_path / "Transkript.docx"
+    paragraphs = ["Sheila:", "[00:00:00] Start.", "[00:05:00] Ende."]
+    body = "".join("<w:p><w:r><w:t>" + escape(t) + "</w:t></w:r></w:p>"
+                    for t in paragraphs)
+    xml = ('<?xml version="1.0"?>'
+           '<w:document xmlns:w="http://schemas.openxmlformats.org/'
+           'wordprocessingml/2006/main"><w:body>' + body + '</w:body></w:document>')
+    with zipfile.ZipFile(docx, "w") as z:
+        z.writestr("word/document.xml", xml)
+    ref = import_descript_transcript(
+        s.project, str(docx), s.project.get_reference_track())
+    assert ref["source"] == "descript"
+    assert ref["source_path"] == str(docx)
+    assert ref["transcript_span_ms"] == 360_000   # 5min Stempel + 60s
+    assert os.path.isfile(transcript_sidecar_path(s.project))
+    # Sidecar wieder einlesbar -> wird von Stufe B konsumiert.
+    root = material_root(_media_paths(s.project), s.project.keyboard_track)
+    t = read_transcript_sidecar(root, ref)
+    assert t is not None and t.segments[0].text.startswith("Sheila:")
 
 
 def test_old_ref_without_new_fields_still_reads_sidecar(tmp_path):

@@ -133,6 +133,26 @@ def alignment_drift(span_ms, duration_ms, tolerance_ms):
     return abs(int(span_ms) - int(duration_ms)) > int(tolerance_ms)
 
 
+def import_descript_transcript(project, docx_path, audio_path,
+                                *, language="de"):
+    """#3-Rev R2 Schluss-Gate: Descript-`.docx` einlesen, Sidecar
+    schreiben, vollständigen ref bauen (source='descript', span +
+    audio_duration_ms für den Ausricht-Schutz; Drift detektiert
+    Stufe B/Statuszeile selbst). Pure Funktion, keine UI."""
+    from .descript_docx import parse_descript_docx
+    from .media_probe import probe_duration_ms
+    transcript = parse_descript_docx(docx_path)
+    span = transcript_span_ms(transcript)
+    duration = probe_duration_ms(audio_path)
+    write_transcript_json(transcript_sidecar_path(project), transcript)
+    ref = build_transcript_ref(
+        project, engine="descript", model="-", language=language,
+        audio_path=audio_path, source="descript", source_path=docx_path,
+        transcript_span_ms=span,
+        audio_duration_ms=duration if duration is not None else None)
+    return ref
+
+
 def cache_reusable_ref(prev_ref, *, current_fingerprint, engine, model,
                        language, root):
     """Spec §11 R6: ein gespeicherter Transkript-Verweis ist nur dann

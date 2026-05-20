@@ -68,6 +68,72 @@ def decide_transcription_start(t_alone_s, t_with_whisper_s, *,
     return "parallel_analysis"
 
 
+def summarize_run_result(result):
+    """Zählwerk pro Lauf — wandert in den Schluss-Report (Carl Task 9).
+    `result` ist ein SmartBoundaryRunResult; tolerant gegen ältere
+    Liste-Form (gibt dann leere Counts)."""
+    cat = getattr(result, "category", None)
+    return {
+        "category": getattr(cat, "value", str(cat)) if cat else "OK",
+        "message": getattr(result, "message", "") or "",
+        "ready_count": int(getattr(result, "ready_count", 0) or 0),
+        "fallback_count": int(getattr(result, "fallback_count", 0) or 0),
+    }
+
+
+def format_key_status(status):
+    """Status-Zeile für den Report — enthält NIE den Key-Wert,
+    nur Symbol + reason. Tolerant gegen None."""
+    if status is None:
+        return "Key-Status: — (kein Provider abgefragt)"
+    reason = getattr(status, "reason", "") or ""
+    ok = bool(getattr(status, "ok", False))
+    sym = "✓" if ok else "✗"
+    label = {"ok": "Schlüsselbund",
+              "env": "Dev-Fallback (ANTHROPIC_API_KEY)",
+              "missing": "kein Key hinterlegt",
+              "invalid": "Key ungültig"}.get(reason, reason or "—")
+    return f"Key-Status: {sym} {label}"
+
+
+def format_fingerprint(fp):
+    """Fingerprint kompakt — `None` -> "—"."""
+    if not isinstance(fp, dict):
+        return "—"
+    size = fp.get("size")
+    mt = fp.get("mtime_ns")
+    if size is None and mt is None:
+        return "—"
+    return f"size={size} mtime_ns={mt}"
+
+
+def transcript_source_label(ref):
+    """Quelle aus dem Transkript-Ref (Whisper/Descript/...)."""
+    if not isinstance(ref, dict):
+        return "—"
+    return str(ref.get("source") or "whisper")
+
+
+def cache_hit_label(prev_ref, current_fingerprint):
+    """Cache-Treffer ja/nein für den Report (Carl Task 9)."""
+    if not isinstance(prev_ref, dict):
+        return "MISS (kein Vorlauf)"
+    if prev_ref.get("audio_fingerprint") == current_fingerprint:
+        return "HIT"
+    return "MISS (Fingerprint geändert)"
+
+
+def format_handoff_summary(rows, run_result):
+    """Handoff-Reihenfolge kompakt — was lief, was hat geliefert."""
+    s = summarize_run_result(run_result)
+    return (
+        f"Handoff: Transkript -> Decider -> Bremse -> Sinnabschnitte | "
+        f"Kategorie={s['category']} ready={s['ready_count']} "
+        f"fallback={s['fallback_count']} "
+        f"peaks_mit_score={sum(1 for r in rows if r['score'] is not None)}/"
+        f"{len(rows)}")
+
+
 def format_report_line(r):
     def tc(ms):
         return "-" if ms is None else f"{ms // 60000}:{(ms // 1000) % 60:02d}"
