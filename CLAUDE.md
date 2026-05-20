@@ -453,8 +453,26 @@ Cut-Entscheidungen aus eurer Produktion replizieren.
 
 ### Nach #3-Rev-Smoke: Prompt-Tuning-Slice (vor Phasing-Fix)
 
-Reihenfolge: Smoke (Max, an echtem Material) → Prompt-Tuning-Slice →
-Phasing-Alt-Bug. Begründung (Carl): „Erst sicherstellen, dass der
+**Smoke-Ergebnis 2026-05-21 (Sheila de Liz, 36 Peaks, Descript-
+Bypass):** Pipeline läuft end-to-end an echtem Material. 35 von 36
+Peaks bekamen narrative Sinnabschnitt-Vorschläge mit Konfidenz
+0.78–0.80 (Beispiel-Reason: „Beginn der Reflexion über Reise mit
+Partner, Peak in Studienfrage, Landung bei Erkenntnis aus Berichten
+und Achterbahn-Analogie"). Peak 1 war ignoriert → korrekt kein
+Sinnabschnitt + Bubble „Standard-Fenster wird verwendet". R4-
+Disziplin live bewährt (kein/ungültiger Key → klare Statuszeile,
+keine Pseudo-Einträge). Persistenz/HC-4-Cache greift („Analyse
+übersprungen"). Drei Smoke-Befunde nachgezogen (Validator-
+Verschärfung, temperature-Parameter, Descript-Import via CLI).
+
+**Smoke-Blocker für eigentliches Hör-Urteil:** Wiedergabe-Schicht
+ist UX-broken (Task #76) — Sinnabschnitt-▶ läuft im Video stumm,
+Play startet Mic-Mode-Mix (alte Logik), Audio nicht synchron zum
+Bild. Max muss erst Wiedergabe sortieren, bevor er die Vorschläge
+beurteilen kann. → **Reihenfolge angepasst:** Smoke ✓ → **UX-
+Wiedergabe-Slice (#76)** → Prompt-Tuning (#70) → Phasing (#71).
+
+Begründung Reihenfolge (Carl): „Erst sicherstellen, dass der
 neue Sinnabschnitt-Motor lebt, dann Qualität tunen, dann
 Audio-Hygiene." Produktmagie und Sanitärarbeit nicht vermischen.
 
