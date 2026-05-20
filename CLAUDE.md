@@ -441,6 +441,42 @@ veröffentlicht-aber-geflopt) sind der Burggraben — genau das haben
 Opus-artige Tools nicht. **Minibar = Max' privates R&D-Labor** für
 dieses Lernsystem, KEIN Produkt-Feature.
 
+**Schärfung (Carl/Claude/Max 2026-05-20, nach #3-Rev):** Der eigentliche
+Burggraben ist NICHT der Decider-Prompt selbst, sondern die
+**redaktionelle Urteilsschule** von Max/Alex/Matze — operationalisiert
+als Few-Shot-Beispiele, Anti-Patterns und Statusentscheidungen, die
+sich über Zeit aus `peak_decisions.json` schärfen. Der aktuelle
+Prompt ist nur die **v1-Oberfläche** dieses Wissens. Schutzfokus: die
+Sammlung, nicht den Text fetischisieren. Anbieter (Opus/Riverside/
+Spike) können denselben Prompt schreiben, aber nicht 70+ Folgen
+Cut-Entscheidungen aus eurer Produktion replizieren.
+
+### Nach #3-Rev-Smoke: Prompt-Tuning-Slice (vor Phasing-Fix)
+
+Reihenfolge: Smoke (Max, an echtem Material) → Prompt-Tuning-Slice →
+Phasing-Alt-Bug. Begründung (Carl): „Erst sicherstellen, dass der
+neue Sinnabschnitt-Motor lebt, dann Qualität tunen, dann
+Audio-Hygiene." Produktmagie und Sanitärarbeit nicht vermischen.
+
+Aufteilung: **Max + Claude editorial** (3–5 echte Beispielstellen
+aus euren Folgen, jeweils positiv UND negatives Anti-Beispiel mit
+Begründung; Hotel-Matze-Stilbeschreibung als redaktionelles
+Regelwerk, nicht Marketingtext). **Carl Werkzeug** (A/B-Harness:
+zwei Prompt-Varianten gegen dieselben BoundaryScaffolds, ohne sie
+als Wahrheit in `.peakcut` zu schreiben; blinder Vergleich,
+Urteilskategorien statt „besser/schlechter"; persistiert in
+separatem `.peakcut/prompt_eval/`-Pfad).
+
+Hebel (Reihenfolge der erwarteten Wirkung): Few-Shot (wenige sehr
+gute Beispiele schlagen viele mittelmäßige) > Anti-Patterns
+(lehrreicher als Idealfälle) > Stil-Profil als redaktionelles
+Regelwerk > Self-Critique im selben Call (zweiter Modell-Call
+erst, wenn A/B beweist, dass er hilft). Modell bleibt Opus —
+Herzstück ist Urteil, da wird nicht gespart, bevor die Qualität
+steht. Beispiele sind ab Tag 1 maschinenlesbar strukturiert
+(Variant-ID, Beispiel-ID, erwartete Boundary, Begründung,
+menschliches Urteil) — kein Fließtext-Friedhof.
+
 ### Roadmap-Reihenfolge (Carl/Claude-Konsens — ersetzt alte V3-Liste)
 
 1. **Persistenz + `.peakcut`-Projektakte** (= HC-4, der Schlussstein —
