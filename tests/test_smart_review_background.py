@@ -80,6 +80,8 @@ def _fake_self(events, *, enabled=True, peaks=True, transcript=True,
     ns._sinnabschnitt_artifacts_written = False
     ns._maybe_write_sinnabschnitt_artifacts = \
         lambda: ReviewPage._maybe_write_sinnabschnitt_artifacts(ns)
+    ns._refresh_smart_status = lambda: None
+    ns._refresh_sinn_btn = lambda: None
     return ns
 
 
@@ -168,6 +170,8 @@ def test_set_session_invokes_maybe_start():
             screenshot_done=types.SimpleNamespace(connect=lambda cb: None)),
         _populate_lut_combo=lambda: None,
         _maybe_start_smart_worker=lambda: called.setdefault("yes", True),
+        _refresh_smart_status=lambda: None,
+        _refresh_sinn_btn=lambda: None,
         camera_label=types.SimpleNamespace(setText=lambda t: None))
     session = types.SimpleNamespace(folgenschnitt_camera_assignments=[])
     ReviewPage.set_session(fs, session, [])

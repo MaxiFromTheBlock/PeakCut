@@ -50,6 +50,9 @@ def _fs(events):
     # Unbound-Pattern: die Hilfsmethode auf das Fake-Self auflösen.
     ns._maybe_write_sinnabschnitt_artifacts = \
         lambda: ReviewPage._maybe_write_sinnabschnitt_artifacts(ns)
+    # #3-Rev Task 8: Status/Button-Refresh sind hier nicht im Fokus.
+    ns._refresh_smart_status = lambda: None
+    ns._refresh_sinn_btn = lambda: None
     return ns
 
 
@@ -215,6 +218,8 @@ def test_set_session_resets_barrier_flags():
             screenshot_done=types.SimpleNamespace(connect=lambda cb: None)),
         _populate_lut_combo=lambda: None,
         _maybe_start_smart_worker=lambda: None,
+        _refresh_smart_status=lambda: None,
+        _refresh_sinn_btn=lambda: None,
         camera_label=types.SimpleNamespace(setText=lambda t: None),
         _base_export_done_for_run=True,
         _smart_ready=True,

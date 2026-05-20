@@ -65,6 +65,8 @@ def _fs(events):
     ns._sinnabschnitt_artifacts_written = False
     ns._maybe_write_sinnabschnitt_artifacts = \
         lambda: ReviewPage._maybe_write_sinnabschnitt_artifacts(ns)
+    ns._refresh_smart_status = lambda: None
+    ns._refresh_sinn_btn = lambda: None
     return ns
 
 
