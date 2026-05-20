@@ -109,8 +109,13 @@ class ClaudeBoundaryDecider:
         if client is None:
             client = self._build_client()
         try:
+            # Smoke-Befund 2026-05-21: Opus 4.7 lehnt den temperature-
+            # Parameter ab (`temperature is deprecated for this model`).
+            # Wir lassen ihn generisch weg — Anthropic-Default greift
+            # für ältere Modelle (geringere Reproduzierbarkeit, aber die
+            # deterministische Bremse + Snap gleicht das im Ergebnis aus).
             msg = client.messages.create(
-                model=self._model, max_tokens=300, temperature=0.0,
+                model=self._model, max_tokens=300,
                 messages=[{"role": "user", "content": prompt}])
             return msg.content[0].text
         except BoundaryError:
