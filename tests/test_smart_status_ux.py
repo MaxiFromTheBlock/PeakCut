@@ -95,6 +95,19 @@ def test_status_drift_visible_from_ref():
     assert "passt nicht zur Audiodauer" in cap["text"]
 
 
+def test_status_ready_with_drift_combines_not_silences():
+    # Carl-Gegenreview [P2]: Drift darf "bereit" nicht ganz untergehen.
+    fs, cap = _fs(transcript="T", smart_ready=True,
+                   candidates=[_cand(1, 0.8)],
+                   transcript_ref={"path": "x",
+                                    "transcript_span_ms": 600_000,
+                                    "audio_duration_ms": 4_200_000})
+    ReviewPage._refresh_smart_status(fs)
+    assert "bereit" in cap["text"].lower()
+    assert "passt nicht" in cap["text"].lower() \
+        or "transkript-länge" in cap["text"].lower()
+
+
 def test_status_transkript_error_visible():
     fs, cap = _fs(transcript=None,
                    transcript_ref={"path": "x"},
@@ -153,3 +166,73 @@ def test_button_disabled_when_no_peak_selected():
     fs, cap = _fs(peaks=[])
     ReviewPage._refresh_sinn_btn(fs)
     assert cap["enabled"] is False
+
+
+# --- Carl-Gegenreview ---------------------------------------------------
+
+def test_on_smart_done_infra_with_running_worker_shows_infra_message():
+    # [P2] Bei INFRA war der _smart_worker noch gesetzt, deshalb
+    # gewann "berechne…"; nach Cleanup muss die INFRA-Meldung
+    # tatsächlich in der Statuszeile stehen.
+    from core.clip_boundary.models import (
+        SmartBoundaryRunResult, BoundaryOutcome)
+    fs, cap = _fs(transcript="T")
+    fs._refresh_smart_status = lambda: ReviewPage._refresh_smart_status(fs)
+    fs._refresh_sinn_btn = lambda: ReviewPage._refresh_sinn_btn(fs)
+    fs._maybe_write_sinnabschnitt_artifacts = \
+        lambda: ReviewPage._maybe_write_sinnabschnitt_artifacts(fs)
+    fs._smart_worker = types.SimpleNamespace(deleteLater=lambda: None)
+    fs.status_message = types.SimpleNamespace(emit=lambda *a: None)
+    fs.session_changed = types.SimpleNamespace(emit=lambda *a: None)
+    fs._base_export_done_for_run = False
+    fs._sinnabschnitt_artifacts_written = False
+    res = SmartBoundaryRunResult(
+        (), BoundaryOutcome.INFRA_FEHLT, "API-Key ungültig", 0, 0)
+    ReviewPage._on_smart_boundaries_done(fs, res)
+    assert "ungültig" in cap["text"].lower()
+
+
+def test_persisted_scores_refresh_status_and_button_immediately():
+    # [P3] Score-Guard öffnete den Riegel ohne Refresh -> Tooltip blieb
+    # für nicht-aktuellen Peak bis zum Peak-Wechsel auf "steht noch
+    # nicht zur Verfügung". Jetzt soll der Refresh sofort laufen.
+    fs, cap = _fs(transcript="T", peaks=[_peak(1), _peak(2)],
+                   current_peak=1,
+                   candidates=[_cand(1, 0.8), _cand(2, None)])
+    fs.session.config = {"smart_boundary_enabled": True,
+                          "smart_boundary_claude_model": "m"}
+    fs._refresh_smart_status = lambda: ReviewPage._refresh_smart_status(fs)
+    fs._refresh_sinn_btn = lambda: ReviewPage._refresh_sinn_btn(fs)
+    fs._maybe_write_sinnabschnitt_artifacts = \
+        lambda: ReviewPage._maybe_write_sinnabschnitt_artifacts(fs)
+    fs._base_export_done_for_run = False
+    fs._sinnabschnitt_artifacts_written = False
+    ReviewPage._maybe_start_smart_worker(fs)
+    assert "bereit" in cap["text"].lower()
+    assert cap["enabled"] is False
+    assert "diesen drücker" in cap["tooltip"].lower() \
+        or "kein sinnabschnitt" in cap["tooltip"].lower()
+
+
+def test_set_session_clears_sticky_infra_status():
+    # [P3] set_session resettete die drei Riegel-Flags, aber NICHT
+    # _smart_status_text — eine alte INFRA-Meldung konnte ohne
+    # neuen Status durchscheinen.
+    label, btn, cap = _label()
+    fs = types.SimpleNamespace(
+        camera_combo=types.SimpleNamespace(
+            clear=lambda: None, addItem=lambda *a, **kw: None),
+        video_preview=types.SimpleNamespace(
+            set_videos=lambda v: None, set_session=lambda s: None,
+            screenshot_done=types.SimpleNamespace(connect=lambda cb: None)),
+        _populate_lut_combo=lambda: None,
+        _maybe_start_smart_worker=lambda: None,
+        _refresh_smart_status=lambda: None,
+        _refresh_sinn_btn=lambda: None,
+        smart_status_label=label, sinn_btn=btn,
+        _smart_status_text="alte INFRA-Meldung",
+        _base_export_done_for_run=True, _smart_ready=True,
+        _sinnabschnitt_artifacts_written=True)
+    session = types.SimpleNamespace(folgenschnitt_camera_assignments=[])
+    ReviewPage.set_session(fs, session, [])
+    assert fs._smart_status_text == ""

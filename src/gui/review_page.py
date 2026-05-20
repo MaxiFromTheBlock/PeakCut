@@ -233,6 +233,9 @@ class ReviewPage(QWidget):
         self._base_export_done_for_run = False
         self._smart_ready = False
         self._sinnabschnitt_artifacts_written = False
+        # Carl-Gegenreview Task 8 [P3]: alte INFRA-Meldung mit der
+        # neuen Session ebenfalls löschen.
+        self._smart_status_text = ""
 
         # Populate camera combo
         self.camera_combo.clear()
@@ -534,6 +537,10 @@ class ReviewPage(QWidget):
             # Basis-Export die Zusatzdateien tatsächlich schreibt.
             self._smart_ready = True
             self._maybe_write_sinnabschnitt_artifacts()
+            # Carl-Gegenreview Task 8 [P3]: Status + Button sofort
+            # aktualisieren, nicht erst beim nächsten Peak-Wechsel.
+            self._refresh_smart_status()
+            self._refresh_sinn_btn()
             return
         # #3-Rev Task 7: neuer Smart-Lauf -> Riegel-Hälfte „Smart" und
         # "schon geschrieben" zurücksetzen. Ein bewusst neuer Lauf
@@ -573,17 +580,19 @@ class ReviewPage(QWidget):
             self._smart_ready = True
             self._smart_status_text = ""        # alte INFRA-Notiz weg
             self._maybe_write_sinnabschnitt_artifacts()
-        # Status + Button-Gate nach Abschluss aktualisieren.
-        self._refresh_smart_status()
-        self._refresh_sinn_btn()
         # P2: nur clearen, wenn DIESER Worker noch der aktuelle ist;
         # ein veralteter Sender wird entsorgt, ohne den neuen zu fassen.
+        # Carl-Gegenreview [P2]: VOR dem Status-Refresh aufräumen,
+        # sonst gewinnt der "berechne…"-Zweig den noch gesetzten Worker.
         if worker is not None and self._smart_worker is not worker:
             worker.deleteLater()
         else:
             if self._smart_worker is not None:
                 self._smart_worker.deleteLater()
             self._smart_worker = None
+        # Status + Button-Gate nach Abschluss aktualisieren.
+        self._refresh_smart_status()
+        self._refresh_sinn_btn()
         # Autosave: aktualisierte ClipCandidates + transcript_ref in
         # die .peakcut-Akte (MainWindow lauscht auf session_changed).
         self.session_changed.emit()
@@ -595,20 +604,9 @@ class ReviewPage(QWidget):
         if session is None:
             self.smart_status_label.setText("")
             return
-        # 1) Bereits Ergebnisse da -> "bereit (N)".
-        cands = getattr(session, "clip_candidates", []) or []
-        ready_count = sum(1 for c in cands
-                          if getattr(c, "score", None) is not None)
-        if getattr(self, "_smart_ready", False) or ready_count > 0:
-            self.smart_status_label.setText(
-                f"Sinnabschnitte bereit ({ready_count})")
-            return
-        # 2) Smart-Lauf gerade aktiv.
-        if getattr(self, "_smart_worker", None) is not None:
-            self.smart_status_label.setText(
-                "Transkript bereit, berechne Sinnabschnitte…")
-            return
-        # 3) Drift im Transkript-Ref (Ausricht-Schutz hat gemeldet).
+        # Drift einmal berechnen — fließt sowohl in "bereit"-Kombi als
+        # auch in den eigenständigen Hinweis ein (Carl-Gegenreview [P2]:
+        # Drift darf nicht hinter "bereit" verschwinden).
         ref = getattr(session, "transcript_ref", None) or {}
         span = ref.get("transcript_span_ms")
         dur = ref.get("audio_duration_ms")
@@ -617,12 +615,30 @@ class ReviewPage(QWidget):
         if cfg is not None and hasattr(cfg, "get"):
             tol = cfg.get("smart_boundary_alignment_tolerance_ms",
                           120_000) or 120_000
+        drift = False
         if span is not None and dur is not None:
             from core.transcript_archive import alignment_drift
-            if alignment_drift(span, dur, tol):
-                self.smart_status_label.setText(
-                    "Sinnabschnitte: Transkript passt nicht zur Audiodauer")
-                return
+            drift = alignment_drift(span, dur, tol)
+        # 1) Bereits Ergebnisse da -> "bereit (N)" (+ Drift kombinieren).
+        cands = getattr(session, "clip_candidates", []) or []
+        ready_count = sum(1 for c in cands
+                          if getattr(c, "score", None) is not None)
+        if getattr(self, "_smart_ready", False) or ready_count > 0:
+            base = f"Sinnabschnitte bereit ({ready_count})"
+            if drift:
+                base += " · Transkript passt nicht zur Audiodauer"
+            self.smart_status_label.setText(base)
+            return
+        # 2) Smart-Lauf gerade aktiv.
+        if getattr(self, "_smart_worker", None) is not None:
+            self.smart_status_label.setText(
+                "Transkript bereit, berechne Sinnabschnitte…")
+            return
+        # 3) Drift im Transkript-Ref (ohne Ergebnisse) -> eigenständiger Hinweis.
+        if drift:
+            self.smart_status_label.setText(
+                "Sinnabschnitte: Transkript passt nicht zur Audiodauer")
+            return
         # 4) Transkript-Ladefehler (kaputtes/fehlendes Sidecar).
         if getattr(session, "transcript_error", None) is not None:
             self.smart_status_label.setText(
