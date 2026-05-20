@@ -58,11 +58,31 @@ class CredentialError(Exception):
     enthalten NIE den Key-Wert."""
 
 
+_HEX_CHARS = set("0123456789abcdefABCDEF")
+
+
+def _looks_like_hex(s: str) -> bool:
+    return (bool(s) and len(s) % 2 == 0
+            and all(c in _HEX_CHARS for c in s))
+
+
+_KEY_PREFIX = "sk-ant-"
+_KEY_MIN_LEN = 80
+_KEY_MAX_LEN = 220
+
+
 def validate_api_key(raw: str) -> str:
-    """Trimmt und prüft (Carl Task 3): nicht leer, druckbares ASCII,
-    keine Steuerzeichen, KEIN Whitespace im Key. Gibt den bereinigten
-    Key zurück oder wirft ValueError mit einer Meldung, die den
-    Key-Inhalt NIE enthält."""
+    """Trimmt und prüft. Carl-Verschärfung 2026-05-20 nach Sheila-Smoke:
+    semantische Form muss plausibel sein (printable-ASCII allein war
+    zu weich — Unicode-Spoofing kam live durch). Reihenfolge der
+    Checks geht von „billig + spezifisch" zu „struktureller Form":
+
+    1. nicht None / nicht leer nach strip
+    2. Charakter-für-Charakter (kein Whitespace, druckbares ASCII)
+    3. Prefix `sk-ant-`
+    4. Länge {min}–{max}
+
+    Fehlermeldungen enthalten NIE den Key-Wert."""
     if raw is None:
         raise ValueError("Kein Claude-Key angegeben")
     key = raw.strip()
@@ -75,6 +95,14 @@ def validate_api_key(raw: str) -> str:
             raise ValueError(
                 "Claude-Key enthält ungültige Zeichen "
                 "(nur druckbares ASCII erlaubt)")
+    if not key.startswith(_KEY_PREFIX):
+        raise ValueError(
+            f"Claude-Key hat unerwartete Form (muss mit "
+            f"'{_KEY_PREFIX}' beginnen — Anthropic-Format).")
+    if not (_KEY_MIN_LEN <= len(key) <= _KEY_MAX_LEN):
+        raise ValueError(
+            f"Claude-Key hat unerwartete Länge ({len(key)} Zeichen, "
+            f"plausibel sind {_KEY_MIN_LEN}–{_KEY_MAX_LEN}).")
     return key
 
 
@@ -109,7 +137,24 @@ class KeychainCredentialProvider:
         if rc != 0:
             return None
         out = out.strip()
-        return out or None
+        if not out:
+            return None
+        # Carl-Verschärfung 2026-05-20: macOS `security -w` gibt das
+        # Passwort als reine Hex-Repräsentation zurück, wenn es ein
+        # non-printable Byte enthält (z. B. ein Trailing-Newline aus
+        # der GUI-Eingabe). Wenn die Hex-Form dekodiert mit "sk-ant-"
+        # beginnt, ist sie nur eine Repräsentation des Original-Keys
+        # — dekodieren und trimmen. Sonst Hex-String stehen lassen
+        # und vom Validator ablehnen lassen (statt einen Hex-Code an
+        # Anthropic zu schicken, was ja gerade live passiert war).
+        if _looks_like_hex(out):
+            try:
+                decoded = bytes.fromhex(out).decode('utf-8').strip()
+                if decoded.startswith(_KEY_PREFIX):
+                    return decoded
+            except (ValueError, UnicodeDecodeError):
+                pass
+        return out
 
     def get_api_key(self) -> Optional[str]:
         kc = self._read_keychain()

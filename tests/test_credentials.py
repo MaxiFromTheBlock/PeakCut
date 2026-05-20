@@ -19,13 +19,13 @@ from core.clip_boundary.models import (  # noqa: E402
     BoundaryError, BoundaryInfraError)
 from core.clip_boundary.decider import ClaudeBoundaryDecider  # noqa: E402
 
-_GOOD = "sk-ant-test-0123456789"
+_GOOD = "sk-ant-api03-" + "a" * 95         # 108 Zeichen, realistisches Format
 
 
 # --- Validierung (pur) ---------------------------------------------------
 
 def test_validate_trims_and_accepts_clean_key():
-    assert validate_api_key("  sk-ant-test-0123456789  ") == _GOOD
+    assert validate_api_key(f"  {_GOOD}  ") == _GOOD
 
 
 def test_validate_rejects_empty_whitespace_nonascii_control_innerspace():
@@ -122,7 +122,8 @@ def test_env_is_only_dev_fallback_when_keychain_empty():
 
 
 def test_keychain_wins_over_env():
-    p = _provider(stored=_GOOD, env={"ANTHROPIC_API_KEY": "sk-ant-OTHER"})
+    other = "sk-ant-api03-" + "b" * 95   # auch realistisch lang
+    p = _provider(stored=_GOOD, env={"ANTHROPIC_API_KEY": other})
     assert p.get_api_key() == _GOOD
 
 
@@ -131,8 +132,9 @@ def test_keychain_wins_over_env():
 def test_store_validates_then_persists_via_security():
     fake = _FakeSecurity()
     p = KeychainCredentialProvider(runner=fake, env={})
-    p.store("  sk-ant-neuer-key  ")
-    assert fake.stored == "sk-ant-neuer-key"          # getrimmt
+    neuer = "sk-ant-api03-" + "n" * 95     # realistisch lang
+    p.store(f"  {neuer}  ")
+    assert fake.stored == neuer                       # getrimmt
     add = [c for c in fake.calls if c[0] == "add-generic-password"][0]
     assert "-U" in add                                # -U = update erlaubt
     assert KEYCHAIN_SERVICE in add and KEYCHAIN_ACCOUNT in add
@@ -185,12 +187,13 @@ def test_store_raises_on_security_failure_without_key_leak():
             return (44, "")
     fake = _FailingSec()
     p = KeychainCredentialProvider(runner=fake, env={})
+    secret = "sk-ant-api03-secret-" + "X" * 88   # realistisch lang
     try:
-        p.store("sk-ant-secret-xyz")
+        p.store(secret)
         assert False, "muss bei security-Fehler werfen"
     except CredentialError as e:
         assert "secret" not in str(e)         # KEIN Key im Text
-        assert "xyz" not in str(e)
+        assert "XXXX" not in str(e)
     assert fake.stored is None                 # nichts gespeichert
 
 
@@ -220,3 +223,79 @@ def test_decider_without_key_raises_boundary_error_not_silent():
         assert False, "ohne Key muss es laut scheitern"
     except BoundaryError as e:
         assert "key" in str(e).lower()
+
+
+# === Carl-Verschärfung 2026-05-20: Validator + Hex-Detection ============
+
+def test_validate_rejects_missing_sk_ant_prefix():
+    # 108 Zeichen, aber falsches Prefix -> abgelehnt
+    bad = "not-ant-" + "a" * 100
+    try:
+        validate_api_key(bad)
+        assert False
+    except ValueError as e:
+        assert "sk-ant" in str(e).lower() or "form" in str(e).lower()
+        # NIE den Key in der Meldung
+        assert "aaa" not in str(e).lower()
+
+
+def test_validate_rejects_too_short_even_with_sk_ant_prefix():
+    too_short = "sk-ant-x"                     # 8 Zeichen, weit unter 80
+    try:
+        validate_api_key(too_short)
+        assert False
+    except ValueError as e:
+        assert "länge" in str(e).lower() or "lange" in str(e).lower()
+
+
+def test_validate_rejects_too_long():
+    too_long = "sk-ant-" + "y" * 300           # weit über 220
+    try:
+        validate_api_key(too_long)
+        assert False
+    except ValueError as e:
+        assert "länge" in str(e).lower() or "lange" in str(e).lower()
+        assert "yyy" not in str(e).lower()
+
+
+def test_validate_rejects_pure_hex_form_without_sk_ant_prefix():
+    # Reine Hex-Repräsentation eines Strings, der NICHT mit sk-ant-
+    # beginnt -> abgelehnt (kein versehentliches Anthropic-Aufrufen mit
+    # Hex-Code, der eigentlich nur Bytes ist).
+    hex_garbage = "73" * 60                    # 120 Hex-Zeichen, nur 's'
+    try:
+        validate_api_key(hex_garbage)
+        assert False
+    except ValueError as e:
+        # Entweder wegen fehlendem Prefix oder als Hex erkannt
+        assert "sk-ant" in str(e).lower() or "form" in str(e).lower() \
+            or "hex" in str(e).lower()
+
+
+# --- _read_keychain Hex-Detection ---
+
+def test_read_keychain_decodes_hex_when_decoded_starts_with_sk_ant():
+    # macOS gibt das Passwort als Hex zurück, wenn es non-printable
+    # Bytes enthält (z. B. Trailing-Newline). Wenn das Decoded-Form
+    # mit sk-ant- beginnt, soll der Reader das automatisch dekodieren.
+    real_key = "sk-ant-api03-" + "h" * 95
+    # Simuliere "Schlüsselbund enthält real_key + \n" -> security -w
+    # liefert das als Hex (genau dasselbe Verhalten wie live gemessen).
+    hex_with_newline = (real_key + "\n").encode('utf-8').hex()
+    p = _provider(stored=hex_with_newline)
+    assert p.get_api_key() == real_key
+
+
+def test_read_keychain_keeps_hex_when_decoded_is_not_sk_ant():
+    # Hex eines Strings, der nicht sk-ant- ist -> Hex bleibt drin,
+    # Validator lehnt dann ab (fehlender Prefix).
+    other = "not-anthropic-key-" + "x" * 90
+    hex_form = other.encode('utf-8').hex()
+    p = _provider(stored=hex_form)
+    assert p.get_api_key() is None             # validate lehnt ab
+
+
+def test_read_keychain_passes_plain_text_through():
+    real_key = "sk-ant-api03-" + "p" * 95
+    p = _provider(stored=real_key)
+    assert p.get_api_key() == real_key
