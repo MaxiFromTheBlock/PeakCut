@@ -11,7 +11,8 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from core.sinnabschnitt_exporter import (  # noqa: E402
-    SinnabschnittTXTExporter, SinnabschnittXMLExporter)
+    SinnabschnittTXTExporter, SinnabschnittXMLExporter,
+    _select_audio_reference)
 from core.clip_candidates import (  # noqa: E402
     ClipCandidate, ClipBoundary, PROPOSED, DISCARDED)
 from core.project import PeakCutProject  # noqa: E402
@@ -42,6 +43,44 @@ def _cands():
         ClipCandidate(peak_id=1, boundary=ClipBoundary(300000, 330000),
                       status=DISCARDED, reason="ignoriert"),
     ]
+
+
+def _session_with_mics(tmp_path, mic_names):
+    p = PeakCutProject()
+    for name in ("KB.wav", "CAM.mp4", *mic_names):
+        (tmp_path / name).write_bytes(b"\x00")
+    p.set_files(
+        str(tmp_path / "KB.wav"),
+        [str(tmp_path / name) for name in mic_names],
+        [str(tmp_path / "CAM.mp4")],
+    )
+    p.guest_name = "Hartmut Rosa"
+    s = PeakCutSession(p, dict(_CFG))
+    s.project.export_dir = str(tmp_path / "export")
+    return s
+
+
+def test_audio_reference_uses_mix_via_audio_routing(tmp_path):
+    s = _session_with_mics(
+        tmp_path, ["MIC1.wav", "Sheila Mix.mp3", "MIC2.wav"])
+
+    ref = _select_audio_reference(s)
+
+    assert os.path.basename(ref) == "Sheila Mix.mp3"
+
+
+def test_audio_reference_falls_back_to_first_real_mic(tmp_path):
+    s = _session_with_mics(tmp_path, ["MIC1.wav", "MIC2.wav"])
+
+    ref = _select_audio_reference(s)
+
+    assert os.path.basename(ref) == "MIC1.wav"
+
+
+def test_audio_reference_falls_back_to_default_without_audio(tmp_path):
+    s = _session_with_mics(tmp_path, [])
+
+    assert _select_audio_reference(s) == "audio.wav"
 
 
 def test_txt_has_all_required_fields_and_skips_discarded(tmp_path):

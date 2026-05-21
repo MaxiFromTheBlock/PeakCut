@@ -20,6 +20,7 @@ from utils import ms_to_timecode, ms_to_frames
 # unangetastet, NICHT "keine gemeinsame Util".
 from .exporters import _file_url
 from .clip_candidates import DISCARDED
+from .audio_routing import get_mix_track, get_source_mic_tracks
 
 
 def _active(session):
@@ -36,6 +37,22 @@ def _paths(session, ext):
     guest = session.project.guest_name
     return os.path.join(session.project.export_dir,
                         f"Sinnabschnitte - {guest}.{ext}")
+
+
+def _select_audio_reference(session) -> str:
+    """Audio-Referenz für die Sinnabschnitt-Spannenliste.
+
+    Nutzt dieselbe Mix-vs-echte-Mics-Wahrheit wie die übrigen
+    Hörpfade: Mix zuerst, sonst erste echte Mic-Spur, sonst stabiler
+    Default für die leichtgewichtige v1-XML.
+    """
+    mix = get_mix_track(session.project)
+    if mix:
+        return mix
+    source_mics = get_source_mic_tracks(session.project)
+    if source_mics:
+        return source_mics[0]
+    return "audio.wav"
 
 
 class SinnabschnittTXTExporter:
@@ -78,9 +95,7 @@ class SinnabschnittXMLExporter:
         fps = session.config.get("fps", 25)
         os.makedirs(session.project.export_dir, exist_ok=True)
         path = _paths(session, "xml")
-        ref = (session.project.get_reference_track()
-               or (session.project.mic_tracks[0]
-                   if session.project.mic_tracks else "audio.wav"))
+        ref = _select_audio_reference(session)
         ref_name = escape(os.path.basename(ref))
         ref_url = _file_url(ref)
         rate = (f"<rate><timebase>{fps}</timebase>"
