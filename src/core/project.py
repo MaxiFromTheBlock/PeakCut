@@ -52,8 +52,9 @@ class PeakCutProject:
         self._guest_name = value
 
     def get_reference_track(self) -> str | None:
-        """Find the 'mix' reference track for video sync."""
-        for f in self.mic_tracks:
-            if 'mix' in os.path.basename(f).lower():
-                return f
-        return None
+        """Find the mix reference track. Delegates to the central
+        token-aware heuristic in ``core.audio_routing`` so the
+        whole codebase shares one source of truth (#71a, 2026-05-21).
+        """
+        from .audio_routing import get_mix_track
+        return get_mix_track(self)
