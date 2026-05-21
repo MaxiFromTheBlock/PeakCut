@@ -469,12 +469,18 @@ Verschärfung, temperature-Parameter, Descript-Import via CLI).
 ist UX-broken (Task #76) — Sinnabschnitt-▶ läuft im Video stumm,
 Play startet Mic-Mode-Mix (alte Logik), Audio nicht synchron zum
 Bild. Max muss erst Wiedergabe sortieren, bevor er die Vorschläge
-beurteilen kann. → **Reihenfolge angepasst:** Smoke ✓ → **UX-
-Wiedergabe-Slice (#76)** → Prompt-Tuning (#70) → Phasing (#71).
+beurteilen kann.
 
-Begründung Reihenfolge (Carl): „Erst sicherstellen, dass der
-neue Sinnabschnitt-Motor lebt, dann Qualität tunen, dann
-Audio-Hygiene." Produktmagie und Sanitärarbeit nicht vermischen.
+**Reihenfolge (Max-Entscheidung 2026-05-21):** Smoke ✓ → **UX-
+Wiedergabe-Slice (#76)** → **Phasing (#71)** → **Prompt-Tuning
+(#70)**. Phasing wurde vor Prompt-Tuning gezogen, weil Phasing
+*aktuell produktionswirksam* ist — der Keyboardstellen-MP3, der
+heute an Matze/Cutter rausgeht, hat den Phasing-Effekt durch das
+Mix+Einzelmics-Summieren im MP3Exporter. Prompt-Tuning verbessert
+eine Funktion, die noch nicht im Produktivbetrieb ist; Phasing ist
+echte Audio-Hygiene im aktiven Ausgabepfad. Carls ursprüngliche
+„Sanitärarbeit zuletzt"-Linie galt für *nicht-produktive* Hygiene
+— hier ist der Output-Pfad direkt betroffen, daher umgekehrt.
 
 Aufteilung: **Max + Claude editorial** (3–5 echte Beispielstellen
 aus euren Folgen, jeweils positiv UND negatives Anti-Beispiel mit
@@ -1265,4 +1271,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-18 (Roadmap #2 ClipCandidate + Rückweg auf main gelandet, Merge d8d9e33 — 261 grün, Carl-grün inkl. 2× P2-Fix, Gate-F-App-Smoke an echtem HR-Material bestanden; develop = main)*
+*Zuletzt aktualisiert: 2026-05-21 (UX-Slice #76 Brainstorm gestartet; Reihenfolge nach Max-Entscheidung umgesetzt: #76 Wiedergabe-UX → #71 Phasing-Fix → #70 Prompt-Tuning. Phasing wandert vor Prompt-Tuning, weil produktionswirksam.)*
