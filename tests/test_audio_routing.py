@@ -254,7 +254,11 @@ class _StubSession:
 def test_get_speech_audio_segment_uses_only_mix_when_present():
     """Mix-Sinuston ist mit -10 dBFS deutlich lauter als die Einzel-
     Mics bei -20 dBFS. Wenn nur Mix als Quelle genutzt wird, hat das
-    Segment ≈ -10 dB. Bei Overlay mit Mics wäre der Pegel anders."""
+    Segment ≈ -10 dB. Bei Overlay mit Mics wäre der Pegel anders.
+
+    Carl-P3-Lock (2026-05-21): zusätzlich overlay-Aufrufe zählen —
+    macht die Invariante „Mix allein, wirklich kein Overlay" direkt
+    lesbar (nicht nur indirekt via dBFS-Pegel)."""
     from core.audio_routing import get_speech_audio_segment
 
     mic1 = _tone(330, -20)
@@ -264,11 +268,26 @@ def test_get_speech_audio_segment_uses_only_mix_when_present():
         ["MIC1.wav", "MIC2.wav", "Sheila Mix.mp3"],
         [mic1, mic2, mix],
     )
-    seg = get_speech_audio_segment(s, 0, 1000)
+
+    calls = []
+    original_overlay = AudioSegment.overlay
+
+    def counting_overlay(self, *args, **kwargs):
+        calls.append(1)
+        return original_overlay(self, *args, **kwargs)
+
+    with patch.object(AudioSegment, "overlay", counting_overlay):
+        seg = get_speech_audio_segment(s, 0, 1000)
+
     assert seg is not None
     assert abs(seg.dBFS - mix[0:1000].dBFS) < 0.5, (
         f"Segment dBFS {seg.dBFS} weicht von Mix dBFS "
         f"{mix[0:1000].dBFS} ab — wahrscheinlich Overlay statt nur Mix."
+    )
+    assert len(calls) == 0, (
+        f"Mix vorhanden → Helper darf NICHT overlay-summieren. "
+        f"Tatsächlich {len(calls)} overlay-Aufrufe — Phasing-Bug "
+        f"käme zurück."
     )
 
 
