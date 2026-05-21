@@ -212,3 +212,70 @@ def test_project_archive_preserves_mic_tracks_including_mix(tmp_path):
     assert any("mix" in name.lower() for name in after), (
         "Sheila Mix.mp3 ist aus mic_tracks verschwunden — Pin-3 verletzt."
     )
+
+
+# --- Carl-Ergänzungen (2026-05-21): guest_name.py bleibt in #71a -------
+# unangetastet, Drift-Schutz gegen indirekten Pin-1-Bruch. ---------------
+
+
+def test_guest_name_extraction_stable_for_typical_mix_filenames():
+    """Pin: extract_guest_name liefert für die HM-typischen
+    Mix-Dateinamen exakt die heutigen Gastnamen. Verhindert, dass
+    eine spätere Heuristik-Verschärfung (z.B. #71a is_mix_track-
+    Umstellung) versehentlich die ältere guest_name-Heuristik mit
+    verschiebt und damit Keyboardstellen-XML-Dateinamen
+    (`Keyboardstellen - {Gastname}.xml`) driften — was Pin-1
+    indirekt brechen würde.
+
+    Auch die heutigen 'Unknown'-Ergebnisse sind bewusst eingefroren:
+    sie sind das aktuelle Verhalten, das #71a nicht 'aus Versehen
+    verbessern' darf. Echte Behebung kommt mit #77 Import-Refactor.
+    """
+    from core.guest_name import extract_guest_name
+
+    cases = [
+        # (file_paths, expected_guest, kommentar)
+        # Heutige HM-Standardform mit ' - ': matched
+        (["Hotel Matze - Sheila de Liz mix.wav"], "Sheila de Liz",
+         "HM-Standard: 'Prefix - Name mix.wav'"),
+        (["HM - Hartmut Rosa mix.mp3"], "Hartmut Rosa",
+         "Kurzprefix mit ' - '"),
+        # Edge-Case: kein ' - ' Trenner → heute 'Unknown'.
+        # Wenn #71a das auf 'Sheila' verbessert, ist die Heuristik
+        # vermutlich überreichend angefasst.
+        (["Sheila Mix.mp3"], "Unknown",
+         "Kein ' - ' Trenner: heute 'Unknown'"),
+        # Edge-Case: keine Mix-Datei in der Liste
+        (["MIC1.wav", "MIC2.wav"], "Unknown",
+         "Kein Mix in den Files: 'Unknown'"),
+    ]
+
+    for paths, expected, kommentar in cases:
+        actual = extract_guest_name(paths)
+        assert actual == expected, (
+            f"extract_guest_name({paths!r}) driftet.\n"
+            f"  Fall:     {kommentar}\n"
+            f"  erwartet: {expected!r}\n"
+            f"  aktuell:  {actual!r}\n"
+            f"Pin-1-Risiko: Keyboardstellen-Dateiname enthält den "
+            f"Gastnamen. #71a darf guest_name.py NICHT anfassen — "
+            f"Behebung gehört in #77 Import-Refactor."
+        )
+
+
+def test_guest_name_module_signature_unchanged():
+    """Pin-Modul-Stabilität: extract_guest_name bleibt importierbar
+    mit unveränderter Signatur. Strukturanker für 'guest_name.py
+    nicht anfassen' — wenn der Bauer hier rein-refactored, fliegt
+    er hier auf."""
+    import inspect
+
+    from core.guest_name import extract_guest_name
+
+    assert callable(extract_guest_name)
+    sig = inspect.signature(extract_guest_name)
+    assert list(sig.parameters) == ["file_paths"], (
+        f"extract_guest_name-Signatur driftet: "
+        f"{list(sig.parameters)}. #71a soll das Modul nicht "
+        f"anfassen — #77 Import-Refactor übernimmt das."
+    )
