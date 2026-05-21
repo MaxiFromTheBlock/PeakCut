@@ -235,9 +235,18 @@ class XMLExporter(BaseExporter):
         if video_paths:
             vid_w, vid_h = _probe_video_info(video_paths[0])
 
+        # Task #72 (Smoke 2026-05-20): nicht mic_tracks[0] direkt nehmen —
+        # die Reihenfolge hängt von der Import-Reihenfolge ab, also würden
+        # zwei Re-Imports desselben Datei-Satzes unterschiedliche XMLs
+        # erzeugen (channelcount 1↔2 je nachdem ob MIC1 oder Mix zuerst
+        # kommt). Stattdessen die Mix-Spur deterministisch via
+        # get_reference_track wählen, Fallback auf mics[0]. Gleiche
+        # Semantik wie SinnabschnittExporter.
         sample_rate, bit_depth, channels = 48000, 16, 2
         if audio_paths:
-            sample_rate, bit_depth, channels = _probe_audio_info(audio_paths[0])
+            ref = (session.project.get_reference_track()
+                   or audio_paths[0])
+            sample_rate, bit_depth, channels = _probe_audio_info(ref)
 
         # Calculate total sequence duration in frames
         total_frames = 0
