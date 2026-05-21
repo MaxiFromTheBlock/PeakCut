@@ -82,6 +82,39 @@ def test_parse_descript_docx_supports_inline_speaker_and_timestamp(tmp_path):
     assert transcript.segments[1].text == "Matze: Danach Matze."
 
 
+def test_parse_descript_docx_keeps_colon_sentence_end_as_text(tmp_path):
+    docx = tmp_path / "colon-sentence.docx"
+    _write_docx(docx, [
+        "Sheila de Liz:",
+        "[00:00:00] Der erste Gedanke.",
+        "Das ist das Wichtigste:",
+        "[00:01:00] Danach geht es weiter.",
+    ])
+
+    transcript = parse_descript_docx(str(docx))
+
+    assert transcript.segments[0].text == (
+        "Sheila de Liz: Der erste Gedanke. Das ist das Wichtigste:")
+    assert transcript.segments[1].text == (
+        "Sheila de Liz: Danach geht es weiter.")
+
+
+def test_parse_descript_docx_rejects_inline_colon_sentence_as_speaker(tmp_path):
+    docx = tmp_path / "inline-colon-sentence.docx"
+    _write_docx(docx, [
+        "Matze Hielscher:",
+        "[00:00:00] Das Entscheidende: Es bleibt Inhalt.",
+        "[00:01:00] Und der Sprecher bleibt Matze.",
+    ])
+
+    transcript = parse_descript_docx(str(docx))
+
+    assert transcript.segments[0].text == (
+        "Matze Hielscher: Das Entscheidende: Es bleibt Inhalt.")
+    assert transcript.segments[1].text == (
+        "Matze Hielscher: Und der Sprecher bleibt Matze.")
+
+
 def test_parse_descript_docx_rejects_broken_or_unexpected_files(tmp_path):
     missing = tmp_path / "missing.docx"
     try:

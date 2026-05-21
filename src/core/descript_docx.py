@@ -17,6 +17,17 @@ from .transcription import Transcript, TranscriptError, TranscriptSegment
 _TIMESTAMP_RE = re.compile(r"\[(\d{1,2}):(\d{2}):(\d{2})\]")
 _INLINE_SPEAKER_RE = re.compile(r"^([^:\[\]]{1,80}):\s*(.*)$")
 _DOC_XML = "word/document.xml"
+_NAME_PARTICLES = {
+    "da", "de", "del", "den", "der", "di", "du", "la", "le",
+    "van", "von", "y", "zu", "zum", "zur",
+}
+_SENTENCE_START_WORDS = {
+    "aber", "also", "das", "dann", "der", "die", "ein", "eine",
+    "einen", "einem", "er", "es", "hat", "ich", "ist", "oder",
+    "sie", "sind", "und", "warum", "was", "weil", "wenn", "wie",
+    "wir",
+}
+_SENTENCE_PUNCTUATION_RE = re.compile(r"[.!?;,\"„“”()\[\]{}]")
 
 
 @dataclass
@@ -165,7 +176,9 @@ def _split_inline_speaker(text: str, fallback: str) -> tuple[str, str]:
     match = _INLINE_SPEAKER_RE.match(text.strip())
     if not match:
         return fallback, text.strip()
-    speaker = match.group(1).strip()
+    speaker = _speaker_label(match.group(1).strip() + ":")
+    if speaker is None:
+        return fallback, text.strip()
     body = match.group(2).strip()
     return speaker, body
 
@@ -179,7 +192,40 @@ def _speaker_label(text: str) -> str | None:
         return None
     if _TIMESTAMP_RE.search(speaker):
         return None
+    if not _looks_like_speaker_name(speaker):
+        return None
     return speaker
+
+
+def _looks_like_speaker_name(label: str) -> bool:
+    """Conservative Descript-speaker heuristic.
+
+    Speaker labels are expected to be simple names ("Matze",
+    "Sheila de Liz"). A prose sentence ending in a colon should stay
+    transcript text, not become the next speaker.
+    """
+    if _SENTENCE_PUNCTUATION_RE.search(label):
+        return False
+    words = label.split()
+    if not (1 <= len(words) <= 5):
+        return False
+    saw_name_word = False
+    for word in words:
+        lower = word.lower()
+        if lower in _SENTENCE_START_WORDS:
+            return False
+        if lower in _NAME_PARTICLES:
+            continue
+        parts = re.split(r"[-'’]", word)
+        if not parts or any(not p for p in parts):
+            return False
+        for part in parts:
+            if not part.isalpha():
+                return False
+            if not (part[0].isupper() or part.isupper()):
+                return False
+        saw_name_word = True
+    return saw_name_word
 
 
 def _timestamp_to_ms(match: re.Match[str]) -> int:
