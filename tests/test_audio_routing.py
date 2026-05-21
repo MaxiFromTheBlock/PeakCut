@@ -217,3 +217,121 @@ def test_reference_track_returns_none_when_no_mix_in_project():
     p = PeakCutProject()
     p.set_files(None, ["MIC1.wav", "MIC2.wav", "mixer_recording.wav"], [])
     assert p.get_reference_track() is None
+
+
+# --- #71a Task 2: get_speech_audio_segment ---------------------------
+# Test-Audio-Pattern (Carl P1-Fix 2026-05-21): silent.dBFS == -inf,
+# damit wären dBFS-Vergleiche nan-Fallen. Statt dessen Sine-Generator
+# mit apply_gain → reproduzierbar identifizierbare Pegel.
+
+
+from unittest.mock import patch  # noqa: E402
+
+from pydub import AudioSegment  # noqa: E402
+from pydub.generators import Sine  # noqa: E402
+
+
+def _silent(ms: int = 180_000) -> AudioSegment:
+    return AudioSegment.silent(duration=ms)
+
+
+def _tone(freq_hz: int, gain_db: float,
+          ms: int = 180_000) -> AudioSegment:
+    """Sinuston mit definiertem Pegel — testbar via dBFS."""
+    return Sine(freq_hz).to_audio_segment(duration=ms).apply_gain(gain_db)
+
+
+class _StubSession:
+    """Minimaler PeakCutSession-Stub: project (mit mic_tracks) +
+    mic_audios-Liste. Alle anderen Session-Attribute werden vom
+    Audio-Routing-Helper nicht gelesen."""
+
+    def __init__(self, mic_tracks, mic_audios):
+        self.project = _StubProject(mic_tracks)
+        self.mic_audios = mic_audios
+
+
+def test_get_speech_audio_segment_uses_only_mix_when_present():
+    """Mix-Sinuston ist mit -10 dBFS deutlich lauter als die Einzel-
+    Mics bei -20 dBFS. Wenn nur Mix als Quelle genutzt wird, hat das
+    Segment ≈ -10 dB. Bei Overlay mit Mics wäre der Pegel anders."""
+    from core.audio_routing import get_speech_audio_segment
+
+    mic1 = _tone(330, -20)
+    mic2 = _tone(380, -20)
+    mix = _tone(440, -10)
+    s = _StubSession(
+        ["MIC1.wav", "MIC2.wav", "Sheila Mix.mp3"],
+        [mic1, mic2, mix],
+    )
+    seg = get_speech_audio_segment(s, 0, 1000)
+    assert seg is not None
+    assert abs(seg.dBFS - mix[0:1000].dBFS) < 0.5, (
+        f"Segment dBFS {seg.dBFS} weicht von Mix dBFS "
+        f"{mix[0:1000].dBFS} ab — wahrscheinlich Overlay statt nur Mix."
+    )
+
+
+def test_get_speech_audio_segment_overlays_real_mics_when_no_mix():
+    """Kein Mix in mic_tracks → Overlay der echten Mics wie altes
+    Verhalten (Backward-Compat für Produktionen ohne Mix-Datei)."""
+    from core.audio_routing import get_speech_audio_segment
+
+    s = _StubSession(
+        ["MIC1.wav", "MIC2.wav"],
+        [_tone(330, -20), _tone(380, -20)],
+    )
+    calls = []
+    original_overlay = AudioSegment.overlay
+
+    def counting_overlay(self, *args, **kwargs):
+        calls.append(1)
+        return original_overlay(self, *args, **kwargs)
+
+    with patch.object(AudioSegment, "overlay", counting_overlay):
+        seg = get_speech_audio_segment(s, 0, 1000)
+    assert seg is not None
+    assert len(calls) == 1, (
+        f"Erwartete einen overlay-Aufruf (MIC2 auf MIC1), "
+        f"tatsächlich {len(calls)}."
+    )
+
+
+def test_get_speech_audio_segment_returns_none_when_no_audio_source():
+    """Edge-Case: weder Mix noch echte Mics → None (nicht
+    AudioSegment.silent oder Crash)."""
+    from core.audio_routing import get_speech_audio_segment
+
+    assert get_speech_audio_segment(_StubSession([], []), 0, 1000) is None
+
+
+def test_get_speech_audio_segment_handles_only_mix():
+    """Edge-Case: nur eine Mix-Datei, keine echten Mics → Mix allein."""
+    from core.audio_routing import get_speech_audio_segment
+
+    mix = _tone(440, -10)
+    s = _StubSession(["Sheila Mix.mp3"], [mix])
+    seg = get_speech_audio_segment(s, 0, 1000)
+    assert seg is not None
+    assert abs(seg.dBFS - mix[0:1000].dBFS) < 0.5
+
+
+def test_get_speech_audio_segment_returns_none_when_lengths_mismatch():
+    """Carl P2-Fix 2026-05-21: mic_tracks/mic_audios-Mismatch ist
+    KORRUPTER Zustand, kein Lazy-Race. KEIN Silent-Fallback auf
+    Overlay (würde sonst still falsches Audio liefern) — sauberes
+    None, damit der Konsument das Problem sieht und nicht
+    versehentlich Mix-loses Audio in den Cutter-Output kippt."""
+    from core.audio_routing import get_speech_audio_segment
+
+    s = _StubSession(
+        ["MIC1.wav", "MIC2.wav", "Sheila Mix.mp3"],
+        [_tone(330, -20), _tone(380, -20)],  # Mix-Index 2 fehlt
+    )
+    seg = get_speech_audio_segment(s, 0, 1000)
+    assert seg is None, (
+        "Mismatch zwischen mic_tracks (Länge 3) und mic_audios "
+        "(Länge 2) darf nicht still in einen Overlay-Fallback "
+        "rutschen — sonst landet möglicherweise falsches Audio "
+        "im Output."
+    )

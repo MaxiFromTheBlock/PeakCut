@@ -87,3 +87,51 @@ def get_source_mic_tracks(project) -> list[str]:
     selbst.
     """
     return [path for path in project.mic_tracks if not is_mix_track(path)]
+
+
+def get_speech_audio_segment(session, start_ms: int, end_ms: int):
+    """Zentrale Audio-Quellen-Wahl für Sprach-Wiedergabe und -Export.
+
+    Regel (#71a Task 2):
+
+    - Pre-Condition: ``len(mic_tracks) == len(mic_audios)``. Bei
+      Mismatch → ``None`` (korrupter Zustand, KEIN Silent-Fallback;
+      Carl-P2-Linie: lieber klare Lücke als versteckt falsches
+      Audio).
+    - Mix in ``mic_tracks`` → nur Mix-Segment, kein Overlay
+      (verhindert Phasing, der ganze Grund für #71a).
+    - Sonst Overlay aller echten Mic-Spuren (Backward-Compat).
+    - Keine echten Mics → ``None``.
+
+    Args:
+        session: Objekt mit ``project.mic_tracks`` und ``mic_audios``.
+        start_ms, end_ms: Fenstergrenzen.
+
+    Returns:
+        ``AudioSegment`` | ``None``.
+    """
+    mic_tracks = session.project.mic_tracks
+    mic_audios = session.mic_audios
+
+    if len(mic_tracks) != len(mic_audios):
+        return None
+
+    mix_path = get_mix_track(session.project)
+    if mix_path:
+        try:
+            idx = mic_tracks.index(mix_path)
+        except ValueError:
+            idx = None
+        if idx is not None:
+            return mic_audios[idx][start_ms:end_ms]
+
+    real_mic_indices = [
+        i for i, p in enumerate(mic_tracks) if not is_mix_track(p)
+    ]
+    if not real_mic_indices:
+        return None
+
+    segment = mic_audios[real_mic_indices[0]][start_ms:end_ms]
+    for i in real_mic_indices[1:]:
+        segment = segment.overlay(mic_audios[i][start_ms:end_ms])
+    return segment
