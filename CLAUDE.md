@@ -471,16 +471,37 @@ Play startet Mic-Mode-Mix (alte Logik), Audio nicht synchron zum
 Bild. Max muss erst Wiedergabe sortieren, bevor er die Vorschläge
 beurteilen kann.
 
-**Reihenfolge (Max-Entscheidung 2026-05-21):** Smoke ✓ → **UX-
-Wiedergabe-Slice (#76)** → **Phasing (#71)** → **Prompt-Tuning
-(#70)**. Phasing wurde vor Prompt-Tuning gezogen, weil Phasing
-*aktuell produktionswirksam* ist — der Keyboardstellen-MP3, der
-heute an Matze/Cutter rausgeht, hat den Phasing-Effekt durch das
-Mix+Einzelmics-Summieren im MP3Exporter. Prompt-Tuning verbessert
-eine Funktion, die noch nicht im Produktivbetrieb ist; Phasing ist
-echte Audio-Hygiene im aktiven Ausgabepfad. Carls ursprüngliche
-„Sanitärarbeit zuletzt"-Linie galt für *nicht-produktive* Hygiene
-— hier ist der Output-Pfad direkt betroffen, daher umgekehrt.
+**Reihenfolge (Max-Entscheidung + Carl-B-prime-Fahrplan 2026-05-21):**
+Smoke ✓ → **#71a Audio-Routing-Mini** → **#76 Wiedergabe-UX** →
+**Import-Refactor + Marker-Rename (#37)** → **#70 Prompt-Tuning**.
+
+**Phasing-Wurzel diagnostiziert 2026-05-21:** Beim Import landet die
+Mix-Datei in `project.mic_tracks` (main_window 232-237 sortiert alles
+außer „keyboard/keys/klavier" als Mic). MP3Exporter (`exporters.py`
+142-144) und `session.play_current` Mic-Mode (`session.py` 100-107)
+overlay-summieren `mic_audios[0]` + `mic_audios[1:]` — die Mix-Datei
+steckt aber als eine dieser „Mic-Spuren" mit drin. Folge: ProTools-
+Mix wird on-top zu allen Einzel-Mics drauf-overlayt, jeder Sprecher
+zweimal addiert (raw + bereits-gemischt). Latenz/Versatz → Phasing
+sowohl im Cutter-MP3 als auch in der Speak-Mode-Wiedergabe.
+
+**Carl-Fahrplan B-prime (statt voller Import-Refactor zuerst):**
+- **#71a:** neuer Helper `core/audio_routing.py` (is_mix_track,
+  get_mix_track, get_source_mic_tracks, get_speech_audio_segment).
+  Regel: Mix vorhanden → Speech-Audio = Mix allein; sonst Overlay
+  der echten Mics. MP3Exporter + `session.play_current` +
+  `assignment_page` nutzen Helper. **XMLExporter + folgenschnitt_
+  exporter BLEIBEN unangetastet** — Pin-1 (Keyboardstellen-XML byte-
+  identisch). Trade-off: Hören sauber, XML-Pfade behalten Mix-als-
+  Mic-Semantik bis zum Import-Refactor.
+- **#76:** Carls bestehender Plan wird leicht angepasst — Speak/
+  Smart laufen auf `get_speech_audio_segment` statt direkter Mix-
+  Datei-Logik. Spec bleibt sonst gültig.
+- **Import-Refactor (großer Slice):** Slots beim Import (Marker /
+  Mics / Mix / Transkript / Kameras), Namens-Heuristik raus,
+  separates `project.mix_track`, `.peakcut` Schema-v3 mit
+  Backwards-Kompat, Pflicht-Regeln. Vereint #37.
+- **#70:** Prompt-Tuning wie geplant.
 
 Aufteilung: **Max + Claude editorial** (3–5 echte Beispielstellen
 aus euren Folgen, jeweils positiv UND negatives Anti-Beispiel mit
@@ -1271,4 +1292,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-21 (UX-Slice #76 Brainstorm gestartet; Reihenfolge nach Max-Entscheidung umgesetzt: #76 Wiedergabe-UX → #71 Phasing-Fix → #70 Prompt-Tuning. Phasing wandert vor Prompt-Tuning, weil produktionswirksam.)*
+*Zuletzt aktualisiert: 2026-05-21 (Carl-Cross-Review von #76-Plan deckte tiefere Phasing-Wurzel auf: Mix-Datei landet als Mic in project.mic_tracks. Carl-Fahrplan B-prime angenommen: #71a Audio-Routing-Mini-Slice ZUERST, dann #76 darauf aufbauend, danach großer Import-Refactor + Marker-Rename, danach #70 Prompt-Tuning.)*
