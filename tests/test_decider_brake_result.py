@@ -171,3 +171,90 @@ def test_legacy_wrapper_verworfen_returns_fallback():
 def test_legacy_wrapper_infra_still_returns_fallback_for_back_compat():
     d = decide_with_brake(_scaffold(), _InfraDecider(), config=_CFG)
     assert isinstance(d, BoundaryDecision) and d.confidence == 0.0
+
+
+# --- Carl-Hinweis Task-4-Review: "Client liefert strukturell komische ---
+# --- Message" — JSON da, aber Inhalt defekt. Soll DECIDER_VERWORFEN     ---
+# --- werden, NICHT INFRA_FEHLT (Decider hat ja geantwortet).            ---
+
+class _MalformedJSONDecider:
+    """ClaudeBoundaryDecider-Verhalten gegen JSON-Antworten mit
+    defektem Inhalt. Wir konstruieren das in der Decider-Antwort selbst,
+    indem wir call_model verwenden und über decide() durchgehen.
+    """
+    def __init__(self, raw_response):
+        self._raw = raw_response
+
+    def decide(self, sc):
+        # echte Decoder-Pipeline durchlaufen — wirft BoundaryError
+        from core.clip_boundary.decider import ClaudeBoundaryDecider
+        dec = ClaudeBoundaryDecider(call_model=lambda p: self._raw)
+        return dec.decide(sc)
+
+
+def test_decider_garbage_text_no_json_is_decider_verworfen():
+    res = decide_with_brake_result(
+        _scaffold(),
+        _MalformedJSONDecider("Da kommt nur Fließtext, kein JSON drin."),
+        config=_CFG)
+    assert res.category is BoundaryOutcome.DECIDER_VERWORFEN
+    assert res.decision is not None and res.decision.confidence == 0.0
+
+
+def test_decider_json_missing_required_field_is_decider_verworfen():
+    # JSON da, aber 'start_ms' fehlt → BoundaryDecision-Konstruktion
+    # wirft KeyError, decider.decide() macht BoundaryError draus.
+    res = decide_with_brake_result(
+        _scaffold(),
+        _MalformedJSONDecider(
+            '{"end_ms": 150000, "reason": "x", "confidence": 0.8}'),
+        config=_CFG)
+    assert res.category is BoundaryOutcome.DECIDER_VERWORFEN
+
+
+def test_decider_json_invalid_values_is_decider_verworfen():
+    # end_ms < start_ms → BoundaryDecision.__post_init__ wirft ValueError
+    res = decide_with_brake_result(
+        _scaffold(),
+        _MalformedJSONDecider(
+            '{"start_ms": 150000, "end_ms": 50000, '
+            '"reason": "x", "confidence": 0.8}'),
+        config=_CFG)
+    assert res.category is BoundaryOutcome.DECIDER_VERWORFEN
+
+
+def test_decider_json_confidence_out_of_range_is_decider_verworfen():
+    res = decide_with_brake_result(
+        _scaffold(),
+        _MalformedJSONDecider(
+            '{"start_ms": 50000, "end_ms": 150000, '
+            '"reason": "x", "confidence": 9.9}'),
+        config=_CFG)
+    assert res.category is BoundaryOutcome.DECIDER_VERWORFEN
+
+
+def test_decider_json_negative_start_ms_is_decider_verworfen():
+    res = decide_with_brake_result(
+        _scaffold(),
+        _MalformedJSONDecider(
+            '{"start_ms": -1000, "end_ms": 60000, '
+            '"reason": "x", "confidence": 0.8}'),
+        config=_CFG)
+    assert res.category is BoundaryOutcome.DECIDER_VERWORFEN
+
+
+def test_decider_json_with_surrounding_text_still_parsed():
+    # Realistisch: Claude umrahmt das JSON mit Erklär-Text. Das
+    # _extract_json sucht zwischen erstem { und letztem }, also OK.
+    # Dieser Test stellt sicher, dass die positive Pfad-Parsing-Toleranz
+    # NICHT versehentlich abgeschnitten wurde.
+    res = decide_with_brake_result(
+        _scaffold(),
+        _MalformedJSONDecider(
+            'Hier mein Vorschlag:\n'
+            '{"start_ms": 95500, "end_ms": 150500, '
+            '"reason": "ok", "confidence": 0.8}\n'
+            'Hoffe, das passt.'),
+        config=_CFG)
+    assert res.category is BoundaryOutcome.OK
+    assert res.decision is not None and res.decision.confidence > 0

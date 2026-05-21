@@ -11,6 +11,15 @@ _start`-Default ab (Mess-Gate, §6/§7 der Spec).
 KEINE App-Logik. Reine Helfer (unten) sind unit-getestet; echte
 Engines werden NUR in main() / lazy importiert (Modul bleibt offline
 importierbar — kein mlx_whisper/anthropic beim Import).
+
+Hinweis zum erwarteten Cache-Befund (Carl-Quick-Check 2026-05-19):
+Der Report zeigt im Hand-Lauf typischerweise `Cache: MISS (kein
+Vorlauf)`, weil dieses Skript keine bestehende `.peakcut` lädt,
+sondern für die Mess-Gate-Wanduhr aus dem nackten Material-Ordner
+neu analysiert. Das ist KEIN Bug — echte Cache-Wiederverwendung
+ist über die Unit-Tests (`test_transcript_cache_alignment.py`)
+abgedeckt. Für einen Cache-HIT-Smoke wäre PeakCut selbst der
+richtige Pfad (zweites Öffnen derselben Folge).
 """
 
 import argparse

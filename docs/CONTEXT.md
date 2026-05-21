@@ -34,6 +34,32 @@ Dieses Dokument ist die Kurzversion fuer den PO.
   unvollständige Zuordnung → nur Hinweis, Folgenschnitt-XML entfällt. Eine
   bewusst leere Zuordnung wird NICHT heimlich durch Defaults ersetzt.
 
+## Smart Clip-Grenzen / Roadmap #3 (auf develop, Smoke 2026-05-21)
+
+- Pro Drücker: Whisper transkribiert die Folge (parallel zur Analyse),
+  ein Scaffold sammelt natürliche Schnittkanten (Satz-/Pausen-/Sprecher-
+  Wechsel), Claude entscheidet den kleinsten zusammenhängenden Sinn-
+  abschnitt, eine deterministische Bremse snappt auf gelieferte Kanten
+  und fängt jeden strukturellen Defekt ab.
+- Drei Ergebnis-Kategorien statt blankem Fallback: OK / DECIDER_VERWORFEN
+  (Claude antwortete, Bremse lehnte ab — konservativer Rückfall mit
+  Konfidenz 0.0 als echtes Signal) / INFRA_FEHLT (kein/ungültiger Key,
+  Modell/API/Transkript fehlt — KEINE Pseudo-Einträge, lauter Hinweis
+  in der Statuszeile).
+- Optionaler Descript-`.docx`-Upload als Transkriptquelle (Whisper-
+  Bypass, minutengrob). Cache via Mix-Fingerprint (size+mtime_ns):
+  zweites Öffnen derselben Folge → kein Whisper mehr.
+- Job B (Scaffold→Decider→Bremse) läuft im Review-Hintergrund, NICHT
+  am Export-Knopf. Sinnabschnitt-Zusatzdateien (TXT/XML) entstehen
+  genau einmal pro Lauf, wenn Basis-Export fertig UND Smart bereit.
+- Claude-Key kommt aus dem macOS-Schlüsselbund (BYOK, v1) über einen
+  abstrakten Provider-Steckplatz; späterer Managed/Cloud-Tier ist ein
+  Tausch der Implementierung, kein Neubau.
+- Smoke 2026-05-21 an Sheila-de-Liz-Material: 35/36 Peaks haben
+  narrative Sinnabschnitt-Vorschläge mit Konfidenz 0.78–0.80,
+  R4-Disziplin live bewährt. Wiedergabe-UX-Slice (#76) ist Voraussetzung
+  fürs eigentliche Hör-Urteil → vor dem Prompt-Tuning-Slice (#70).
+
 ## Folgenschnitt Stufe 2 / Track 1 (auf main gelandet 2026-05-17)
 
 - Lange Ein-Personen-Monologe werden in grosse, ausgewogene Minuten-
