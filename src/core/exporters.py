@@ -7,6 +7,7 @@ from xml.sax.saxutils import escape
 from pydub import AudioSegment
 
 from utils import TEMP_DIR, ASSETS_DIR, parse_timecode_to_ms, ms_to_timecode, ms_to_frames, get_logger
+from core.audio_routing import get_speech_audio_segment
 from core.media_probe import run_ffprobe
 
 _log = get_logger("peakcut.export")
@@ -130,38 +131,22 @@ class MP3Exporter(BaseExporter):
         config = session.config
         voice = config.get("tts_voice", "Anna")
 
-        # Quickfix 2026-05-21 (vor #71a Task 1): wenn die Mix-Datei
-        # in mic_tracks einsortiert ist (heutiges _categorize_files-
-        # Verhalten), darf sie NICHT mit den Einzel-Mics overlay-
-        # summiert werden — sonst Phasing (Mix enthält die Mics
-        # bereits). In dem Fall ziehen wir nur den Mix als Sprach-
-        # Quelle. Der saubere audio_routing.py-Helper folgt mit
-        # #71a Task 1, dieser Quickfix wird dann durch ihn ersetzt.
-        mix_path = session.project.get_reference_track()
-        mix_idx = None
-        if mix_path:
-            try:
-                mix_idx = session.project.mic_tracks.index(mix_path)
-            except ValueError:
-                mix_idx = None
-
         active_peaks = session.get_active_peaks()
         if not active_peaks or not mic_audios:
             return ""
 
+        # #71a Task 3 (2026-05-21): Mix-vs-Mics-Wahl lebt jetzt zentral
+        # in audio_routing.get_speech_audio_segment. Quickfix-Inline-
+        # Code (eigene mix_idx-Berechnung) ist hier raus — eine
+        # Wahrheit für alle Konsumenten.
         segments = []
         for peak_num, peak in active_peaks:
             number_audio = load_spoken_number(peak_num, TEMP_DIR, ASSETS_DIR, voice)
             start = peak.in_point_ms
             end = peak.out_point_ms
-            if mix_idx is not None and mix_idx < len(mic_audios):
-                # Mix vorhanden -> nur Mix-Spur, kein Overlay
-                segment = mic_audios[mix_idx][start:end]
-            else:
-                # Kein Mix -> alte Overlay-Logik (Backward-Compat)
-                segment = mic_audios[0][start:end]
-                for m in mic_audios[1:]:
-                    segment = segment.overlay(m[start:end])
+            segment = get_speech_audio_segment(session, start, end)
+            if segment is None:
+                continue
             segments.append(number_audio + AudioSegment.silent(duration=_TTS_NUMBER_GAP_MS) + segment)
             segments.append(AudioSegment.silent(duration=PAUSE_DURATION_MS))
 

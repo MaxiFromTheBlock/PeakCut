@@ -1,20 +1,19 @@
-"""Quickfix 2026-05-21 — MP3Exporter darf nicht Mix + Einzel-Mics
-overlay-summieren, weil dadurch Phasing entsteht (Mix enthält die
-Mic-Signale schon).
+"""#71a Task 3 — MP3Exporter delegiert an audio_routing-Helper.
 
-Hintergrund: Beim Cross-Review der #71a-Spec wurde 2026-05-21
-verifiziert, dass die Mix-Datei beim Import in ``project.mic_tracks``
-einsortiert wird (``main_window._categorize_files`` 232–237) und
-damit ``session.mic_audios`` enthält. MP3Exporter (``exporters.py``
-142–144) und ``session.play_current()`` Mic-Mode overlay-summieren
-``mic_audios[0]`` + ``mic_audios[1:]``, also Mix on-top zu allen
-Einzel-Mics → jeder Sprecher zweimal addiert → Phasing.
+Geschichte: Der Quickfix vom 2026-05-21 (eigene Mix-Index-Berechnung
+inline in MP3Exporter) wird hier durch den sauberen Helper-Pfad
+ersetzt. ``MP3Exporter.export()`` ruft pro aktivem Peak
+``audio_routing.get_speech_audio_segment(session, start, end)`` auf
+— die Mix-Wahl-Logik lebt jetzt zentral im Helper.
 
-Dieser Quickfix zieht den Mix als alleinige Sprach-Quelle vor das
-Overlay, wenn er vorhanden ist. Der saubere audio_routing.py-Helper
-folgt mit #71a Task 1 (Carl-Plan).
+Verhaltens-Pins (überleben den Refactor):
+- Mix in ``mic_tracks`` → 0 overlay-Aufrufe (Phasing weg).
+- Kein Mix in ``mic_tracks`` → 1 overlay-Aufruf (MIC2 auf MIC1,
+  Backward-Compat).
+- ``MP3Exporter`` ruft den Helper exakt einmal pro aktivem Peak
+  (Carl P2-Lock 2026-05-21: kein Schleifen-Drift, kein Skip).
 
-Pin-1-Schutz: XMLExporter wird *nicht* berührt, der Pin-Hash in
+Pin-1-Schutz: ``XMLExporter`` wird *nicht* berührt, der Pin-Hash in
 ``tests/test_audio_routing_safety.py`` darf nicht driften.
 """
 
@@ -132,3 +131,67 @@ def test_mp3_exporter_still_overlays_when_no_mix_in_mic_tracks(tmp_path):
         f"erwartet 1 overlay-Aufruf, tatsächlich {count}. "
         f"Backward-Compat gebrochen."
     )
+
+
+# --- #71a Task 3: MP3Exporter delegiert an Helper (Carl P2-Lock) -----
+
+
+def test_mp3_exporter_calls_get_speech_audio_segment_per_active_peak(tmp_path):
+    """Carl-P2-Lock (Plan-Cross-Review 2026-05-21): MP3Exporter
+    delegiert die Audio-Wahl an audio_routing.get_speech_audio_segment
+    und ruft den Helper EXAKT EINMAL pro aktivem Peak — nicht nur
+    ‚mindestens einmal'. Fängt versehentliche Doppel-Schleifen oder
+    Skip-Bugs auf."""
+    s = _session_with_files(tmp_path / "exact_count", with_mix=True)
+    # Setup mit drei Peaks, einer davon ignored → zwei aktive
+    s.load_analysis_results(
+        {
+            "peaks": [
+                {"index": 0, "position_ms": 60_000,
+                 "context_ms": 15_000, "ignored": False},
+                {"index": 1, "position_ms": 90_000,
+                 "context_ms": 15_000, "ignored": True},
+                {"index": 2, "position_ms": 120_000,
+                 "context_ms": 15_000, "ignored": False},
+            ],
+            "video_offsets": [],
+        }
+    )
+    # Re-stub audio nach load_analysis_results (resetet alles)
+    s.keyboard_audio = _silent_segment()
+    s.mic_audios = [_silent_segment() for _ in s.project.mic_tracks]
+    s.load_audio_lazy = lambda: None
+
+    active = s.get_active_peaks()
+    assert len(active) == 2, "Test-Setup: 2 aktive Peaks erwartet"
+
+    mock_seg = _silent_segment(1000)
+    with patch(
+        "core.exporters.get_speech_audio_segment",
+        return_value=mock_seg,
+    ) as mock_helper:
+        MP3Exporter().export(s)
+
+    assert mock_helper.call_count == len(active), (
+        f"MP3Exporter ruft get_speech_audio_segment "
+        f"{mock_helper.call_count}× auf, erwartet "
+        f"{len(active)} (= active peaks). Schleife driftet oder "
+        f"Quickfix-Code noch nicht ersetzt."
+    )
+
+
+def test_mp3_exporter_skips_peak_when_helper_returns_none(tmp_path):
+    """Pin: wenn get_speech_audio_segment None liefert
+    (mic_tracks/mic_audios-Mismatch laut Carl-P2-Linie), überspringt
+    MP3Exporter diesen Peak still — kein Crash, keine kaputten
+    Segments im Export."""
+    s = _session_with_files(tmp_path / "helper_none", with_mix=True)
+    with patch(
+        "core.exporters.get_speech_audio_segment",
+        return_value=None,
+    ):
+        # Export läuft durch ohne Exception, MP3 ist (fast) leer.
+        result = MP3Exporter().export(s)
+    # Result kann leerer String oder Pfad zu winziger MP3 sein —
+    # Hauptsache kein Crash.
+    assert result == "" or result.endswith(".mp3")
