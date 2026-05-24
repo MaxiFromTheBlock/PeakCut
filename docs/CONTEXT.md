@@ -57,8 +57,19 @@ Dieses Dokument ist die Kurzversion fuer den PO.
   Tausch der Implementierung, kein Neubau.
 - Smoke 2026-05-21 an Sheila-de-Liz-Material: 35/36 Peaks haben
   narrative Sinnabschnitt-Vorschläge mit Konfidenz 0.78–0.80,
-  R4-Disziplin live bewährt. Wiedergabe-UX-Slice (#76) ist Voraussetzung
-  fürs eigentliche Hör-Urteil → vor dem Prompt-Tuning-Slice (#70).
+  R4-Disziplin live bewährt.
+- **#71a Audio-Routing-Mini-Slice auf main 2026-05-25:** Phasing-
+  Wurzel im Cutter-MP3 und in der Review-Speak-Mode-Wiedergabe
+  behoben. Mix-Datei wurde beim Import in `project.mic_tracks`
+  einsortiert und von MP3Exporter + `session.play_current` mit den
+  Einzel-Mics overlay-summiert — jeder Sprecher doppelt. Zentraler
+  Helfer `core/audio_routing.py` mit Token-Heuristik wurde
+  eingeführt, alle Hör-/Renderpfade hängen sich daran auf. XML-
+  Pfade + `.peakcut`-Schema unangetastet (Pin-1 stabil). Max-O-Ton
+  „kein Phasing mehr" am realen Re-Export. Nächste Slices:
+  **#76 Wiedergabe-UX** (baufertig auf dem Helper-Fundament) →
+  **Import-Refactor + Marker-Rename (#37, #77)** → **Prompt-Tuning
+  (#70)**.
 
 ## Folgenschnitt Stufe 2 / Track 1 (auf main gelandet 2026-05-17)
 
