@@ -441,6 +441,88 @@ veröffentlicht-aber-geflopt) sind der Burggraben — genau das haben
 Opus-artige Tools nicht. **Minibar = Max' privates R&D-Labor** für
 dieses Lernsystem, KEIN Produkt-Feature.
 
+**Schärfung (Carl/Claude/Max 2026-05-20, nach #3-Rev):** Der eigentliche
+Burggraben ist NICHT der Decider-Prompt selbst, sondern die
+**redaktionelle Urteilsschule** von Max/Alex/Matze — operationalisiert
+als Few-Shot-Beispiele, Anti-Patterns und Statusentscheidungen, die
+sich über Zeit aus `peak_decisions.json` schärfen. Der aktuelle
+Prompt ist nur die **v1-Oberfläche** dieses Wissens. Schutzfokus: die
+Sammlung, nicht den Text fetischisieren. Anbieter (Opus/Riverside/
+Spike) können denselben Prompt schreiben, aber nicht 70+ Folgen
+Cut-Entscheidungen aus eurer Produktion replizieren.
+
+### Nach #3-Rev-Smoke: Prompt-Tuning-Slice (vor Phasing-Fix)
+
+**Smoke-Ergebnis 2026-05-21 (Sheila de Liz, 36 Peaks, Descript-
+Bypass):** Pipeline läuft end-to-end an echtem Material. 35 von 36
+Peaks bekamen narrative Sinnabschnitt-Vorschläge mit Konfidenz
+0.78–0.80 (Beispiel-Reason: „Beginn der Reflexion über Reise mit
+Partner, Peak in Studienfrage, Landung bei Erkenntnis aus Berichten
+und Achterbahn-Analogie"). Peak 1 war ignoriert → korrekt kein
+Sinnabschnitt + Bubble „Standard-Fenster wird verwendet". R4-
+Disziplin live bewährt (kein/ungültiger Key → klare Statuszeile,
+keine Pseudo-Einträge). Persistenz/HC-4-Cache greift („Analyse
+übersprungen"). Drei Smoke-Befunde nachgezogen (Validator-
+Verschärfung, temperature-Parameter, Descript-Import via CLI).
+
+**Smoke-Blocker für eigentliches Hör-Urteil:** Wiedergabe-Schicht
+ist UX-broken (Task #76) — Sinnabschnitt-▶ läuft im Video stumm,
+Play startet Mic-Mode-Mix (alte Logik), Audio nicht synchron zum
+Bild. Max muss erst Wiedergabe sortieren, bevor er die Vorschläge
+beurteilen kann.
+
+**Reihenfolge (Stand 2026-05-25):** Smoke ✓ → **#71a Audio-Routing-
+Mini ✓** (auf main gelandet 2026-05-25) → **#76 Wiedergabe-UX**
+(jetzt baufertig) → **Import-Refactor + Marker-Rename (#37, #77)** →
+**#70 Prompt-Tuning**.
+
+**Phasing-Wurzel diagnostiziert 2026-05-21:** Beim Import landet die
+Mix-Datei in `project.mic_tracks` (main_window 232-237 sortiert alles
+außer „keyboard/keys/klavier" als Mic). MP3Exporter (`exporters.py`
+142-144) und `session.play_current` Mic-Mode (`session.py` 100-107)
+overlay-summieren `mic_audios[0]` + `mic_audios[1:]` — die Mix-Datei
+steckt aber als eine dieser „Mic-Spuren" mit drin. Folge: ProTools-
+Mix wird on-top zu allen Einzel-Mics drauf-overlayt, jeder Sprecher
+zweimal addiert (raw + bereits-gemischt). Latenz/Versatz → Phasing
+sowohl im Cutter-MP3 als auch in der Speak-Mode-Wiedergabe.
+
+**Carl-Fahrplan B-prime (statt voller Import-Refactor zuerst):**
+- **#71a:** neuer Helper `core/audio_routing.py` (is_mix_track,
+  get_mix_track, get_source_mic_tracks, get_speech_audio_segment).
+  Regel: Mix vorhanden → Speech-Audio = Mix allein; sonst Overlay
+  der echten Mics. MP3Exporter + `session.play_current` +
+  `assignment_page` nutzen Helper. **XMLExporter + folgenschnitt_
+  exporter BLEIBEN unangetastet** — Pin-1 (Keyboardstellen-XML byte-
+  identisch). Trade-off: Hören sauber, XML-Pfade behalten Mix-als-
+  Mic-Semantik bis zum Import-Refactor.
+- **#76:** Carls bestehender Plan wird leicht angepasst — Speak/
+  Smart laufen auf `get_speech_audio_segment` statt direkter Mix-
+  Datei-Logik. Spec bleibt sonst gültig.
+- **Import-Refactor (großer Slice):** Slots beim Import (Marker /
+  Mics / Mix / Transkript / Kameras), Namens-Heuristik raus,
+  separates `project.mix_track`, `.peakcut` Schema-v3 mit
+  Backwards-Kompat, Pflicht-Regeln. Vereint #37.
+- **#70:** Prompt-Tuning wie geplant.
+
+Aufteilung: **Max + Claude editorial** (3–5 echte Beispielstellen
+aus euren Folgen, jeweils positiv UND negatives Anti-Beispiel mit
+Begründung; Hotel-Matze-Stilbeschreibung als redaktionelles
+Regelwerk, nicht Marketingtext). **Carl Werkzeug** (A/B-Harness:
+zwei Prompt-Varianten gegen dieselben BoundaryScaffolds, ohne sie
+als Wahrheit in `.peakcut` zu schreiben; blinder Vergleich,
+Urteilskategorien statt „besser/schlechter"; persistiert in
+separatem `.peakcut/prompt_eval/`-Pfad).
+
+Hebel (Reihenfolge der erwarteten Wirkung): Few-Shot (wenige sehr
+gute Beispiele schlagen viele mittelmäßige) > Anti-Patterns
+(lehrreicher als Idealfälle) > Stil-Profil als redaktionelles
+Regelwerk > Self-Critique im selben Call (zweiter Modell-Call
+erst, wenn A/B beweist, dass er hilft). Modell bleibt Opus —
+Herzstück ist Urteil, da wird nicht gespart, bevor die Qualität
+steht. Beispiele sind ab Tag 1 maschinenlesbar strukturiert
+(Variant-ID, Beispiel-ID, erwartete Boundary, Begründung,
+menschliches Urteil) — kein Fließtext-Friedhof.
+
 ### Roadmap-Reihenfolge (Carl/Claude-Konsens — ersetzt alte V3-Liste)
 
 1. **Persistenz + `.peakcut`-Projektakte** (= HC-4, der Schlussstein —
@@ -489,6 +571,13 @@ Studio-Mac. NAS = Hintergrund-Rückgrat:
 Descript-API, SRT/Untertitel in XML, Auphonic Mix-Polish, In/Out-Clip-
 Editor, voller Social-Renderer, Smart Scan (relevant sobald fremdes
 Material zählt), Marker-Export, Einzel-Clip-MP4, Projekt-Metadaten.
+
+**Sprecher-Gegencheck über die Mics** (Max-Idee 2026-05-19, eigener
+Roadmap-Punkt, NICHT #3-Scope): Descript-Sprecher-Label gegen
+tatsächliche Mic-Aktivität (speaker_activity) abgleichen → fängt
+mis-attribuierte/kaputte Sprecher-Labels automatisch ab (defensiv,
+„Vertrauen durch Tooling"). PeakCut hat die Mic-Aktivitätsdaten schon.
+Eigener kleiner Brainstorm → Spec, bevor gebaut wird.
 
 ---
 
@@ -772,6 +861,83 @@ Produkt):**
 ---
 
 ## Changelog
+
+### #71a Audio-Routing-Mini-Slice (auf main gelandet 2026-05-25)
+
+Phasing-Wurzel-Fix für den Keyboardstellen-Cutter-MP3 und die Review-
+Speak-Mode-Wiedergabe. Diagnose 2026-05-21 (Carl-Cross-Review von
+#76-Plan): Mix-Datei landet beim Import in `project.mic_tracks` (alles
+außer `keyboard/keys/klavier` → Mic). MP3Exporter und
+`session.play_current` Mic-Mode overlay-summierten `mic_audios[0]` +
+`mic_audios[1:]` — d.h. der ProTools-Mix wurde on-top zu allen Einzel-
+Mics drauf-overlayt, jeder Sprecher doppelt addiert, Phasing landete
+im Output an Matze/Cutter.
+
+Carl-Fahrplan B-prime statt voller Import-Refactor: zentraler
+Helfer `core/audio_routing.py` als eine Wahrheit für Mix vs. echte
+Mics, alle Hör-/Renderpfade hängen sich daran auf, XML-Pfade und
+`.peakcut`-Schema unangetastet bis #77.
+
+- **Helfer:** `is_mix_track` (Token-Heuristik via
+  `re.split(r'[^a-z0-9]+', stem.lower())` + `{"mix", "mixdown"}` —
+  fängt False-Positives wie `mixer_recording.wav` ab),
+  `get_mix_track`, `get_source_mic_tracks`, `get_speech_audio_segment`
+  (Mix vorhanden → Mix allein; sonst Overlay echter Mics; bei
+  `mic_tracks`/`mic_audios`-Längen-Mismatch → `None` statt versteckt
+  falsches Audio).
+- **Consumer umgehängt:** MP3Exporter, `session.play_current`
+  Mic-Mode, AssignmentPage (Mix-Filter), SinnabschnittExporter-
+  Fallback. `project.get_reference_track` delegiert ebenfalls an
+  `audio_routing.get_mix_track` → eine Wahrheit auch für die
+  Smart-Boundary-Pipeline und den XML-Probe-Pfad (ohne XML-Bytes
+  zu ändern).
+- **Pin-Garantien (alle stabil):** Pin-1 Keyboardstellen-XML
+  byte-identisch (SHA-256-Hash in
+  `tests/test_audio_routing_safety.py`), Pin-2 HC-2-Lifecycle,
+  Pin-3 `.peakcut`-Schema unverändert, Pin-Gastname (alte
+  `guest_name.py`-Heuristik unangetastet → kein Drift im
+  XML-Dateinamen).
+- **Production-Quickfix** vom 2026-05-21 (Mid-Slice für laufende
+  Produktion, Commit 3c8d6ba) wurde in Task 3 sauber durch den
+  Helper-Pfad ersetzt.
+- **Parallel-Workflow** mit Carl etabliert: Plan-Cross-Review
+  (P1/P2/P3-Befunde wechselseitig), Task-Aufteilung 3+4 (Claude
+  Hör-Pfad) ↔ 5+6 (Carl UI + Sinnabschnitt-Fallback), Schluss-
+  Cross-Review von Carl 2026-05-25 grün ohne P1/P2.
+- **Real-Smoke:** Max-O-Ton „kein Phasing mehr" auf produzierter
+  Folge nach dem Refactor. `scripts/verify_audio_routing_real.py`
+  liefert pro Akte einen Routing-Report und optional drei
+  Vergleichs-WAVs (Mix-allein vs. Pre-#71a-Reproduktion vs.
+  nur-echte-Mics).
+- **519 → 519 + 64 Pin-Tests** grün vor Merge.
+- **P3-Backlog für #77 (Carl-Schluss-Review-Befund):**
+  `speaker_activity.py:49` hat noch eigene Substring-Heuristik
+  („mix"/„keyboard"/…), Analyse-Defensiv-Pfad nicht Render-Pfad —
+  sollte beim Import-Refactor auf den zentralen Klassifizierer
+  ziehen. Plus: `verify_audio_routing_real.py` benennt Debug-WAVs
+  immer `mix_only.wav`, auch wenn Quelle echte Mics sind —
+  quellenabhängiger Name wäre sauberer.
+
+Merge-Range: `728abca..17b5aad` (9 Commits, Aufteilung Claude/Carl
+siehe Commit-Autoren).
+
+### Roadmap #2 — ClipCandidate + Rückweg (auf main gelandet 2026-05-18, Merge d8d9e33)
+
+Erstes Produktobjekt im `.peakcut`-Gedächtnis. `core/clip_candidates.py`:
+`ClipBoundary`/`ClipCandidate`/`PeakDecision` (frozen, roundtrip-exakt),
+Statusmaschine `proposed→selected→produced→published→discarded`
+(published terminal v1), `PeakDecision` selbst-validierend.
+Bootstrap je Peak in `load_analysis_results` (ignoriert→discarded);
+`ignore_peak` koppelt via `Peak.index` → discarded + `PeakDecision`
+(source=ignore_peak), idempotent. `.peakcut` Schema **v2** additiv
+(`clip_candidates`/`peak_decisions` optionale Sektionen, v1+v2
+tolerant, v1-Akte bootstrappt; kaputte v2 → `ProjectArchiveError`,
+HC-4-Robustheit erhalten). Keyboardstellen-XML byte-identisch
+(Metadaten, kein Export-Einfluss). Erster echter Rückkanal über das
+bestehende Ignorieren (kein neuer GUI-Code). Carl-Plan + Schluss-
+Review grün (Gate-A-P2 + Schluss-P2), Gate-F-App-Smoke an echtem
+HR-Material bestanden. 243 → 261 Tests. Nächster Roadmap-Schritt:
+#3 smarte/KI-Clip-Grenzen.
 
 ### HC-4 — .peakcut-Projektakte (auf main gelandet 2026-05-18, Merge 317a576)
 
@@ -1186,4 +1352,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-18 (HC-4 .peakcut-Projektakte auf main gelandet, Merge 317a576 — 243 grün, Carl-grün inkl. P1-Fix, Max-App-Smoke bestanden; develop = main)*
+*Zuletzt aktualisiert: 2026-05-25 (#71a Audio-Routing-Mini-Slice auf main gelandet, Phasing-Wurzel behoben sowohl im Cutter-MP3 als auch in der Review-Speak-Mode-Wiedergabe. Real-Smoke an echter Folge bestätigt. Parallel-Workflow Carl/Claude etabliert. Nächster Slice: #76 Wiedergabe-UX, baufertig auf dem neuen Helper-Fundament.)*

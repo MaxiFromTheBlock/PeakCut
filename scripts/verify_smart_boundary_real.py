@@ -1,0 +1,309 @@
+#!/usr/bin/env python3
+"""Roadmap #3 Task 10 — Hand-Realprüfung + Mess-Gate.
+
+Echtes Whisper + echtes Claude an einer echten markierten Folge
+(z.B. Hartmut Rosa). Druckt pro Drücker: altes ±Kontext-Fenster vs.
+neuer Sinnabschnitt, Dauer, Score, Fallback ja/nein, Grund. Misst
+zusätzlich die Analyse-Wanduhr OHNE vs. MIT parallel laufendem
+Whisper und leitet daraus den finalen `smart_boundary_transcription
+_start`-Default ab (Mess-Gate, §6/§7 der Spec).
+
+KEINE App-Logik. Reine Helfer (unten) sind unit-getestet; echte
+Engines werden NUR in main() / lazy importiert (Modul bleibt offline
+importierbar — kein mlx_whisper/anthropic beim Import).
+
+Hinweis zum erwarteten Cache-Befund (Carl-Quick-Check 2026-05-19):
+Der Report zeigt im Hand-Lauf typischerweise `Cache: MISS (kein
+Vorlauf)`, weil dieses Skript keine bestehende `.peakcut` lädt,
+sondern für die Mess-Gate-Wanduhr aus dem nackten Material-Ordner
+neu analysiert. Das ist KEIN Bug — echte Cache-Wiederverwendung
+ist über die Unit-Tests (`test_transcript_cache_alignment.py`)
+abgedeckt. Für einen Cache-HIT-Smoke wäre PeakCut selbst der
+richtige Pfad (zweites Öffnen derselben Folge).
+"""
+
+import argparse
+import os
+import sys
+import time
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
+# Provisorische Mess-Gate-Schwelle: bremst paralleles Whisper die
+# Analyse-Wanduhr um > 15 %, kippt der Default auf "nach der Analyse".
+_SLOWDOWN_THRESHOLD = 1.15
+
+
+def build_peak_report(peaks, candidates, context_ms):
+    """Reiner Vergleich alt (±context) vs. neu (ClipCandidate.boundary).
+    Kandidat fehlt -> new_*/fallback = None. score==0.0 == Fallback."""
+    by_id = {c.peak_id: c for c in candidates}
+    rows = []
+    for p in peaks:
+        c = by_id.get(p.index)
+        row = {
+            "peak_id": p.index,
+            "old_start_ms": max(0, p.position_ms - context_ms),
+            "old_end_ms": p.position_ms + context_ms,
+            "new_start_ms": None,
+            "new_end_ms": None,
+            "duration_s": None,
+            "score": None,
+            "fallback": None,
+            "reason": "",
+        }
+        if c is not None:
+            row["new_start_ms"] = c.boundary.start_ms
+            row["new_end_ms"] = c.boundary.end_ms
+            row["duration_s"] = (c.boundary.end_ms - c.boundary.start_ms) // 1000
+            row["score"] = c.score
+            row["fallback"] = (c.score == 0.0)
+            row["reason"] = c.reason
+        rows.append(row)
+    return rows
+
+
+def decide_transcription_start(t_alone_s, t_with_whisper_s, *,
+                               threshold=_SLOWDOWN_THRESHOLD):
+    """Mess-Gate: ohne valide Baseline -> sicher 'parallel_analysis'
+    (keine Fehlentscheidung). Sonst kippt nur bei STRIKT spürbarer
+    Bremse (> threshold) auf 'after_analysis'."""
+    if t_alone_s <= 0:
+        return "parallel_analysis"
+    # Ratio-Vergleich mit Epsilon: exakt auf der Schwelle bleibt
+    # 'parallel' (Float: 100*1.15 == 114.999… -> sonst Fehlkipp).
+    if (t_with_whisper_s / t_alone_s) - threshold > 1e-9:
+        return "after_analysis"
+    return "parallel_analysis"
+
+
+def summarize_run_result(result):
+    """Zählwerk pro Lauf — wandert in den Schluss-Report (Carl Task 9).
+    `result` ist ein SmartBoundaryRunResult; tolerant gegen ältere
+    Liste-Form (gibt dann leere Counts)."""
+    cat = getattr(result, "category", None)
+    return {
+        "category": getattr(cat, "value", str(cat)) if cat else "OK",
+        "message": getattr(result, "message", "") or "",
+        "ready_count": int(getattr(result, "ready_count", 0) or 0),
+        "fallback_count": int(getattr(result, "fallback_count", 0) or 0),
+    }
+
+
+def format_key_status(status):
+    """Status-Zeile für den Report — enthält NIE den Key-Wert,
+    nur Symbol + reason. Tolerant gegen None."""
+    if status is None:
+        return "Key-Status: — (kein Provider abgefragt)"
+    reason = getattr(status, "reason", "") or ""
+    ok = bool(getattr(status, "ok", False))
+    sym = "✓" if ok else "✗"
+    label = {"ok": "Schlüsselbund",
+              "env": "Dev-Fallback (ANTHROPIC_API_KEY)",
+              "missing": "kein Key hinterlegt",
+              "invalid": "Key ungültig"}.get(reason, reason or "—")
+    return f"Key-Status: {sym} {label}"
+
+
+def format_fingerprint(fp):
+    """Fingerprint kompakt — `None` -> "—"."""
+    if not isinstance(fp, dict):
+        return "—"
+    size = fp.get("size")
+    mt = fp.get("mtime_ns")
+    if size is None and mt is None:
+        return "—"
+    return f"size={size} mtime_ns={mt}"
+
+
+def transcript_source_label(ref):
+    """Quelle aus dem Transkript-Ref (Whisper/Descript/...)."""
+    if not isinstance(ref, dict):
+        return "—"
+    return str(ref.get("source") or "whisper")
+
+
+def cache_hit_label(prev_ref, current_fingerprint):
+    """Cache-Treffer ja/nein für den Report (Carl Task 9)."""
+    if not isinstance(prev_ref, dict):
+        return "MISS (kein Vorlauf)"
+    if prev_ref.get("audio_fingerprint") == current_fingerprint:
+        return "HIT"
+    return "MISS (Fingerprint geändert)"
+
+
+def format_handoff_summary(rows, run_result):
+    """Handoff-Reihenfolge kompakt — was lief, was hat geliefert."""
+    s = summarize_run_result(run_result)
+    return (
+        f"Handoff: Transkript -> Decider -> Bremse -> Sinnabschnitte | "
+        f"Kategorie={s['category']} ready={s['ready_count']} "
+        f"fallback={s['fallback_count']} "
+        f"peaks_mit_score={sum(1 for r in rows if r['score'] is not None)}/"
+        f"{len(rows)}")
+
+
+def classify_media_files(files):
+    """Carl-Gegenreview [P2]: Endungs-Klassifikation case-insensitiv —
+    .WAV/.MOV (Recorder-Default) fielen sonst aus mics/vids."""
+    lower = [(f, os.path.basename(f).lower()) for f in files]
+    kb = next((f for f, n in lower
+               if "keyboard" in n or "keys" in n or "klavier" in n), None)
+    if kb is None and lower:
+        kb = lower[0][0]
+    mics = [f for f, n in lower
+            if n.endswith((".wav", ".mp3")) and f != kb]
+    vids = [f for f, n in lower if n.endswith((".mp4", ".mov"))]
+    return kb, mics, vids
+
+
+def compose_report_summary(*, rows, t_alone, t_with, mess_gate_decision,
+                            run_result, key_status, cache_label,
+                            source_label, fingerprint_str):
+    """Pure: baut die Schluss-Gate-Diagnosezeilen aus den vorhandenen
+    Helfern (Carl-Gegenreview [P2]). main() nutzt nur dieses Resultat,
+    damit jede Diagnose immer im Report landet."""
+    rs = summarize_run_result(run_result) if run_result is not None else \
+        {"category": "—", "message": "", "ready_count": 0,
+         "fallback_count": 0}
+    n_fallback = sum(1 for r in rows if r.get("fallback"))
+    lines = [format_report_line(r) for r in rows]
+    lines += [
+        "",
+        f"Transkriptquelle: {source_label}",
+        f"Cache: {cache_label}",
+        f"Audio-Fingerprint: {fingerprint_str}",
+        format_key_status(key_status),
+        f"Run-Kategorie: {rs['category']}"
+        + (f"  — {rs['message']}" if rs['message'] else ""),
+        format_handoff_summary(rows, run_result),
+        "",
+        f"Analyse allein:           {t_alone:6.1f}s",
+        (f"Analyse + paralleles WS:  {t_with:6.1f}s "
+         f"(x{t_with / t_alone:.2f})  — Näherung (Carl [P3]: nicht "
+         f"identisch zum Worker-Spawn-Pfad)") if t_alone > 0 else "",
+        f"MESS-GATE -> smart_boundary_transcription_start = "
+        f"{mess_gate_decision}",
+        f"Drücker: {len(rows)} | Fallback: {n_fallback}",
+    ]
+    return [ln for ln in lines if ln is not None]
+
+
+def format_report_line(r):
+    def tc(ms):
+        return "-" if ms is None else f"{ms // 60000}:{(ms // 1000) % 60:02d}"
+    if r["new_start_ms"] is None:
+        return (f"Peak {r['peak_id']:>3}  alt {tc(r['old_start_ms'])}"
+                f"–{tc(r['old_end_ms'])}  | KEIN Sinnabschnitt")
+    fb = "FALLBACK" if r["fallback"] else "ok"
+    return (f"Peak {r['peak_id']:>3}  alt {tc(r['old_start_ms'])}"
+            f"–{tc(r['old_end_ms'])}  ->  neu {tc(r['new_start_ms'])}"
+            f"–{tc(r['new_end_ms'])}  {r['duration_s']:>3}s  "
+            f"score={r['score']}  [{fb}]  {r['reason']}")
+
+
+def main():  # pragma: no cover — Hand-Werkzeug, echte Engines
+    ap = argparse.ArgumentParser(description="Roadmap #3 Real-Prüfung")
+    ap.add_argument("project_dir", help="Ordner mit dem echten Rohmaterial")
+    ap.add_argument("--report", help="optionaler Report-Pfad (.txt)")
+    args = ap.parse_args()
+
+    from core.project import PeakCutProject
+    from core.session import PeakCutSession
+    from core.analysis_process import run_analysis
+    from core.transcription_process import _build_engine, run_transcription
+    from core.transcript_archive import (
+        transcript_sidecar_path, write_transcript_json, build_transcript_ref)
+    from core.transcription import Transcript
+    from core.clip_boundary.pipeline import prepare_smart_boundaries
+    from core.clip_boundary.decider import ClaudeBoundaryDecider
+    import config as appcfg
+
+    cfg = appcfg.load()
+    files = [os.path.join(args.project_dir, f)
+             for f in os.listdir(args.project_dir)
+             if f.lower().endswith((".wav", ".mp4", ".mov", ".mp3"))]
+    project = PeakCutProject()
+    # Carl-Gegenreview [P2]: case-insensitive Klassifikation.
+    kb, mics, vids = classify_media_files(files)
+    project.set_files(kb, mics, vids)
+    session = PeakCutSession(project, cfg)
+    reference = project.get_reference_track() or (mics[0] if mics else kb)
+
+    # --- Mess-Gate: Analyse-Wanduhr ohne vs. mit parallelem Whisper ---
+    base = {"keyboard_track": kb, "mic_tracks": mics, "videos": vids,
+            "reference_track": reference, "temp_dir": "/tmp",
+            "export_dir": project.export_dir, "default_people": [],
+            "config": cfg}
+    t0 = time.monotonic()
+    run_analysis(dict(base))
+    t_alone = time.monotonic() - t0
+
+    import threading
+    holder = {}
+
+    def _whisper():
+        holder["t"] = run_transcription(
+            {"audio_path": reference,
+             "engine": cfg.get("smart_boundary_whisper_engine"),
+             "model": cfg.get("smart_boundary_whisper_model"),
+             "language": cfg.get("smart_boundary_language")},
+            engine=_build_engine({
+                "engine": cfg.get("smart_boundary_whisper_engine")}))
+
+    th = threading.Thread(target=_whisper)
+    t1 = time.monotonic()
+    th.start()
+    results = run_analysis(dict(base))
+    t_with = time.monotonic() - t1
+    th.join()
+
+    decision = decide_transcription_start(t_alone, t_with)
+
+    # --- Vorlauf-Ref (für Cache-Diagnose) merken ---
+    prev_ref = getattr(session, "transcript_ref", None)
+
+    # --- Echtes Whisper-Sidecar + Pipeline mit echtem Claude ---
+    out = holder.get("t", {})
+    if "transcript" in out:
+        write_transcript_json(transcript_sidecar_path(project),
+                              Transcript.from_dict(out["transcript"]))
+        session.transcript_ref = build_transcript_ref(
+            project, engine=cfg.get("smart_boundary_whisper_engine"),
+            model=cfg.get("smart_boundary_whisper_model"),
+            language=cfg.get("smart_boundary_language"),
+            audio_path=reference)
+    session.load_analysis_results(results)
+    # Carl-Gegenreview [P2]: Run-Result speichern + Provider für
+    # Key-Status verwenden (kein versteckter SDK-Default).
+    from core.credentials import default_credential_provider
+    provider = default_credential_provider()
+    run_result = prepare_smart_boundaries(
+        session,
+        ClaudeBoundaryDecider(
+            model=cfg.get("smart_boundary_claude_model"),
+            credential_provider=provider),
+        config=cfg)
+
+    rows = build_peak_report(session.peaks, session.clip_candidates,
+                             cfg.get("context_duration_ms", 15000))
+
+    # Diagnose-Helfer einbinden (Carl Task 9): Key-Status, Quelle,
+    # Cache, Fingerprint, Run-Kategorie/INFRA-Message, Handoff.
+    current_ref = getattr(session, "transcript_ref", None) or {}
+    current_fp = current_ref.get("audio_fingerprint")
+    text = "\n".join(compose_report_summary(
+        rows=rows, t_alone=t_alone, t_with=t_with,
+        mess_gate_decision=decision, run_result=run_result,
+        key_status=provider.status(),
+        cache_label=cache_hit_label(prev_ref, current_fp),
+        source_label=transcript_source_label(current_ref),
+        fingerprint_str=format_fingerprint(current_fp)))
+    print(text)
+    if args.report:
+        with open(args.report, "w", encoding="utf-8") as f:
+            f.write(text + "\n")
+
+
+if __name__ == "__main__":
+    main()

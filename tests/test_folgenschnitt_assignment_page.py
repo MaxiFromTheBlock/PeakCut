@@ -68,6 +68,22 @@ def test_default_assignment_state_starts_all_person_fields_empty():
     assert state.people == []
 
 
+def test_build_assignment_state_filters_mix_out_of_mic_rows():
+    session = _session(mic_assignments=[
+        MicAssignment(0, "/material/MIC1.wav", "Matze", "mic_1"),
+        MicAssignment(1, "/material/Sheila Mix.mp3", "Gast", "mic_mix"),
+        MicAssignment(2, "/material/MIC2.wav", "Sheila", "mic_2"),
+    ])
+
+    state = build_assignment_state(session, [])
+
+    assert [r.path for r in state.mic_rows] == [
+        "/material/MIC1.wav",
+        "/material/MIC2.wav",
+    ]
+    assert [r.speaker_key for r in state.mic_rows] == ["mic_1", "mic_2"]
+
+
 def test_neutral_camera_rows_create_no_camera_assignments():
     session = _session(mic_assignments=_hm_mics())
     state = build_assignment_state(session, ["/material/CAM_A.mp4"])

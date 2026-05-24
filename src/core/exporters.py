@@ -6,7 +6,9 @@ from xml.sax.saxutils import escape
 
 from pydub import AudioSegment
 
-from utils import TEMP_DIR, ASSETS_DIR, FFPROBE_BIN, parse_timecode_to_ms, ms_to_timecode, ms_to_frames, get_logger
+from utils import TEMP_DIR, ASSETS_DIR, parse_timecode_to_ms, ms_to_timecode, ms_to_frames, get_logger
+from core.audio_routing import get_speech_audio_segment
+from core.media_probe import run_ffprobe
 
 _log = get_logger("peakcut.export")
 
@@ -66,19 +68,16 @@ _ms_to_frames = ms_to_frames  # Local alias for readability in XML generation
 
 def _probe_video_info(video_path):
     """Probe video file for resolution using ffprobe. Returns (width, height) or (3840, 2160) as fallback."""
-    try:
-        result = subprocess.run(
-            [FFPROBE_BIN, "-v", "quiet", "-select_streams", "v:0",
-             "-show_entries", "stream=width,height",
-             "-of", "csv=p=0", video_path],
-            capture_output=True, text=True, timeout=10
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            parts = result.stdout.strip().split(",")
-            if len(parts) >= 2:
+    out = run_ffprobe(["-v", "quiet", "-select_streams", "v:0",
+                       "-show_entries", "stream=width,height",
+                       "-of", "csv=p=0", video_path])
+    if out and out.strip():
+        parts = out.strip().split(",")
+        if len(parts) >= 2:
+            try:
                 return int(parts[0]), int(parts[1])
-    except Exception:
-        pass
+            except (ValueError, IndexError):
+                pass
     return 3840, 2160
 
 
@@ -88,25 +87,20 @@ def _probe_audio_info(audio_path):
     Returns (sample_rate, bit_depth, channels) with fallbacks (48000, 16, 2).
     """
     sample_rate, bit_depth, channels = 48000, 16, 2
-    try:
-        result = subprocess.run(
-            [FFPROBE_BIN, "-v", "quiet", "-select_streams", "a:0",
-             "-show_entries", "stream=sample_rate,bits_per_sample,channels",
-             "-of", "flat", audio_path],
-            capture_output=True, text=True, timeout=10
-        )
-        if result.returncode == 0:
-            for line in result.stdout.strip().splitlines():
-                key, _, val = line.partition("=")
-                val = val.strip('"')
-                if key.endswith("sample_rate") and val.isdigit():
-                    sample_rate = int(val)
-                elif key.endswith("bits_per_sample") and val.isdigit() and int(val) > 0:
-                    bit_depth = int(val)
-                elif key.endswith("channels") and val.isdigit():
-                    channels = int(val)
-    except Exception:
-        pass
+    out = run_ffprobe(["-v", "quiet", "-select_streams", "a:0",
+                       "-show_entries",
+                       "stream=sample_rate,bits_per_sample,channels",
+                       "-of", "flat", audio_path])
+    if out:
+        for line in out.strip().splitlines():
+            key, _, val = line.partition("=")
+            val = val.strip('"')
+            if key.endswith("sample_rate") and val.isdigit():
+                sample_rate = int(val)
+            elif key.endswith("bits_per_sample") and val.isdigit() and int(val) > 0:
+                bit_depth = int(val)
+            elif key.endswith("channels") and val.isdigit():
+                channels = int(val)
     return sample_rate, bit_depth, channels
 
 
@@ -141,14 +135,18 @@ class MP3Exporter(BaseExporter):
         if not active_peaks or not mic_audios:
             return ""
 
+        # #71a Task 3 (2026-05-21): Mix-vs-Mics-Wahl lebt jetzt zentral
+        # in audio_routing.get_speech_audio_segment. Quickfix-Inline-
+        # Code (eigene mix_idx-Berechnung) ist hier raus — eine
+        # Wahrheit für alle Konsumenten.
         segments = []
         for peak_num, peak in active_peaks:
             number_audio = load_spoken_number(peak_num, TEMP_DIR, ASSETS_DIR, voice)
             start = peak.in_point_ms
             end = peak.out_point_ms
-            segment = mic_audios[0][start:end]
-            for m in mic_audios[1:]:
-                segment = segment.overlay(m[start:end])
+            segment = get_speech_audio_segment(session, start, end)
+            if segment is None:
+                continue
             segments.append(number_audio + AudioSegment.silent(duration=_TTS_NUMBER_GAP_MS) + segment)
             segments.append(AudioSegment.silent(duration=PAUSE_DURATION_MS))
 
@@ -242,9 +240,18 @@ class XMLExporter(BaseExporter):
         if video_paths:
             vid_w, vid_h = _probe_video_info(video_paths[0])
 
+        # Task #72 (Smoke 2026-05-20): nicht mic_tracks[0] direkt nehmen —
+        # die Reihenfolge hängt von der Import-Reihenfolge ab, also würden
+        # zwei Re-Imports desselben Datei-Satzes unterschiedliche XMLs
+        # erzeugen (channelcount 1↔2 je nachdem ob MIC1 oder Mix zuerst
+        # kommt). Stattdessen die Mix-Spur deterministisch via
+        # get_reference_track wählen, Fallback auf mics[0]. Gleiche
+        # Semantik wie SinnabschnittExporter.
         sample_rate, bit_depth, channels = 48000, 16, 2
         if audio_paths:
-            sample_rate, bit_depth, channels = _probe_audio_info(audio_paths[0])
+            ref = (session.project.get_reference_track()
+                   or audio_paths[0])
+            sample_rate, bit_depth, channels = _probe_audio_info(ref)
 
         # Calculate total sequence duration in frames
         total_frames = 0

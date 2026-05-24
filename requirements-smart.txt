@@ -1,0 +1,16 @@
+# Roadmap #3 — OPTIONALE Smart-Pipeline-Abhängigkeiten.
+#
+# BEWUSST getrennt von requirements.txt: mlx-whisper ist Apple-
+# Silicon/macOS-only und würde den Linux-CI-Runner brechen. Die CI
+# installiert diese Datei NICHT (offline, Engines injiziert/gefaked).
+#
+# Nur lokal für den echten Smart-Pfad (App-Smoke / scripts/
+# verify_smart_boundary_real.py) installieren:
+#   ./venv311/bin/pip install -r requirements-smart.txt
+# Zusätzlich nötig: Umgebungsvariable ANTHROPIC_API_KEY.
+#
+# Ohne diese Pakete läuft PeakCut unverändert — Stufe A/B greifen
+# sauber auf Skip/Fallback (Keyboardstellen-Weg unberührt).
+
+mlx-whisper
+anthropic

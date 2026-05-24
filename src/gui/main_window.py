@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 
 from .apple_style import COLORS, get_stylesheet
-from .workers import AnalysisWorker
+from .workers import AnalysisWorker, TranscriptWorker
 from .assignment_page import AssignmentPage
 from .review_page import ReviewPage
 
@@ -26,6 +26,25 @@ from core.project_archive import (
 
 _log = get_logger("peakcut.gui")
 _WORKER_SHUTDOWN_WAIT_MS = 3000
+
+
+def _on_transcript_finished(ref, *, autosave, review):
+    """#3-Rev Task 6 + Pin 2: TranscriptWorker.finished-Vertrag.
+
+    {} (oder ref ohne path/audio_fingerprint) = kontrollierter Skip
+    (kein Mix/Timeout/Fehler/Stop) -> autosave kümmert sich um den
+    Stand (z. B. transcript_error), aber Job B NICHT anstoßen.
+    Echter Ref mit `path` UND `audio_fingerprint` -> Review
+    benachrichtigen, Job B im Hintergrund starten lassen.
+    Fortschritt/Fehler laufen über `progress`, nicht über Fake-Refs.
+    """
+    autosave()
+    if not isinstance(ref, dict):
+        return
+    if not ref.get("path") or not ref.get("audio_fingerprint"):
+        return
+    if review is not None:
+        review._maybe_start_smart_worker()
 
 
 def default_import_folder() -> str:
@@ -46,6 +65,7 @@ class MainWindow(QMainWindow):
 
         self.session = None
         self._worker = None
+        self._transcript_worker = None  # Roadmap #3 Stufe A (entkoppelt)
 
         # CLI arguments from CheckIn
         self._cli_guest = cli_guest
@@ -237,6 +257,23 @@ class MainWindow(QMainWindow):
         self._worker.progress.connect(self._on_analysis_progress)
         self._worker.start()
 
+        # Roadmap #3 Stufe A: Transkription früh & parallel anstoßen —
+        # NACH AnalysisWorker.start(), eigener entkoppelter Job,
+        # bremst den Analyse-/Keyboardstellen-Weg nie. Notbremse:
+        # smart_boundary_enabled=False -> läuft gar nicht. Kein Mix ->
+        # Worker skippt selbst kontrolliert.
+        if config.get("smart_boundary_enabled"):
+            self._transcript_worker = TranscriptWorker(self.session)
+            self._transcript_worker.progress.connect(
+                self._on_analysis_progress)
+            # #3-Rev Task 6 + Pin 2: bei echtem Ref Autosave anstoßen
+            # UND Review benachrichtigen, damit Job B im Hintergrund
+            # startet. {}/Stub-Ref -> nur Autosave, kein Job B.
+            self._transcript_worker.finished.connect(
+                lambda ref: _on_transcript_finished(
+                    ref, autosave=self._autosave, review=self.review_page))
+            self._transcript_worker.start()
+
     def _load_from_archive(self, archive) -> bool:
         """HC-4: Projektakte laden, Analyse überspringen. Bei Fehler
         kontrollierter Hinweis + Rückfall auf den normalen Flow (False)."""
@@ -348,6 +385,14 @@ class MainWindow(QMainWindow):
             self._worker.request_stop()
             if self._worker.isRunning():
                 self._worker.wait(_WORKER_SHUTDOWN_WAIT_MS)
+
+        if self._transcript_worker:
+            # Roadmap #3: langer Job — sauber abbrechbar (HC-2-Stil),
+            # kein blindes wait(). App-Schließen weder hängen noch
+            # unkontrolliert abreißen.
+            self._transcript_worker.request_stop()
+            if self._transcript_worker.isRunning():
+                self._transcript_worker.wait(_WORKER_SHUTDOWN_WAIT_MS)
 
         stop_playback()
         event.accept()

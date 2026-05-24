@@ -12,7 +12,10 @@ from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from .apple_style import COLORS
 from .video_preview_peak import PeakVideoPreview
 from .review_camera_labels import camera_display_label
-from .workers import ExportWorker
+from .workers import ExportWorker, SmartBoundaryWorker
+from core.clip_boundary.decider import ClaudeBoundaryDecider
+from core.sinnabschnitt_exporter import (
+    SinnabschnittTXTExporter, SinnabschnittXMLExporter)
 
 import config
 from utils import LUTS_DIR, ms_to_mmss, get_logger
@@ -47,6 +50,15 @@ class ReviewPage(QWidget):
         self._video_files = []
         self._is_playing = False
         self._export_worker = None
+        self._smart_worker = None   # Roadmap #3 Stufe B (nach Handoff)
+        # #3-Rev Task 7: Zwei-Bedingungen-Barriere für Sinnabschnitte.
+        self._base_export_done_for_run = False
+        self._smart_ready = False
+        self._sinnabschnitt_artifacts_written = False
+        # #3-Rev Task 8: zuletzt gemeldeter sticky Smart-Status (INFRA/
+        # Drift); überlagert den abgeleiteten Status, bis er gelöscht
+        # oder durch einen neuen Lauf überschrieben wird.
+        self._smart_status_text = ""
 
         # Playback poll timer
         self._play_timer = QTimer()
@@ -155,6 +167,12 @@ class ReviewPage(QWidget):
         self.next_btn.clicked.connect(self.on_next)
         controls.addWidget(self.next_btn)
 
+        # Roadmap #3 Verifizierungs-Vorschau (Gate G: nice-to-have)
+        self.sinn_btn = QPushButton("Sinnabschnitt ▶")
+        self.sinn_btn.setMinimumWidth(120)
+        self.sinn_btn.clicked.connect(self._on_play_sinnabschnitt)
+        controls.addWidget(self.sinn_btn)
+
         controls.addSpacing(20)
 
         sep = QFrame()
@@ -196,6 +214,13 @@ class ReviewPage(QWidget):
 
         layout.addLayout(controls)
 
+        # #3-Rev Task 8 / R5: immer sichtbare Smart-Statuszeile.
+        self.smart_status_label = QLabel("")
+        self.smart_status_label.setStyleSheet(
+            f"color: {COLORS['text_secondary']}; font-size: 12px; "
+            "padding: 2px 6px;")
+        layout.addWidget(self.smart_status_label)
+
     # ══════════════════════════════════════════════════════════════
     # Setup (called after analysis completes)
     # ══════════════════════════════════════════════════════════════
@@ -204,6 +229,13 @@ class ReviewPage(QWidget):
         """Initialize the review page with analysis results."""
         self.session = session
         self._video_files = video_files
+        # #3-Rev Task 7: neuer Stand -> Riegel-Flags zurück.
+        self._base_export_done_for_run = False
+        self._smart_ready = False
+        self._sinnabschnitt_artifacts_written = False
+        # Carl-Gegenreview Task 8 [P3]: alte INFRA-Meldung mit der
+        # neuen Session ebenfalls löschen.
+        self._smart_status_text = ""
 
         # Populate camera combo
         self.camera_combo.clear()
@@ -217,6 +249,13 @@ class ReviewPage(QWidget):
             self.video_preview.screenshot_done.connect(self._on_screenshot_done)
 
         self._populate_lut_combo()
+        # #3-Rev Task 8: Status + Button-Gate auf den geladenen Stand.
+        self._refresh_smart_status()
+        self._refresh_sinn_btn()
+        # #3-Rev Task 6 (R1): Job B im Review-Hintergrund anstoßen,
+        # sobald die Vorbedingungen stimmen (Notbremse, Peaks,
+        # Transkript, kein laufender Worker, keine fertigen Scores).
+        self._maybe_start_smart_worker()
 
     def _populate_lut_combo(self, select_filename=None):
         self.lut_combo.blockSignals(True)
@@ -295,6 +334,8 @@ class ReviewPage(QWidget):
 
         self.session.play_current()
         self._start_play_state()
+        # #3-Rev Task 8: Sinnabschnitt-▶ live an den neuen Peak hängen.
+        self._refresh_sinn_btn()
 
     def on_back(self):
         if self.session and self.session.current_peak > 0:
@@ -448,6 +489,264 @@ class ReviewPage(QWidget):
         self._export_worker.deleteLater()
         self._export_worker = None
         self.session_changed.emit()
+        # #3-Rev Task 6 (R1): Job B startet NICHT mehr hier — er läuft
+        # im Review-Hintergrund (_maybe_start_smart_worker, aufgerufen
+        # aus set_session() bzw. nach TranscriptWorker.finished).
+        # #3-Rev Task 7: Zwei-Bedingungen-Riegel — Basis-Export fertig.
+        self._base_export_done_for_run = True
+        self._maybe_write_sinnabschnitt_artifacts()
+
+    def _maybe_start_smart_worker(self):
+        """#3-Rev Task 6 (R1): Job B startet im Review-Hintergrund,
+        sobald die Vorbedingungen stimmen. Gate-Bedingungen (Carl):
+        Notbremse an, Peaks da, Transkript lesbar, kein Worker läuft
+        bereits, KEINE fertigen Smart-Scores (kein teures Doppel-
+        Berechnen). Bricht den Keyboardstellen-Weg NIE."""
+        session = getattr(self, "session", None)
+        if session is None:
+            return
+        cfg = getattr(session, "config", {})
+        enabled = (cfg.get("smart_boundary_enabled", True)
+                   if hasattr(cfg, "get") else True)
+        if not enabled:
+            return
+        if not getattr(session, "peaks", None):
+            return
+        # Carl-Gegenreview Task 6 [P2]: ein vorhandener transcript_ref
+        # zählt nur, wenn das Sidecar beim Laden NICHT als kaputt/fehlend
+        # markiert wurde (sonst Churn in INFRA_FEHLT).
+        has_transcript = getattr(session, "transcript", None) is not None
+        has_ref = bool(getattr(session, "transcript_ref", None))
+        has_error = getattr(session, "transcript_error", None) is not None
+        if not has_transcript and (not has_ref or has_error):
+            return
+        existing = self._smart_worker
+        if existing is not None and getattr(existing, "started", False):
+            # Worker läuft bereits (oder ist eben gestartet) — kein
+            # zweiter Anlauf.
+            try:
+                if existing.isRunning():
+                    return
+            except Exception:  # noqa: BLE001
+                return
+        cands = getattr(session, "clip_candidates", []) or []
+        if any(getattr(c, "score", None) is not None for c in cands):
+            # Carl-Gegenreview Task 7 [P2]: schon berechneter Stand aus
+            # einer geladenen Akte — kein teurer Doppellauf, aber den
+            # Riegel auf der Smart-Seite öffnen, damit der nächste
+            # Basis-Export die Zusatzdateien tatsächlich schreibt.
+            self._smart_ready = True
+            self._maybe_write_sinnabschnitt_artifacts()
+            # Carl-Gegenreview Task 8 [P3]: Status + Button sofort
+            # aktualisieren, nicht erst beim nächsten Peak-Wechsel.
+            self._refresh_smart_status()
+            self._refresh_sinn_btn()
+            return
+        # #3-Rev Task 7: neuer Smart-Lauf -> Riegel-Hälfte „Smart" und
+        # "schon geschrieben" zurücksetzen. Ein bewusst neuer Lauf
+        # (z. B. nach Key-Reparatur) darf wieder neu schreiben.
+        self._smart_ready = False
+        self._sinnabschnitt_artifacts_written = False
+        model = (cfg.get("smart_boundary_claude_model")
+                 if hasattr(cfg, "get") else None)
+        self._smart_worker = SmartBoundaryWorker(
+            session, ClaudeBoundaryDecider(model=model))
+        worker = self._smart_worker
+        # P2: finished an die KONKRETE Instanz binden — ein spät
+        # fertig werdender Alt-Worker darf den neuen nicht aufräumen.
+        worker.finished.connect(
+            lambda result, w=worker:
+            self._on_smart_boundaries_done(result, w))
+        worker.progress.connect(self.status_message.emit)
+        worker.start()
+        # #3-Rev Task 8: laufender Smart-Status sichtbar.
+        self._refresh_smart_status()
+        self._refresh_sinn_btn()
+
+    def _on_smart_boundaries_done(self, result, worker=None):
+        # #3-Rev Task 5: Worker liefert ein SmartBoundaryRunResult.
+        # Spec §11 R4: bei INFRA_FEHLT KEINE Sinnabschnitt-Dateien —
+        # LAUTER Status. Bei OK (oder DECIDER_VERWORFEN-Counts >0)
+        # Smart-Seite des Riegels öffnen und schreiben prüfen
+        # (Task 7: Zwei-Bedingungen-Barriere).
+        from core.clip_boundary.models import BoundaryOutcome
+        if getattr(result, "category", None) is BoundaryOutcome.INFRA_FEHLT:
+            msg = (getattr(result, "message", None)
+                   or "Sinnabschnitte: nicht berechnet (Infrastruktur fehlt).")
+            self.status_message.emit(msg)
+            # #3-Rev Task 8: INFRA in der Statuszeile sichtbar halten.
+            self._smart_status_text = msg
+        else:
+            self._smart_ready = True
+            self._smart_status_text = ""        # alte INFRA-Notiz weg
+            self._maybe_write_sinnabschnitt_artifacts()
+        # P2: nur clearen, wenn DIESER Worker noch der aktuelle ist;
+        # ein veralteter Sender wird entsorgt, ohne den neuen zu fassen.
+        # Carl-Gegenreview [P2]: VOR dem Status-Refresh aufräumen,
+        # sonst gewinnt der "berechne…"-Zweig den noch gesetzten Worker.
+        if worker is not None and self._smart_worker is not worker:
+            worker.deleteLater()
+        else:
+            if self._smart_worker is not None:
+                self._smart_worker.deleteLater()
+            self._smart_worker = None
+        # Status + Button-Gate nach Abschluss aktualisieren.
+        self._refresh_smart_status()
+        self._refresh_sinn_btn()
+        # Autosave: aktualisierte ClipCandidates + transcript_ref in
+        # die .peakcut-Akte (MainWindow lauscht auf session_changed).
+        self.session_changed.emit()
+
+    def _refresh_smart_status(self):
+        """#3-Rev Task 8 / R5: durchgängige Smart-Statuszeile aus dem
+        Sessions-/Worker-Stand ableiten."""
+        session = getattr(self, "session", None)
+        if session is None:
+            self.smart_status_label.setText("")
+            return
+        # Drift einmal berechnen — fließt sowohl in "bereit"-Kombi als
+        # auch in den eigenständigen Hinweis ein (Carl-Gegenreview [P2]:
+        # Drift darf nicht hinter "bereit" verschwinden).
+        ref = getattr(session, "transcript_ref", None) or {}
+        span = ref.get("transcript_span_ms")
+        dur = ref.get("audio_duration_ms")
+        tol = 120_000
+        cfg = getattr(session, "config", None)
+        if cfg is not None and hasattr(cfg, "get"):
+            tol = cfg.get("smart_boundary_alignment_tolerance_ms",
+                          120_000) or 120_000
+        drift = False
+        if span is not None and dur is not None:
+            from core.transcript_archive import alignment_drift
+            drift = alignment_drift(span, dur, tol)
+        # 1) Bereits Ergebnisse da -> "bereit (N)" (+ Drift kombinieren).
+        cands = getattr(session, "clip_candidates", []) or []
+        ready_count = sum(1 for c in cands
+                          if getattr(c, "score", None) is not None)
+        if getattr(self, "_smart_ready", False) or ready_count > 0:
+            base = f"Sinnabschnitte bereit ({ready_count})"
+            if drift:
+                base += " · Transkript passt nicht zur Audiodauer"
+            self.smart_status_label.setText(base)
+            return
+        # 2) Smart-Lauf gerade aktiv.
+        if getattr(self, "_smart_worker", None) is not None:
+            self.smart_status_label.setText(
+                "Transkript bereit, berechne Sinnabschnitte…")
+            return
+        # 3) Drift im Transkript-Ref (ohne Ergebnisse) -> eigenständiger Hinweis.
+        if drift:
+            self.smart_status_label.setText(
+                "Sinnabschnitte: Transkript passt nicht zur Audiodauer")
+            return
+        # 4) Transkript-Ladefehler (kaputtes/fehlendes Sidecar).
+        if getattr(session, "transcript_error", None) is not None:
+            self.smart_status_label.setText(
+                "Sinnabschnitte: Transkript fehlt oder ist kaputt")
+            return
+        # 5) Transkription läuft noch (nichts da).
+        has_t = getattr(session, "transcript", None) is not None
+        has_r = bool(getattr(session, "transcript_ref", None))
+        if not has_t and not has_r:
+            self.smart_status_label.setText("Transkription läuft…")
+            return
+        # 6) Sticky-Status aus letztem Lauf (INFRA-Meldung etc.).
+        self.smart_status_label.setText(
+            getattr(self, "_smart_status_text", "") or "")
+
+    def _refresh_sinn_btn(self):
+        """#3-Rev Task 8 / R5: Sinnabschnitt-▶ disabled bis Kandidat
+        für den aktuellen Drücker `score is not None` hat; Tooltip
+        erklärt den Grund."""
+        session = getattr(self, "session", None)
+        peaks = getattr(session, "peaks", None) if session else None
+        if not peaks:
+            self.sinn_btn.setEnabled(False)
+            self.sinn_btn.setToolTip("Kein Drücker ausgewählt.")
+            return
+        idx = getattr(session, "current_peak", 0)
+        if not (0 <= idx < len(peaks)):
+            self.sinn_btn.setEnabled(False)
+            self.sinn_btn.setToolTip("Kein Drücker ausgewählt.")
+            return
+        pid = peaks[idx].index
+        cands = getattr(session, "clip_candidates", []) or []
+        cand = next(
+            (c for c in cands
+             if getattr(c, "peak_id", None) == pid
+             and getattr(c, "score", None) is not None), None)
+        if cand is not None:
+            self.sinn_btn.setEnabled(True)
+            self.sinn_btn.setToolTip(
+                "Sinnabschnitt dieses Drückers abspielen.")
+            return
+        self.sinn_btn.setEnabled(False)
+        # Reihenfolge: erst die Aussage, die am meisten erklärt.
+        # `_smart_ready` (Ergebnisse liegen vor, dieser Drücker hat
+        # nur keinen) ist informativer als generelle Transkript-Zustände.
+        if getattr(self, "_smart_ready", False):
+            self.sinn_btn.setToolTip(
+                "Für diesen Drücker liegt kein Sinnabschnitt vor — "
+                "Standard-Fenster wird verwendet.")
+        elif getattr(self, "_smart_worker", None) is not None:
+            self.sinn_btn.setToolTip(
+                "Sinnabschnitte werden gerade berechnet…")
+        elif getattr(session, "transcript_error", None) is not None:
+            self.sinn_btn.setToolTip(
+                "Transkript fehlt oder ist kaputt — keine Sinnabschnitte.")
+        elif (getattr(session, "transcript", None) is None
+              and not getattr(session, "transcript_ref", None)):
+            self.sinn_btn.setToolTip(
+                "Warte auf Transkription, bevor Sinnabschnitte berechnet "
+                "werden können.")
+        else:
+            self.sinn_btn.setToolTip(
+                "Sinnabschnitte stehen noch nicht zur Verfügung.")
+
+    def _maybe_write_sinnabschnitt_artifacts(self):
+        """#3-Rev Task 7: Zusatzdateien (TXT/XML) GENAU dann schreiben,
+        wenn der Basis-Export fertig UND der Smart-Lauf bereit ist UND
+        noch nicht geschrieben wurde. Bricht den Flow NIE."""
+        if not getattr(self, "_base_export_done_for_run", False):
+            return
+        if not getattr(self, "_smart_ready", False):
+            return
+        if getattr(self, "_sinnabschnitt_artifacts_written", False):
+            return
+        for exp in (SinnabschnittTXTExporter(), SinnabschnittXMLExporter()):
+            try:
+                exp.export(self.session)
+            except Exception as e:  # noqa: BLE001
+                self.status_message.emit(
+                    f"Sinnabschnitte-Export übersprungen: {e}")
+        self._sinnabschnitt_artifacts_written = True
+
+    def _on_play_sinnabschnitt(self):
+        """Verifizierungs-Vorschau: spielt den smarten Sinnabschnitt
+        des aktuellen Drückers. Kein Kandidat -> Hinweis, kein Crash
+        (Gate G: nice-to-have, bricht nie etwas)."""
+        if not self.session or not getattr(self.session, "peaks", None):
+            return
+        idx = self.session.current_peak
+        if not (0 <= idx < len(self.session.peaks)):
+            return
+        pid = self.session.peaks[idx].index
+        cand = next((c for c in getattr(self.session, "clip_candidates", [])
+                     if c.peak_id == pid and c.score is not None), None)
+        if cand is None:
+            self.status_message.emit(
+                "Kein Sinnabschnitt für diesen Drücker — Standard-Fenster.")
+            return
+        b = cand.boundary
+        dur_s = (b.end_ms - b.start_ms) // 1000
+        # Laufende Audio-Vorschau stoppen, bevor die Video-Vorschau
+        # startet (sonst doppelte Wiedergabe) — Carl-UX-Notiz Gate G.
+        stop_playback()
+        self._stop_play_state()
+        self.video_preview.play_from(b.start_ms, b.end_ms)
+        self.status_message.emit(
+            f"Sinnabschnitt: {dur_s}s · Konfidenz {cand.score} · "
+            f"{cand.reason}")
 
     def _on_export_error(self, msg):
         _log.error("Export error: %s", msg)
@@ -466,3 +765,7 @@ class ReviewPage(QWidget):
         self.video_preview.cleanup()
         if self._export_worker and self._export_worker.isRunning():
             self._export_worker.wait(3000)
+        if self._smart_worker:
+            self._smart_worker.request_stop()
+            if self._smart_worker.isRunning():
+                self._smart_worker.wait(3000)

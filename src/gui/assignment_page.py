@@ -28,6 +28,7 @@ from core.folgenschnitt_pipeline import (
     build_default_folgenschnitt_mic_assignments,
     has_minimum_folgenschnitt_assignment,
 )
+from core.audio_routing import is_mix_track
 
 SHOT_COMBO_STYLESHEET = f"""
 QComboBox {{
@@ -146,6 +147,7 @@ def build_assignment_state(session, video_files) -> AssignmentState:
     )
     if not analysis_mics:
         analysis_mics = build_default_folgenschnitt_mic_assignments(project)
+    analysis_mics = [m for m in analysis_mics if not is_mix_track(m.path)]
 
     # speaker_key + path are technical (needed for Folgenschnitt mapping and
     # the Hörprobe). The *person* is deliberately left empty — no analysis/

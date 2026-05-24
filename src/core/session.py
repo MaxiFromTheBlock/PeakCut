@@ -5,6 +5,7 @@ from pydub import AudioSegment
 
 from utils import parse_timecode_to_ms
 
+from .audio_routing import get_speech_audio_segment
 from .project import PeakCutProject
 from .peak import Peak
 from .playback import play_audio
@@ -62,6 +63,13 @@ class PeakCutSession:
         self.folgenschnitt_camera_assignments = []
         self.clip_candidates = []   # Roadmap #2: ClipCandidate je Peak
         self.peak_decisions = []    # Roadmap #2: redaktioneller Rückkanal
+        # Roadmap #3 Stufe A: Transkript-Zustand formalisiert (nicht
+        # mehr ad-hoc). transcript bleibt None — Stufe B liest das
+        # gespeicherte Sidecar; ref = Referenzblock; error = Hinweis
+        # wenn Sidecar fehlt/kaputt (Smart dann nicht verfügbar).
+        self.transcript = None
+        self.transcript_ref = None
+        self.transcript_error: str | None = None
         self.folgenschnitt_skip_reason: str | None = None
         # True once the user has gone through the assignment step. Then a
         # deliberately empty assignment must NOT silently fall back to
@@ -91,13 +99,15 @@ class PeakCutSession:
         if self.mode == "keyboard":
             segment = self.keyboard_audio[time_ms:time_ms + preview_duration]
         else:
+            # #71a Task 4 (2026-05-21): Mic-/Speak-Mode delegiert die
+            # Audio-Wahl an den zentralen audio_routing-Helper.
+            # Phasing-Wurzel (Mix-mit-Mics-Overlay) ist damit auch
+            # im Review-Pfad behoben, nicht nur im MP3-Export.
             start = peak.in_point_ms
             end = peak.out_point_ms
-            if not self.mic_audios:
+            segment = get_speech_audio_segment(self, start, end)
+            if segment is None:
                 return
-            segment = self.mic_audios[0][start:end]
-            for audio in self.mic_audios[1:]:
-                segment = segment.overlay(audio[start:end])
 
         play_audio(segment)
 
