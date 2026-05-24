@@ -471,9 +471,10 @@ Play startet Mic-Mode-Mix (alte Logik), Audio nicht synchron zum
 Bild. Max muss erst Wiedergabe sortieren, bevor er die Vorschläge
 beurteilen kann.
 
-**Reihenfolge (Max-Entscheidung + Carl-B-prime-Fahrplan 2026-05-21):**
-Smoke ✓ → **#71a Audio-Routing-Mini** → **#76 Wiedergabe-UX** →
-**Import-Refactor + Marker-Rename (#37)** → **#70 Prompt-Tuning**.
+**Reihenfolge (Stand 2026-05-25):** Smoke ✓ → **#71a Audio-Routing-
+Mini ✓** (auf main gelandet 2026-05-25) → **#76 Wiedergabe-UX**
+(jetzt baufertig) → **Import-Refactor + Marker-Rename (#37, #77)** →
+**#70 Prompt-Tuning**.
 
 **Phasing-Wurzel diagnostiziert 2026-05-21:** Beim Import landet die
 Mix-Datei in `project.mic_tracks` (main_window 232-237 sortiert alles
@@ -860,6 +861,65 @@ Produkt):**
 ---
 
 ## Changelog
+
+### #71a Audio-Routing-Mini-Slice (auf main gelandet 2026-05-25)
+
+Phasing-Wurzel-Fix für den Keyboardstellen-Cutter-MP3 und die Review-
+Speak-Mode-Wiedergabe. Diagnose 2026-05-21 (Carl-Cross-Review von
+#76-Plan): Mix-Datei landet beim Import in `project.mic_tracks` (alles
+außer `keyboard/keys/klavier` → Mic). MP3Exporter und
+`session.play_current` Mic-Mode overlay-summierten `mic_audios[0]` +
+`mic_audios[1:]` — d.h. der ProTools-Mix wurde on-top zu allen Einzel-
+Mics drauf-overlayt, jeder Sprecher doppelt addiert, Phasing landete
+im Output an Matze/Cutter.
+
+Carl-Fahrplan B-prime statt voller Import-Refactor: zentraler
+Helfer `core/audio_routing.py` als eine Wahrheit für Mix vs. echte
+Mics, alle Hör-/Renderpfade hängen sich daran auf, XML-Pfade und
+`.peakcut`-Schema unangetastet bis #77.
+
+- **Helfer:** `is_mix_track` (Token-Heuristik via
+  `re.split(r'[^a-z0-9]+', stem.lower())` + `{"mix", "mixdown"}` —
+  fängt False-Positives wie `mixer_recording.wav` ab),
+  `get_mix_track`, `get_source_mic_tracks`, `get_speech_audio_segment`
+  (Mix vorhanden → Mix allein; sonst Overlay echter Mics; bei
+  `mic_tracks`/`mic_audios`-Längen-Mismatch → `None` statt versteckt
+  falsches Audio).
+- **Consumer umgehängt:** MP3Exporter, `session.play_current`
+  Mic-Mode, AssignmentPage (Mix-Filter), SinnabschnittExporter-
+  Fallback. `project.get_reference_track` delegiert ebenfalls an
+  `audio_routing.get_mix_track` → eine Wahrheit auch für die
+  Smart-Boundary-Pipeline und den XML-Probe-Pfad (ohne XML-Bytes
+  zu ändern).
+- **Pin-Garantien (alle stabil):** Pin-1 Keyboardstellen-XML
+  byte-identisch (SHA-256-Hash in
+  `tests/test_audio_routing_safety.py`), Pin-2 HC-2-Lifecycle,
+  Pin-3 `.peakcut`-Schema unverändert, Pin-Gastname (alte
+  `guest_name.py`-Heuristik unangetastet → kein Drift im
+  XML-Dateinamen).
+- **Production-Quickfix** vom 2026-05-21 (Mid-Slice für laufende
+  Produktion, Commit 3c8d6ba) wurde in Task 3 sauber durch den
+  Helper-Pfad ersetzt.
+- **Parallel-Workflow** mit Carl etabliert: Plan-Cross-Review
+  (P1/P2/P3-Befunde wechselseitig), Task-Aufteilung 3+4 (Claude
+  Hör-Pfad) ↔ 5+6 (Carl UI + Sinnabschnitt-Fallback), Schluss-
+  Cross-Review von Carl 2026-05-25 grün ohne P1/P2.
+- **Real-Smoke:** Max-O-Ton „kein Phasing mehr" auf produzierter
+  Folge nach dem Refactor. `scripts/verify_audio_routing_real.py`
+  liefert pro Akte einen Routing-Report und optional drei
+  Vergleichs-WAVs (Mix-allein vs. Pre-#71a-Reproduktion vs.
+  nur-echte-Mics).
+- **519 → 519 + 64 Pin-Tests** grün vor Merge.
+- **P3-Backlog für #77 (Carl-Schluss-Review-Befund):**
+  `speaker_activity.py:49` hat noch eigene Substring-Heuristik
+  („mix"/„keyboard"/…), Analyse-Defensiv-Pfad nicht Render-Pfad —
+  sollte beim Import-Refactor auf den zentralen Klassifizierer
+  ziehen. Plus: `verify_audio_routing_real.py` benennt Debug-WAVs
+  immer `mix_only.wav`, auch wenn Quelle echte Mics sind —
+  quellenabhängiger Name wäre sauberer.
+
+Merge-Range: `728abca..17b5aad` (9 Commits, Aufteilung Claude/Carl
+siehe Commit-Autoren).
 
 ### Roadmap #2 — ClipCandidate + Rückweg (auf main gelandet 2026-05-18, Merge d8d9e33)
 
@@ -1292,4 +1352,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-21 (Carl-Cross-Review von #76-Plan deckte tiefere Phasing-Wurzel auf: Mix-Datei landet als Mic in project.mic_tracks. Carl-Fahrplan B-prime angenommen: #71a Audio-Routing-Mini-Slice ZUERST, dann #76 darauf aufbauend, danach großer Import-Refactor + Marker-Rename, danach #70 Prompt-Tuning.)*
+*Zuletzt aktualisiert: 2026-05-25 (#71a Audio-Routing-Mini-Slice auf main gelandet, Phasing-Wurzel behoben sowohl im Cutter-MP3 als auch in der Review-Speak-Mode-Wiedergabe. Real-Smoke an echter Folge bestätigt. Parallel-Workflow Carl/Claude etabliert. Nächster Slice: #76 Wiedergabe-UX, baufertig auf dem neuen Helper-Fundament.)*
