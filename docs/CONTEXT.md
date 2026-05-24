@@ -66,10 +66,15 @@ Dieses Dokument ist die Kurzversion fuer den PO.
   Helfer `core/audio_routing.py` mit Token-Heuristik wurde
   eingeführt, alle Hör-/Renderpfade hängen sich daran auf. XML-
   Pfade + `.peakcut`-Schema unangetastet (Pin-1 stabil). Max-O-Ton
-  „kein Phasing mehr" am realen Re-Export. Nächste Slices:
-  **#76 Wiedergabe-UX** (baufertig auf dem Helper-Fundament) →
-  **Import-Refactor + Marker-Rename (#37, #77)** → **Prompt-Tuning
-  (#70)**.
+  „kein Phasing mehr" am realen Re-Export. **Wichtige Übergangs-
+  Asymmetrie (Absicht, kein Vergessen):** Mix liegt strukturell
+  weiter in `project.mic_tracks`, der `audio_routing`-Helper
+  filtert ihn nur zur Laufzeit raus. Strukturelle Trennung (eigenes
+  `project.mix_track`-Feld, Mix nicht mehr in mic_tracks, Schema-v3)
+  kommt erst mit **#77 Import-Refactor** — bis dahin ist das so
+  korrekt. Nächste Slices: **#76 Wiedergabe-UX** (baufertig auf
+  dem Helper-Fundament) → **Import-Refactor + Marker-Rename (#37,
+  #77)** → **Prompt-Tuning (#70)**.
 
 ## Folgenschnitt Stufe 2 / Track 1 (auf main gelandet 2026-05-17)
 
