@@ -115,6 +115,23 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 2. UI Revamp (Figma → PyQt6, oder Electron?)
 3. Versionsnummer + Code Signing (geparkt — erst noetig wenn PeakCut wieder extern verteilt wird)
 
+## Offene Slices (Stand 2026-06-01)
+
+Reihenfolge nach #71a-Merge (2026-05-25) und Fremdmaterial-Test (2026-06-01):
+1. **#76 Wiedergabe-UX** — Spec abgenommen 2026-05-21, Carl-Plan steht aus.
+2. **Slice A — Dialog-Totale Cross-Talk-Pass** (neu aus Fremdmaterial-Test):
+   Totale bei Cross-Talk-Phasen einfügen, NICHT genereller Zeit-Pass.
+   Inhaltliche Unterscheidung (Cross-Talk vs. humorvoller Schlagabtausch).
+3. **Slice B — Multi-Track-Folgenschnitt-XML** (neu): drei Video-Spuren
+   (V1=Totale, V2/V3=Personen) mit Lücken, Premiere-Overlay-Fallback.
+   Audio-Default = Mix-only (Carl-Hinweis, Phasing-Schutz wie #71a in
+   NLE-Timeline). Postprocess-Skript existiert als Stand-In:
+   `~/Desktop/Fremdproduktion/multitrack_postprocess.py` (argparse-generisch).
+4. **#37/#77 Import-Refactor + Marker-Rename** — strukturelle Mix-Trennung.
+5. **#70 Prompt-Tuning** — Few-Shot + A/B-Harness.
+
+Details + Begründungen: App/CLAUDE.md, Sektion „Fremdmaterial-Test-Befunde + Slice-Kandidaten — 2026-06-01".
+
 ## Branches
 
 - main: Stable Releases

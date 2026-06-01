@@ -689,10 +689,69 @@ Backlog, kein offenes Feature mehr:
 - [ ] **Cutter-Qualitäts-Sign-off:** braucht 1 aufbewahrten sauberen Export
   (vollständige Zuordnung). XML ist regression-locked frame-identisch zur
   bereits gelobten reaktiven Version — Bestätigung, kein Blocker.
-- [ ] **Fremdmaterial-Test (Max):** echte Fremdproduktion durchspielen.
-  Produktionsunabhängigkeit ist testbewiesen — reale Bestätigung.
+- [x] ~~**Fremdmaterial-Test (Max):** echte Fremdproduktion durchspielen.~~
+  **DURCHGEFÜHRT 2026-06-01** an "1plus1" (Tim Mälzer / Jan Ullrich,
+  zwei Folgen-Teile à ~57min + ~46min). Ablauf: kein Marker im
+  Material → Fake-Keyboard (30s WAV mit Klick bei 5s) als Trigger-
+  Spur, sonst regulärer Flow. Folgenschnitt-XML beide Male sauber
+  generiert; Max-Sichtung in Premiere: Sprecher-Wechsel Jan/Tim
+  überzeugend. Produktionsunabhängigkeit damit real bestätigt.
+  Drei Befunde aus der Sichtung → eigene Slice-Kandidaten (siehe
+  „Fremdmaterial-Test-Befunde" unten).
 - [ ] Competitor-Recherche (autocut.com, Resolve Scene-Cut, GitHub-Repos) —
   Inspiration, geparkt.
+
+### Fremdmaterial-Test-Befunde + Slice-Kandidaten — 2026-06-01
+
+Aus dem Fremdmaterial-Test (1plus1, Mälzer/Ullrich) entstanden drei
+saubere Slice-Kandidaten. Reihenfolge per Carl-Take (2026-06-01):
+A → B, Profile später. Stand-In für (A) + (B) während des Tests war
+ein **Postprocess-Skript** `~/Desktop/Fremdproduktion/multitrack_postprocess.py`
+(argparse-generisch: `--input/--output/--totale-video/--person-a/--person-b`)
+— produziert die gewünschte XML, ist aber kein PeakCut-Code. Wird
+durch die richtigen Slices abgelöst.
+
+- [ ] **Slice A — Dialog-Totale Cross-Talk-Pass.** Heutige
+  `_insert_totale`-Logik streut Totale nur in Monolog-Blöcken ≥ 90s ein
+  (mit Intervall 240s). Bei dialogischem Material (Median 4.8s Blöcke,
+  243 Cuts in 57min) greift sie nie. **Max' Wunsch (Korrektur zu Carls
+  ursprünglichem „globaler Pass alle X Min"):** Totale soll bei
+  *Cross-Talk* zwischen den Sprechern reinkommen — wenn beide im
+  schnellen Wechsel reden — aber *nicht* bei humorvollem
+  Schlagabtausch (da bleibt's beim Einzelkamera-Wechsel). Inhaltliche
+  Unterscheidung, automatisch nicht trivial zu erkennen. Eigene Spec
+  + Carl-Plan + TDD-Bau. Beispiele aus echtem Material in die Spec.
+- [ ] **Slice B — Multi-Track-Folgenschnitt-XML.** Aktueller Exporter
+  schreibt eine Video-Spur mit nahtlosen Cuts. Max will pro Kamera
+  eigene Spur mit Lücken: V1 (unten) = Totale, V2 = Person A, V3 = Person B.
+  Premiere-Logik „oberste sichtbare gewinnt" greift; bei A/B-Lücken
+  fällt V1-Totale als Sicherheit durch. Carls Unterscheidung
+  *Partitioned* vs. *Overlay* in der Spec entscheiden — Max' Variante
+  (V1-Totale an JEDER Decision-Position, V2/V3 mit Lücken nur an
+  ihren Decisions) ist **Overlay**, weil Premiere-Fallback genau
+  funktioniert. Pin: Keyboardstellen-XML byte-identisch. Spec → Carl-Plan
+  → TDD-Bau (siehe Audio-Hinweis unten).
+- [ ] **Slice C (in B integriert oder als Mini-Slice davor) —
+  Folgenschnitt-XML Audio = Mix-only.** Heute exportiert PeakCut alle
+  drei Audio-Spuren (Jan-Mic, Tim-Mic, Mix) in die Folgenschnitt-XML.
+  Carl-Hinweis (2026-06-01): wenn alle drei in der NLE gleichzeitig
+  laufen, holen wir uns dieselbe Phasing-Klasse wie #71a in die
+  Premiere-Timeline. Richtige Default-Semantik: **Mix vorhanden → nur
+  Mix-Spur. Fallback auf echte Mics nur wenn kein Mix.** Postprocess-
+  Skript macht das schon. Keyboardstellen-XML bleibt byte-identisch
+  (Pin-1, anderer Exporter).
+- [ ] **Profile als Datenmodell — *deutlich* später**, nicht in dieses
+  Slice-Paket ziehen (Roadmap-Pkt 4). Aktuelle Tuning-Achsen
+  (Totale-Schwellen, Loosening-Defaults, Schnittfrequenz) gehören
+  langfristig in Per-Produktion-Profile (HM ≠ 1plus1). Erst bewährte
+  Slice-A/B-Realität schaffen, dann Datenmodell-Migration.
+
+**Inhaltliche Lektion aus dem Test:** Das Tool **funktioniert
+produktionsunabhängig** — Schnitt-Logik, Zuordnung, Sync-Pfad
+greifen unverändert. Aber die *Layout-Annahmen* der Folgenschnitt-XML
+(eine Video-Spur, alle drei Audio-Spuren) sind HM-Standard und für
+fremde Cutter-Workflows nicht ideal. Beide Slices oben adressieren
+genau das.
 
 ### Gesundheits-Check-Backlog — abgegrenzt 2026-05-17 (KEIN Feature)
 
