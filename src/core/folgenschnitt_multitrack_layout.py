@@ -128,3 +128,249 @@ class MultitrackLayoutPlan:
     audio_tracks: tuple[AudioTrackPlan, ...]
     uses_mix: bool
     mode: str
+
+
+# ---------------------------------------------------------------------
+# Track-Order: Carl-Algorithmus (Spec Design-Entscheidung 1)
+# ---------------------------------------------------------------------
+
+
+def build_video_track_order(camera_assignments, decisions):
+    """Liefert Kameras in XML-Reihenfolge (V1 zuerst).
+
+    Algorithmus:
+    1. Aus camera_assignments Kameras filtern: shot_type != "unused".
+    2. Totale-Kamera (shot_type == "totale") zuerst, wenn vorhanden.
+    3. Person-Kameras in Assignment-Reihenfolge danach.
+    4. Nach path deduplizieren (versehentliche Doppelzuweisung).
+    5. Decision-Kameras, die nicht in den Assignments stehen, hinten
+       anhaengen (Defensiv: kein aktiver Schnitt darf verloren gehen).
+
+    Rueckgabe: Tuple von CameraAssignment-aehnlichen Objekten in
+    XML-Reihenfolge. Fuer Decision-Kameras ohne Assignment wird ein
+    synthetischer Eintrag mit shot_type="unused" und path-basiertem
+    Fallback erzeugt.
+    """
+    from .folgenschnitt_models import (
+        CameraAssignment,
+        PERSONLESS_SHOT_TYPES,
+        SHOT_TOTAL,
+        SHOT_UNUSED,
+    )
+
+    # 1. unused raus
+    active = [
+        ca for ca in camera_assignments
+        if ca.shot_type != SHOT_UNUSED
+    ]
+
+    # 2. Totale zuerst (nur erste Totale wird V1; weitere wandern in
+    # die normale Reihenfolge — Edge-Case, nicht in Spec definiert)
+    totale = next(
+        (ca for ca in active if ca.shot_type == SHOT_TOTAL), None,
+    )
+    rest = [ca for ca in active if ca is not totale]
+
+    ordered = ([totale] + rest) if totale is not None else rest
+
+    # 3. Nach path deduplizieren (erste Zuweisung gewinnt)
+    seen_paths = set()
+    deduped = []
+    for ca in ordered:
+        if ca.path in seen_paths:
+            continue
+        seen_paths.add(ca.path)
+        deduped.append(ca)
+
+    # 4. Decision-Kameras anhaengen, die noch fehlen
+    for d in decisions:
+        if d.camera_path not in seen_paths:
+            # Synthetischer Eintrag — shot_type "unused" weil unbekannt,
+            # damit name-Logik auf Basename-Fallback geht.
+            synth = CameraAssignment(
+                path=d.camera_path,
+                shot_type=SHOT_UNUSED,
+                person=None,
+            )
+            deduped.append(synth)
+            seen_paths.add(d.camera_path)
+
+    return tuple(deduped)
+
+
+# ---------------------------------------------------------------------
+# Name-Konvention fuer Tracks (Carl-Hinweis 2026-06-03)
+# ---------------------------------------------------------------------
+
+
+def _track_name_for_camera(camera):
+    """Cutter-lesbarer Name fuer eine Kamera-Spur.
+
+    - Totale (shot_type == "totale"): "Totale".
+    - Person-Kamera (person + shot_type): "{person} {shot_type}".
+    - Fallback (fehlende Info, missing-decision-Synth): Basename des
+      Pfads ohne fuehrenden Slash.
+    """
+    import os
+    from .folgenschnitt_models import SHOT_TOTAL
+
+    if camera.shot_type == SHOT_TOTAL:
+        return "Totale"
+    if camera.person and camera.shot_type:
+        return f"{camera.person} {camera.shot_type}"
+    return os.path.basename(camera.path)
+
+
+# ---------------------------------------------------------------------
+# Video-Layout: Remove vs. Disable (Task 2)
+# ---------------------------------------------------------------------
+
+
+def build_video_track_layout(camera_assignments, decisions, mode):
+    """Baut die Video-Tracks fuer Multi-Track-XML.
+
+    mode = UNUSED_CLIPS_REMOVE:
+      - Totale-Track (shot_type == "totale") bekommt einen Clip pro
+        Decision (durchgehende Fallback-Schicht).
+      - Person-Tracks bekommen nur Clips fuer ihre aktiven Decisions.
+      - Alle Clips enabled = True.
+
+    mode = UNUSED_CLIPS_DISABLE:
+      - JEDER Track bekommt einen Clip pro Decision.
+      - Totale-Track: alle enabled = True.
+      - Person-Tracks: nur Clip fuer aktive Decision enabled = True,
+        sonst enabled = False.
+
+    Plan-Vertrag (Spec): in_ms = start_ms, out_ms = end_ms. Die
+    Offset-Logik (HM-Sync) wird im Exporter angewandt — der Plan
+    bleibt FCP7-frei.
+    """
+    from .folgenschnitt_models import SHOT_TOTAL
+
+    mode = normalize_unused_clips_mode(mode)
+    order = build_video_track_order(camera_assignments, decisions)
+    decisions_list = list(decisions)
+
+    tracks = []
+    for camera in order:
+        is_totale = camera.shot_type == SHOT_TOTAL
+        clips = []
+        for d in decisions_list:
+            active = d.camera_path == camera.path
+            if mode == UNUSED_CLIPS_REMOVE:
+                # Totale durchgaengig; Person-Tracks nur aktive Clips.
+                if is_totale or active:
+                    clips.append(VideoClipPlan(
+                        start_ms=d.start_ms,
+                        end_ms=d.end_ms,
+                        in_ms=d.start_ms,
+                        out_ms=d.end_ms,
+                        enabled=True,
+                    ))
+            else:  # UNUSED_CLIPS_DISABLE
+                # Jeder Track bekommt jede Decision; Totale immer
+                # enabled, Person-Tracks nur bei aktiver Decision.
+                clips.append(VideoClipPlan(
+                    start_ms=d.start_ms,
+                    end_ms=d.end_ms,
+                    in_ms=d.start_ms,
+                    out_ms=d.end_ms,
+                    enabled=is_totale or active,
+                ))
+        tracks.append(VideoTrackPlan(
+            file_path=camera.path,
+            name=_track_name_for_camera(camera),
+            clips=tuple(clips),
+        ))
+    return tuple(tracks)
+
+
+# ---------------------------------------------------------------------
+# Audio-Quellenwahl (Task 3)
+# ---------------------------------------------------------------------
+
+
+def build_audio_track_plan(project, sequence_duration_ms):
+    """Liefert Audio-Tracks und uses_mix-Flag.
+
+    Mix vorhanden in project.mic_tracks → genau eine Audio-Spur mit
+    dem Mix als durchgehender Clip (0 bis sequence_duration_ms).
+    uses_mix=True.
+
+    Kein Mix → Fallback auf echte Mics (alle non-mix-Eintraege in
+    mic_tracks), jeweils als durchgehender Clip. uses_mix=False
+    → UI/Statusbar zeigt Phasing-Hinweis.
+
+    Leere mic_tracks → ((), False), Exporter kann darauf reagieren.
+
+    Nutzt audio_routing-Helper aus #71a (Pin-3) — keine eigene
+    Mix-Heuristik.
+    """
+    import os
+    from .audio_routing import get_mix_track, get_source_mic_tracks
+
+    mix_path = get_mix_track(project)
+    if mix_path:
+        clip = AudioClipPlan(
+            start_ms=0,
+            end_ms=sequence_duration_ms,
+            in_ms=0,
+            out_ms=sequence_duration_ms,
+        )
+        return (
+            (AudioTrackPlan(
+                file_path=mix_path,
+                name="Mix",
+                clips=(clip,),
+            ),),
+            True,
+        )
+
+    mic_paths = get_source_mic_tracks(project)
+    if not mic_paths:
+        return ((), False)
+
+    tracks = []
+    for path in mic_paths:
+        clip = AudioClipPlan(
+            start_ms=0,
+            end_ms=sequence_duration_ms,
+            in_ms=0,
+            out_ms=sequence_duration_ms,
+        )
+        tracks.append(AudioTrackPlan(
+            file_path=path,
+            name=os.path.splitext(os.path.basename(path))[0],
+            clips=(clip,),
+        ))
+    return (tuple(tracks), False)
+
+
+# ---------------------------------------------------------------------
+# build_multitrack_layout — Integration (Task 2 + 3)
+# ---------------------------------------------------------------------
+
+
+def build_multitrack_layout(decisions, camera_assignments, project, mode):
+    """Baut den vollstaendigen MultitrackLayoutPlan.
+
+    Sequence-Dauer wird aus den Decisions abgeleitet (max end_ms).
+    Bei leeren Decisions = 0, kein Audio.
+    """
+    mode = normalize_unused_clips_mode(mode)
+    video_tracks = build_video_track_layout(
+        camera_assignments, decisions, mode,
+    )
+    decisions_list = list(decisions)
+    sequence_duration_ms = (
+        max(d.end_ms for d in decisions_list) if decisions_list else 0
+    )
+    audio_tracks, uses_mix = build_audio_track_plan(
+        project, sequence_duration_ms,
+    )
+    return MultitrackLayoutPlan(
+        video_tracks=video_tracks,
+        audio_tracks=audio_tracks,
+        uses_mix=uses_mix,
+        mode=mode,
+    )
