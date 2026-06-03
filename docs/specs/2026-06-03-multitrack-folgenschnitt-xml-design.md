@@ -1,6 +1,8 @@
 # Multi-Track-Folgenschnitt-XML (Slice B) — Design
 
-**Status:** Design, abgenommen 2026-06-03 (Max). Carl-Plan folgt.
+**Status:** Design, abgenommen 2026-06-03 (Max). Carl-Cross-Review 2026-06-03
+durchgelaufen, Verbesserungen eingearbeitet. Default `unused_clips_mode = "disable"`
+final (Max 2026-06-03). Carl-Plan folgt.
 **Slot in Roadmap:** Slice A (Cross-Talk-Totale) und B (dieser hier) sind
 unabhängig. Max-Reihenfolge 2026-06-03: B zuerst, weil isoliert und mit
 bewiesener Hack-Vorlage. A erst sobald Material-Markierung steht.
@@ -75,15 +77,24 @@ fremde NLEs später).
 
 ## Design-Entscheidungen (Max, 2026-06-03)
 
-### 1. Spuren-Verteilung (universell)
+### 1. Spuren-Verteilung (universell) — Carl-Korrektur 2026-06-03
 
-**Regel:** Eine Video-Spur pro unterschiedlicher Kamera-Datei in den
-Decisions. Reihenfolge im XML:
+**Track-Universum kommt aus den Zuordnungen, nicht aus den Decisions.**
+Damit Disable-Modus konsistente Spuren auch dann liefert, wenn eine
+Kamera in einer Folge zufällig nicht aktiv eingesetzt wurde (Cutter
+muss sie trotzdem per Klick reinholen können).
 
-- **V1 (unten in Premiere) = Totale-Kamera** (`shot_type == "totale"`),
-  **wenn vorhanden**. Dient als Fallback-Schicht.
-- **V2..VN = Person-Kameras** (in der Reihenfolge der
-  `camera_assignments`, also der Reihenfolge aus dem Zuordnungs-Schritt).
+**Algorithmus (Reihenfolge im XML):**
+
+1. Aus `session.folgenschnitt_camera_assignments` Kameras
+   filtern: `shot_type != "unused"`.
+2. **V1 = Totale-Kamera** (`shot_type == "totale"`), wenn vorhanden.
+   Premiere-Logik „oberste sichtbare gewinnt" → V1 unten dient als
+   Fallback-Schicht.
+3. **V2..VN = Person-Kameras** in der Reihenfolge der
+   `camera_assignments` (= Reihenfolge aus dem Zuordnungs-Schritt).
+4. **Nach `path` deduplizieren** (für den Fall dass dieselbe Datei
+   versehentlich mehrfach zugewiesen wurde).
 
 **Wichtig:** Da pro Decision exakt eine Kamera aktiv ist (auch nach
 Stufe-2-Loosening, das nur die `camera_path` einer Decision setzt),
@@ -123,20 +134,26 @@ Layout für nicht-aktive Kameras:  ( ) Remove   ( ) Disable
 
 - **Disable-Modus (= Deactivated Clips):**
   **Jede** Person-Spur hat für jede Decision einen Clip, aber nur die
-  in der Decision aktive ist `enabled=TRUE`; die anderen sind
-  `enabled=FALSE`. V1-Totale ist immer `enabled=TRUE`. Cutter sieht
+  in der Decision aktive ist enabled; die anderen sind disabled (in
+  FCP7-XML als Kind-Element `<enabled>FALSE</enabled>` am clipitem,
+  **NICHT als Attribut**). V1-Totale ist immer enabled. Cutter sieht
   alle möglichen Kameras pro Schnittstelle und kann mit einem Klick
   umschalten — eine Art Multicam-Look ohne Premiere-Multicam-Feature.
 
-**Default-Vorschlag:** *Disable.* Begründung:
+**Default = `disable`** (Max + Carl + Claude einig, 2026-06-03).
+Begründung:
 - Autocut-Industriestandard ist Disable (orange Default-Button im
   Autocut-Screenshot 2026-05-31).
 - Cutter-Workflow-freundlicher: zusätzliche Information, kein Verlust.
 - Remove ist trivial draus erzeugbar (alle disabled-Clips löschen),
   umgekehrt nicht.
 
-Max-Entscheidung zu Default offen (kann jetzt oder im Carl-Review
-gesetzt werden).
+**Carl-Vorbehalt zum Default:** Erstes Premiere-Smoke im Slice-Bau
+muss verifizieren, dass disabled-Clips in Premiere tatsächlich nicht
+sichtbar/rendernd importieren. Wenn Premiere zickt (z.B. Clips beim
+Import doch sichtbar oder Performance-Probleme): Default auf `remove`
+kippen, Architektur bleibt unverändert. Beide Modi werden gebaut, nur
+die Default-Wahl wird angepasst.
 
 ### 3. Audio
 
@@ -155,7 +172,7 @@ Mic-Spuren statt Mix — Phasing möglich, Mix-Datei fehlt").
 **Pin-3 (Audio-Routing-Helper):** Multi-Track-Exporter nutzt den
 zentralen `core/audio_routing`-Helper — keine neue Mix-Heuristik.
 
-### 4. Persistenz
+### 4. Persistenz — Schema-v3 mit explizitem Bootstrap-Vertrag (Carl-Korrektur)
 
 Der Toggle-Wert wandert ins `.peakcut`-Schema. Schema-Version steigt
 auf **v3** mit additiver Erweiterung:
@@ -173,31 +190,54 @@ auf **v3** mit additiver Erweiterung:
 }
 ```
 
-Backwards-Kompat: v1/v2-Akten ohne `folgenschnitt_unused_clips_mode`
-nehmen den Default (= „disable" oder was Max entscheidet).
-v3-Akten in altem PeakCut-Code: tolerieren („unbekanntes Feld
-ignorieren"), kein Fail.
+**Expliziter Bootstrap-Vertrag** (statt nur „toleranter Loader"):
 
-### 5. Pin-1 Keyboardstellen-XML byte-identisch
+- `CURRENT_SCHEMA_VERSION = 3` als Konstante im `project_archive`-Modul.
+- `DEFAULT_UNUSED_CLIPS_MODE = "disable"` als Konstante (single source).
+- **v1/v2-Akten ohne Feld:** Bootstrap mit `DEFAULT_UNUSED_CLIPS_MODE`.
+- **v3-Akten mit ungültigem Wert** (Tippfehler, Migration-Schaden):
+  Fallback auf `DEFAULT_UNUSED_CLIPS_MODE`, Status-Warning, **kein
+  Crash**.
+- **Save/Load Roundtrip exakt:** v3-Akte gespeichert + neu geladen =
+  identischer Mode (Pin-Test).
+- **v3-Akten in altem PeakCut-Code** (rare Backwards-Path): unbekanntes
+  Feld wird ignoriert, kein Fail.
+
+### 5. Pin-1 Keyboardstellen-XML byte-identisch — Task-0-Gate
 
 Diese Spec ändert **nur** `FolgenschnittXMLExporter`. Der existierende
-`XMLExporter` (Keyboardstellen) bleibt unangetastet. Pin-1-Tests
-laufen weiter.
+`XMLExporter` (Keyboardstellen) bleibt unangetastet.
+
+**Carl-Anforderung 2026-06-03:** Pin-1 läuft im Slice **namentlich**
+als eigenes Task-0-Gate mit. Konkret:
+- Vor dem Slice-Bau: SHA-256-Hash der Keyboardstellen-XML eines
+  Referenz-Setups einfrieren.
+- Nach jeder Task im Slice: Hash gegen Baseline prüfen.
+- **Auch wenn `session.folgenschnitt_unused_clips_mode` gesetzt ist**
+  (Multi-Track-Pfad muss Keyboardstellen-XML nicht berühren).
+- Kein neuer Golden-Mechanismus nötig — die existierenden Pin-Tests
+  aus #71a sind ausreichend, müssen aber im Slice-Plan explizit
+  referenziert werden.
 
 ---
 
 ## UI-Verhalten im Detail
 
-### Zuordnungs-Seite
+### Zuordnungs-Seite — Toggle-Position (Carl-Korrektur 2026-06-03)
 
-Am Ende der Zuordnungs-Page (unter den Kamera-/Mic-Zuordnungs-Zeilen,
-vor dem „Weiter"-Button) erscheint:
+Der Toggle ist eine **Export-Einstellung**, keine weitere Kamera-Zeile.
+Er liegt deshalb **nicht im Kamera-/Mic-Scroll-Bereich**, sondern als
+eigener Block direkt unter dem Scrollbereich, oberhalb des „Weiter"-/
+Status-Buttons:
 
 ```
-─────────────────────────────────────────────────────
+─── (Kamera-/Mic-Zuordnungs-Zeilen, Scroll) ─────────
+
+────────────── Export-Einstellungen ──────────────
 Layout für nicht-aktive Kameras
-( ) Remove (Lücken)   ( ) Disable (deaktivierte Clips)
-─────────────────────────────────────────────────────
+( ) Remove (Lücken)   (•) Disable (deaktivierte Clips)
+───────────────────────────────────────────────────
+                                       [ Weiter → ]
 ```
 
 Tooltip oder Help-Text klein darunter:
@@ -207,7 +247,7 @@ Tooltip oder Help-Text klein darunter:
   aktiv. Andere liegen daneben und können mit einem Klick aktiviert
   werden. Multicam-Look ohne Premiere-Multicam-Feature.
 
-Default beim ersten Öffnen einer neuen Akte = `disable` (s. oben).
+Default beim ersten Öffnen einer neuen Akte = `disable`.
 Bei Re-Open einer existierenden `.peakcut`-Akte: gespeicherter Wert.
 
 ### Export-Statusbar
@@ -238,17 +278,34 @@ die Wiedergabe in PeakCut.
 - `core/exporters.py` (Keyboardstellen-MP3/XML/TXT — Pin-1)
 - Sync-Logik, Decision-Erstellung — vollständig unberührt
 
-### Was sich ändert
+### Was sich ändert — Code-Layout-Trennung (Carl-Korrektur 2026-06-03)
 
-- **`core/folgenschnitt_exporter.py`** — Hauptchange. `FolgenschnittXMLExporter.export(session)`:
+Layout-Planung und XML-Schreiben werden bewusst getrennt, damit TDD-
+Tests die Layout-Logik komplett ohne XML-Strings prüfen können.
+
+- **NEU: `core/folgenschnitt_multitrack_layout.py`** — reine Planungs-
+  Logik:
+  - Track-Universum aus `camera_assignments` aufbauen (Algorithmus
+    aus Design-Entscheidung 1).
+  - Audio-Quellenwahl (Mix-only wenn vorhanden, Fallback auf Mics).
+  - Pro Decision: welche Spur ist enabled, welche Spuren brauchen
+    Disabled-Clips bzw. werden im Remove-Modus übersprungen.
+  - Output: strukturierte Datentypen (z.B. `MultitrackLayoutPlan`)
+    die der Exporter dann in XML übersetzt.
+  - Keine XML-Strings, keine FCP7-Spezifika — pure Daten.
+
+- **`core/folgenschnitt_exporter.py`** — wird zum XML-Writer:
   - Liest `session.folgenschnitt_unused_clips_mode` (neu)
-  - Baut N Video-Tracks statt 1
-  - Baut 1 Audio-Track (Mix) statt N
+  - Ruft `multitrack_layout`-Modul für Planung
+  - Schreibt FCP7-XML aus dem Plan: N Video-Tracks, 1 Audio-Track,
+    `<enabled>FALSE</enabled>` als Kind-Element am clipitem für
+    Disable-Modus
   - File-Defs nur beim ersten Vorkommen einer file_id (FCP7-Pattern)
   - DOCTYPE + Sequence-Header + alle FCP7-Pflicht-Elemente
     unverändert beibehalten
 
-- **`gui/assignment_page.py`** — Toggle-UI hinzufügen. Stores in
+- **`gui/assignment_page.py`** — Toggle-UI hinzufügen als Export-
+  Options-Block (s. UI-Verhalten). Stores in
   `session.folgenschnitt_unused_clips_mode`.
 
 - **`core/session.py`** — Neues Attribut `folgenschnitt_unused_clips_mode`
@@ -269,9 +326,11 @@ sind dokumentiert (DOCTYPE, sequence/timecode, sequence/format,
 audio/format mit samplerate+depth, sourcetrack für Audio-Clips).
 Risiko hier minimal.
 
-**`enabled=FALSE` in FCP7-XML** — Standard-Attribut, Premiere
-respektiert es. Resolve und FCP X verhalten sich ähnlich (zu
-verifizieren in den Tests, aber kein Blocker).
+**`<enabled>FALSE</enabled>` in FCP7-XML** — Carl-Klarstellung
+2026-06-03: das ist ein **Kind-Element** am clipitem, KEIN Attribut.
+Im Code beim Schreiben/Prüfen darauf achten. Premiere respektiert es.
+**Premiere-only als Merge-Gate** — Resolve/FCP X höchstens als
+sekundärer Smoke, nicht blockierend.
 
 **Schema-Migration v2 → v3** — additiv, kein Bruch. Risiko minimal
 solange der Default-Wert konsistent ist.
@@ -314,14 +373,27 @@ wäre Auto-Mix-Erzeugung (= eigener Roadmap-Punkt, Out-of-Scope hier).
 - v2-Akte laden → bootstrappt mit Default-Mode
 - v3-Akte mit unbekanntem Mode-Wert → fallback auf Default + Warning
 
-### Premiere-Verifikation (Akzeptanz, kein Unit-Test)
-- 1plus1-Folge mit Multi-Track-Exporter neu generieren
-- Vergleich zum Postprocess-Hack-Output von 2026-06-02 (sollte
-  inhaltlich identisches Layout produzieren, evtl. mit kleinen
-  Strukturunterschieden)
-- Import in Premiere am echten Mac
-- Max-Sichtung: Layout korrekt, V1-Totale-Fallback funktioniert,
-  Audio sauber
+### Premiere-Verifikation — Merge-Gate (Carl-Anforderung 2026-06-03)
+
+**Akzeptanz für Slice-Merge** — nicht nur Unit-Tests:
+
+1. **1plus1-Folge mit Multi-Track-Exporter neu generieren** im
+   **Remove-Modus**. Vergleich zum Postprocess-Hack-Output von
+   2026-06-02 (sollte inhaltlich identisches Layout produzieren).
+   Import in Premiere am echten Mac, Max-Sichtung.
+2. **1plus1-Folge im Disable-Modus** neu generieren. Import in
+   Premiere. **Verifizieren:**
+   - Disabled-Clips sind in der Timeline sichtbar (Cutter kann sie
+     anklicken)
+   - Disabled-Clips werden **nicht** beim Playback gerendert
+   - Disabled-Clips werden **nicht** beim Export aus Premiere
+     mitgerendert
+3. **Fallback-Strategie wenn (2) zickt:** Default auf `remove`
+   kippen, Disable bleibt als opt-in. Architektur unverändert.
+4. **HM-Setup-Sanity:** Ein HM-Material (z.B. Hartmut-Rosa-Folge)
+   mit Multi-Track-Exporter durchspielen. V1 sollte fehlen (keine
+   Totale), V2..VN korrekt verteilt. Cutter-Sichtung (Alex) als
+   Bestätigung.
 
 ---
 
