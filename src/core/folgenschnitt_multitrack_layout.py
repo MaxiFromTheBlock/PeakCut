@@ -251,15 +251,27 @@ def build_video_track_layout(camera_assignments, decisions, mode):
     order = build_video_track_order(camera_assignments, decisions)
     decisions_list = list(decisions)
 
+    # Carl-P2-Fix 2026-06-03: Nur die ERSTE Totale in der Track-Order
+    # ist Fallback-Schicht. Weitere Totale-Kameras (versehentliche
+    # Mehrfachzuweisung) verhalten sich wie normale Person-Kameras —
+    # Remove = nur aktive Clips, Disable = disabled bei nicht-aktiven.
+    # Sonst koennte eine zweite Totale ueber den Person-Spuren alles
+    # verdecken.
+    fallback_totale_path = (
+        order[0].path
+        if order and order[0].shot_type == SHOT_TOTAL
+        else None
+    )
+
     tracks = []
     for camera in order:
-        is_totale = camera.shot_type == SHOT_TOTAL
+        is_fallback_totale = camera.path == fallback_totale_path
         clips = []
         for d in decisions_list:
             active = d.camera_path == camera.path
             if mode == UNUSED_CLIPS_REMOVE:
-                # Totale durchgaengig; Person-Tracks nur aktive Clips.
-                if is_totale or active:
+                # Fallback-Totale durchgaengig; sonst nur aktive Clips.
+                if is_fallback_totale or active:
                     clips.append(VideoClipPlan(
                         start_ms=d.start_ms,
                         end_ms=d.end_ms,
@@ -268,14 +280,14 @@ def build_video_track_layout(camera_assignments, decisions, mode):
                         enabled=True,
                     ))
             else:  # UNUSED_CLIPS_DISABLE
-                # Jeder Track bekommt jede Decision; Totale immer
-                # enabled, Person-Tracks nur bei aktiver Decision.
+                # Jeder Track bekommt jede Decision; Fallback-Totale
+                # immer enabled, sonst nur bei aktiver Decision.
                 clips.append(VideoClipPlan(
                     start_ms=d.start_ms,
                     end_ms=d.end_ms,
                     in_ms=d.start_ms,
                     out_ms=d.end_ms,
-                    enabled=is_totale or active,
+                    enabled=is_fallback_totale or active,
                 ))
         tracks.append(VideoTrackPlan(
             file_path=camera.path,

@@ -597,6 +597,106 @@ def test_full_layout_1plus1_disable_mode():
     assert plan.audio_tracks[0].clips[0].end_ms == 2000
 
 
+# ---------------------------------------------------------------------
+# 7b. Carl-P2-Fix (2026-06-03): Mehrfach-Totale-Edge-Case
+# ---------------------------------------------------------------------
+
+
+def test_layout_multiple_totale_only_first_is_fallback_remove():
+    """Carl-P2: Wenn zwei Totale-Kameras zugewiesen sind, ist nur die
+    ERSTE Fallback. Die zweite verhaelt sich wie eine normale Person-
+    Kamera (Remove-Modus: nur Clips an aktiven Decisions)."""
+    from core.folgenschnitt_multitrack_layout import (
+        UNUSED_CLIPS_REMOVE,
+        build_video_track_layout,
+    )
+
+    assignments = [
+        _ca("/Totale1.mp4", "totale"),
+        _ca("/Totale2.mp4", "totale"),
+        _ca("/Jan.mp4", "weit", "Jan"),
+    ]
+    decisions = [
+        _ed(0, 1000, "/Jan.mp4", "Jan"),
+        _ed(1000, 2000, "/Jan.mp4", "Jan"),
+    ]
+    tracks = build_video_track_layout(
+        assignments, decisions, UNUSED_CLIPS_REMOVE,
+    )
+    by_path = {t.file_path: t for t in tracks}
+    # Erste Totale (in track-order V1): Fallback-Schicht, alle Decisions
+    assert len(by_path["/Totale1.mp4"].clips) == 2
+    # Zweite Totale: NICHT-Fallback, keine aktiven Decisions → 0 Clips
+    assert len(by_path["/Totale2.mp4"].clips) == 0
+
+
+def test_layout_multiple_totale_only_first_is_fallback_disable():
+    """Carl-P2 im Disable-Modus: erste Totale alle enabled, zweite
+    Totale hat alle Decisions aber alle disabled (kein aktiver
+    Decision)."""
+    from core.folgenschnitt_multitrack_layout import (
+        UNUSED_CLIPS_DISABLE,
+        build_video_track_layout,
+    )
+
+    assignments = [
+        _ca("/Totale1.mp4", "totale"),
+        _ca("/Totale2.mp4", "totale"),
+        _ca("/Jan.mp4", "weit", "Jan"),
+    ]
+    decisions = [
+        _ed(0, 1000, "/Jan.mp4", "Jan"),
+        _ed(1000, 2000, "/Jan.mp4", "Jan"),
+    ]
+    tracks = build_video_track_layout(
+        assignments, decisions, UNUSED_CLIPS_DISABLE,
+    )
+    by_path = {t.file_path: t for t in tracks}
+    # Erste Totale: 2 Decisions, ALLE enabled (Fallback)
+    t1 = by_path["/Totale1.mp4"]
+    assert len(t1.clips) == 2
+    assert all(c.enabled for c in t1.clips)
+    # Zweite Totale: 2 Decisions, ALLE disabled (nie aktiv, keine
+    # Fallback-Rolle)
+    t2 = by_path["/Totale2.mp4"]
+    assert len(t2.clips) == 2
+    assert not any(c.enabled for c in t2.clips)
+
+
+def test_layout_multiple_totale_with_decision_for_second_totale():
+    """Edge-Case: zweite Totale ist aktiv in einer Decision → ihr
+    Clip ist enabled (im Disable-Modus); im Remove-Modus hat sie
+    diesen einen Clip."""
+    from core.folgenschnitt_multitrack_layout import (
+        UNUSED_CLIPS_DISABLE,
+        UNUSED_CLIPS_REMOVE,
+        build_video_track_layout,
+    )
+
+    assignments = [
+        _ca("/Totale1.mp4", "totale"),
+        _ca("/Totale2.mp4", "totale"),
+    ]
+    decisions = [
+        _ed(0, 1000, "/Totale2.mp4", "X"),
+    ]
+    # Remove: Totale1 hat alle (Fallback), Totale2 nur die aktive
+    rt = build_video_track_layout(
+        assignments, decisions, UNUSED_CLIPS_REMOVE,
+    )
+    by_path_r = {t.file_path: t for t in rt}
+    assert len(by_path_r["/Totale1.mp4"].clips) == 1
+    assert len(by_path_r["/Totale2.mp4"].clips) == 1
+    # Disable: beide haben den Clip; Totale1 als Fallback enabled,
+    # Totale2 enabled weil aktiv
+    dt = build_video_track_layout(
+        assignments, decisions, UNUSED_CLIPS_DISABLE,
+    )
+    by_path_d = {t.file_path: t for t in dt}
+    assert by_path_d["/Totale1.mp4"].clips[0].enabled is True
+    assert by_path_d["/Totale2.mp4"].clips[0].enabled is True
+
+
 def test_full_layout_hm_remove_mode_no_totale():
     """HM-Setup ohne Totale, Remove-Modus."""
     from core.folgenschnitt_multitrack_layout import (
