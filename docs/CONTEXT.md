@@ -115,22 +115,25 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 2. UI Revamp (Figma → PyQt6, oder Electron?)
 3. Versionsnummer + Code Signing (geparkt — erst noetig wenn PeakCut wieder extern verteilt wird)
 
-## Offene Slices (Stand 2026-06-01)
+## Offene Slices (Stand 2026-06-03)
 
 Reihenfolge nach #71a-Merge (2026-05-25) und Fremdmaterial-Test (2026-06-01):
-1. **#76 Wiedergabe-UX** — Spec abgenommen 2026-05-21, Carl-Plan steht aus.
-2. **Slice A — Dialog-Totale Cross-Talk-Pass** (neu aus Fremdmaterial-Test):
-   Totale bei Cross-Talk-Phasen einfügen, NICHT genereller Zeit-Pass.
-   Inhaltliche Unterscheidung (Cross-Talk vs. humorvoller Schlagabtausch).
-3. **Slice B — Multi-Track-Folgenschnitt-XML** (neu): drei Video-Spuren
-   (V1=Totale, V2/V3=Personen) mit Lücken, Premiere-Overlay-Fallback.
-   Audio-Default = Mix-only (Carl-Hinweis, Phasing-Schutz wie #71a in
-   NLE-Timeline). Postprocess-Skript existiert als Stand-In:
-   `~/Desktop/Fremdproduktion/multitrack_postprocess.py` (argparse-generisch).
+1. **Slice B — Multi-Track-Folgenschnitt-XML** (IN AKTIVER BAUARBEIT
+   2026-06-03): Task 0-4 fertig (Pin-1, Contracts, Layout-Planung,
+   Audio-Quellenwahl, Multi-Track-Video im Exporter). Carl arbeitet
+   gerade an Task 5 (Audio Mix-only). Offen: Task 6 (Schema-v3),
+   Task 7 (UI-Toggle), Task 8 (Integration), Task 9 (Premiere-Smoke).
+   Default-Mode = disable. 566 Tests grün, Pin-1 stabil.
+2. **#76 Wiedergabe-UX** — Spec abgenommen 2026-05-21, Carl-Plan steht aus.
+3. **Slice A — Dialog-Totale Cross-Talk-Pass**: Totale bei Cross-Talk-
+   Phasen einfügen, NICHT genereller Zeit-Pass. Inhaltliche
+   Unterscheidung (Cross-Talk vs. humorvoller Schlagabtausch).
+   Wartet auf Max' Material-Markierung aus 1plus1.
 4. **#37/#77 Import-Refactor + Marker-Rename** — strukturelle Mix-Trennung.
 5. **#70 Prompt-Tuning** — Few-Shot + A/B-Harness.
 
-Details + Begründungen: App/CLAUDE.md, Sektion „Fremdmaterial-Test-Befunde + Slice-Kandidaten — 2026-06-01".
+Details + Bau-Status pro Task: App/CLAUDE.md, Sektion „Slice B
+Bau-Status — Stand 2026-06-03".
 
 ## Branches
 

@@ -753,6 +753,50 @@ greifen unverändert. Aber die *Layout-Annahmen* der Folgenschnitt-XML
 fremde Cutter-Workflows nicht ideal. Beide Slices oben adressieren
 genau das.
 
+### Slice B Bau-Status — Stand 2026-06-03 21:55
+
+**In aktiver Bauarbeit nach Carl-Plan vom 2026-06-03.** Default-Mode
+= disable (Max final). Pin-1 (Keyboardstellen-XML byte-identisch)
+hält durchgehend. Aufteilung: Claude macht Datenstruktur/UI, Carl
+macht XML-Writer.
+
+- [x] **Task 0 — Safety-Harness / Pin-1** (Claude, Commit `ce52833`).
+  5 Tests: Keyboardstellen-XML byte-identisch unabhängig vom Mode,
+  `core/exporters.py` API stabil.
+- [x] **Task 1 — Contracts + Defaults** (Claude, Commit `722a823`).
+  `core/folgenschnitt_multitrack_layout.py` mit Konstanten,
+  `normalize_unused_clips_mode`, frozen Dataclasses (VideoClipPlan,
+  VideoTrackPlan, AudioClipPlan, AudioTrackPlan, MultitrackLayoutPlan).
+  Session-Default-Attribut. Gate-A grün von Carl.
+- [x] **Task 2+3 — Layout-Planung + Audio-Quellenwahl** (Claude,
+  Commit `fef9c28`, P2-Fix `579a14b`).
+  `build_video_track_order` (Carl-Algorithmus), `build_video_track_layout`
+  (Remove + Disable), `build_audio_track_plan` (Mix-only via #71a-
+  Helper, Fallback echte Mics), `build_multitrack_layout`.
+  Carl-P2-Fix: nur erste Totale ist Fallback-Schicht (Mehrfach-Totale-
+  Edge-Case). Plan-Vertrag: `in_ms = start_ms`, Offset-Logik bleibt
+  im Exporter.
+- [x] **Task 4 — XMLExporter Video auf Multi-Track** (Carl, Commit
+  `140ecd0`). `FolgenschnittXMLExporter` schreibt Video über
+  MultitrackLayoutPlan. `<enabled>FALSE</enabled>` als Kind-Element
+  für Disable-Mode-Clips. Negative-Offset-Policy unverändert
+  (`duration == end-start == out-in`). Audio bewusst noch unangetastet
+  bis Task 5.
+- [ ] **Task 5 — Audio im Exporter Mix-only** (Carl, in Arbeit).
+  `audio_routing.get_mix_track` → eine Mix-Spur. Fallback echte Mics
+  mit Status-Hinweis.
+- [ ] **Task 6 — Schema-v3 Persistenz** (offen). `CURRENT_SCHEMA_VERSION
+  = 3`, `assignments.folgenschnitt_unused_clips_mode`, v1/v2-Bootstrap
+  mit Default, ungültiger Wert → Default + Warning.
+- [ ] **Task 7 — AssignmentPage Toggle-UI** (Claude). Radio-Buttons
+  Remove/Disable als Export-Options-Block über Status/Weiter.
+- [ ] **Task 8 — Integration/Regression** (gemeinsam).
+- [ ] **Task 9 — Premiere-Smoke / Merge-Gate** (Max + Claude, Carl
+  Schluss-Review). 1plus1 in beiden Modi + HM-Sanity.
+
+**Test-Stand 2026-06-03 22:00:** 566 Full Suite grün auf develop,
+Pin-1 stabil.
+
 ### Gesundheits-Check-Backlog — abgegrenzt 2026-05-17 (KEIN Feature)
 
 Ergebnis eines **2-Pass-Reviews** (Carl + Claude, unabhängig
