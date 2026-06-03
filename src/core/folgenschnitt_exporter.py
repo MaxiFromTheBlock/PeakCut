@@ -4,6 +4,10 @@ from xml.sax.saxutils import escape
 from utils import ms_to_frames, parse_timecode_to_ms
 
 from .exporters import BaseExporter, _file_url, _probe_audio_info, _probe_video_info
+from .folgenschnitt_multitrack_layout import (
+    DEFAULT_UNUSED_CLIPS_MODE,
+    build_multitrack_layout,
+)
 
 
 class FolgenschnittXMLExporter(BaseExporter):
@@ -22,6 +26,20 @@ class FolgenschnittXMLExporter(BaseExporter):
 
         video_paths = list(session.project.videos)
         audio_paths = list(session.project.mic_tracks)
+        camera_assignments = list(
+            getattr(session, "folgenschnitt_camera_assignments", []) or []
+        )
+        unused_clips_mode = getattr(
+            session,
+            "folgenschnitt_unused_clips_mode",
+            DEFAULT_UNUSED_CLIPS_MODE,
+        )
+        layout = build_multitrack_layout(
+            decisions,
+            camera_assignments,
+            session.project,
+            unused_clips_mode,
+        )
 
         offset_lookup_ms = {}
         for video_filename, offset_str in getattr(session, "video_offsets", []) or []:
@@ -77,60 +95,64 @@ class FolgenschnittXMLExporter(BaseExporter):
             f.write(f'            {rate_block}\n')
             f.write('          </samplecharacteristics>\n')
             f.write('        </format>\n')
-            f.write('        <track>\n')
+            clip_idx = 0
+            for track in layout.video_tracks:
+                f.write('        <track>\n')
+                for clip in track.clips:
+                    clip_idx += 1
+                    video_path = track.file_path
+                    video_file = os.path.basename(video_path)
+                    video_name = track.name or os.path.splitext(video_file)[0]
+                    offset_ms = offset_lookup_ms.get(video_file, 0)
 
-            for idx, decision in enumerate(decisions):
-                video_path = decision.camera_path
-                video_file = os.path.basename(video_path)
-                video_name = os.path.splitext(video_file)[0]
-                offset_ms = offset_lookup_ms.get(video_file, 0)
+                    file_id = video_file_ids.get(video_path)
+                    is_first_file_ref = file_id is None
+                    if file_id is None:
+                        file_id = f"file-folgenschnitt-video-{len(video_file_ids) + 1}"
+                        video_file_ids[video_path] = file_id
 
-                file_id = video_file_ids.get(video_path)
-                is_first_file_ref = file_id is None
-                if file_id is None:
-                    file_id = f"file-folgenschnitt-video-{len(video_file_ids) + 1}"
-                    video_file_ids[video_path] = file_id
+                    rec_start_f = ms_to_frames(clip.start_ms, fps)
+                    rec_end_f = ms_to_frames(clip.end_ms, fps)
+                    clip_dur_f = rec_end_f - rec_start_f
 
-                rec_start_f = ms_to_frames(decision.start_ms, fps)
-                rec_end_f = ms_to_frames(decision.end_ms, fps)
-                clip_dur_f = rec_end_f - rec_start_f
+                    source_in_ms = max(0, clip.in_ms + offset_ms)
+                    source_in_f = ms_to_frames(source_in_ms, fps)
+                    source_out_f = source_in_f + clip_dur_f
 
-                source_in_ms = max(0, decision.start_ms + offset_ms)
-                source_in_f = ms_to_frames(source_in_ms, fps)
-                source_out_f = source_in_f + clip_dur_f
+                    f.write(f'          <clipitem id="clipitem-folgenschnitt-v{clip_idx}">\n')
+                    f.write(f'            <name>{escape(video_name)}</name>\n')
+                    f.write(f'            <duration>{clip_dur_f}</duration>\n')
+                    f.write(f'            {rate_block}\n')
+                    f.write(f'            <start>{rec_start_f}</start>\n')
+                    f.write(f'            <end>{rec_end_f}</end>\n')
+                    f.write(f'            <in>{source_in_f}</in>\n')
+                    f.write(f'            <out>{source_out_f}</out>\n')
+                    if not clip.enabled:
+                        f.write('            <enabled>FALSE</enabled>\n')
 
-                f.write(f'          <clipitem id="clipitem-folgenschnitt-v{idx + 1}">\n')
-                f.write(f'            <name>{escape(video_name)}</name>\n')
-                f.write(f'            <duration>{clip_dur_f}</duration>\n')
-                f.write(f'            {rate_block}\n')
-                f.write(f'            <start>{rec_start_f}</start>\n')
-                f.write(f'            <end>{rec_end_f}</end>\n')
-                f.write(f'            <in>{source_in_f}</in>\n')
-                f.write(f'            <out>{source_out_f}</out>\n')
+                    if is_first_file_ref:
+                        f.write(f'            <file id="{file_id}">\n')
+                        f.write(f'              <name>{escape(video_file)}</name>\n')
+                        f.write(f'              <pathurl>{_file_url(video_path)}</pathurl>\n')
+                        f.write(f'              {rate_block}\n')
+                        f.write(f'              {tc_block}\n')
+                        f.write('              <media>\n')
+                        f.write('                <video>\n')
+                        f.write('                  <samplecharacteristics>\n')
+                        f.write(f'                    <width>{vid_w}</width>\n')
+                        f.write(f'                    <height>{vid_h}</height>\n')
+                        f.write('                    <pixelaspectratio>Square</pixelaspectratio>\n')
+                        f.write(f'                    {rate_block}\n')
+                        f.write('                  </samplecharacteristics>\n')
+                        f.write('                </video>\n')
+                        f.write('              </media>\n')
+                        f.write('            </file>\n')
+                    else:
+                        f.write(f'            <file id="{file_id}"/>\n')
 
-                if is_first_file_ref:
-                    f.write(f'            <file id="{file_id}">\n')
-                    f.write(f'              <name>{escape(video_file)}</name>\n')
-                    f.write(f'              <pathurl>{_file_url(video_path)}</pathurl>\n')
-                    f.write(f'              {rate_block}\n')
-                    f.write(f'              {tc_block}\n')
-                    f.write('              <media>\n')
-                    f.write('                <video>\n')
-                    f.write('                  <samplecharacteristics>\n')
-                    f.write(f'                    <width>{vid_w}</width>\n')
-                    f.write(f'                    <height>{vid_h}</height>\n')
-                    f.write('                    <pixelaspectratio>Square</pixelaspectratio>\n')
-                    f.write(f'                    {rate_block}\n')
-                    f.write('                  </samplecharacteristics>\n')
-                    f.write('                </video>\n')
-                    f.write('              </media>\n')
-                    f.write('            </file>\n')
-                else:
-                    f.write(f'            <file id="{file_id}"/>\n')
+                    f.write('          </clipitem>\n')
 
-                f.write('          </clipitem>\n')
-
-            f.write('        </track>\n')
+                f.write('        </track>\n')
             f.write('      </video>\n')
 
             f.write('      <audio>\n')
