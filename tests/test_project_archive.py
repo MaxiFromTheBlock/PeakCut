@@ -42,7 +42,8 @@ class _FakeSession:
 
 
 def test_constants_are_frozen():
-    assert CURRENT_SCHEMA_VERSION == 2  # v2: + clip_candidates/peak_decisions
+    # Slice B 2026-06-03: bump auf v3 (+ folgenschnitt_unused_clips_mode).
+    assert CURRENT_SCHEMA_VERSION == 3
     assert ARCHIVE_DIR == ".peakcut"
     assert ARCHIVE_FILE == "project.json"
 
@@ -325,11 +326,13 @@ def test_folgenschnitt_roundtrip_new_root_after_move(tmp_path):
 from core.clip_candidates import PROPOSED, DISCARDED, SELECTED
 
 
-def test_schema_is_v2_and_archive_has_both_sections(tmp_path):
+def test_schema_is_current_and_archive_has_both_sections(tmp_path):
+    # Slice B 2026-06-03: bump auf v3. v2-Vertraege (clip_candidates,
+    # peak_decisions) bleiben drin.
     s, *_ = _session(tmp_path, "Mat")
     path = save_project_archive(s)
     data = _json.loads(open(path).read())
-    assert data["schema_version"] == 2
+    assert data["schema_version"] == CURRENT_SCHEMA_VERSION
     assert "clip_candidates" in data and "peak_decisions" in data
     assert len(data["clip_candidates"]) == len(s.peaks)  # bootstrap je Peak
 

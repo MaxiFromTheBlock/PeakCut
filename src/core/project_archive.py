@@ -10,7 +10,12 @@ import json
 import os
 import shutil
 
-CURRENT_SCHEMA_VERSION = 2  # v2: + clip_candidates/peak_decisions (additiv)
+from .folgenschnitt_multitrack_layout import (
+    DEFAULT_UNUSED_CLIPS_MODE,
+    normalize_unused_clips_mode as _normalize_clips_mode,
+)
+
+CURRENT_SCHEMA_VERSION = 3  # v3: + assignments.folgenschnitt_unused_clips_mode (Slice B)
 ARCHIVE_DIR = ".peakcut"
 ARCHIVE_FILE = "project.json"
 _CSV_NAME = "speaker_activity.csv"
@@ -158,6 +163,11 @@ def build_archive_payload(session, material_root, speaker_activity_csv_ref=None)
             "folgenschnitt_camera_assignments": _map_assignment_paths(
                 _to_dict_list(getattr(
                     session, "folgenschnitt_camera_assignments", [])), _rel_p),
+            # Slice B v3 (Carl-Plan 2026-06-03): Toggle "Unused Clips"
+            # ueberlebt App-Neustart. normalize_unused_clips_mode beim
+            # Loader filtert ungueltige Werte → Default.
+            "folgenschnitt_unused_clips_mode": _normalize_clips_mode(
+                getattr(session, "folgenschnitt_unused_clips_mode", None)),
         },
         # v2 additiv (Roadmap #2): keine Pfade -> keine Relativierung.
         "clip_candidates": _to_dict_list(
@@ -328,6 +338,11 @@ def load_project_archive(archive_path_or_root, fallback_config):
         CameraAssignment.from_dict(d)
         for d in _map_assignment_paths(
             asg.get("folgenschnitt_camera_assignments", []), _abs_p)]
+    # Slice B v3 (Carl-Plan 2026-06-03): Toggle-Wert hydratisieren.
+    # Fehlt (v1/v2) ODER ungueltig (Tippfehler/Migration-Schaden) →
+    # Default. normalize_unused_clips_mode wirft nicht.
+    session.folgenschnitt_unused_clips_mode = _normalize_clips_mode(
+        asg.get("folgenschnitt_unused_clips_mode"))
 
     # v2: clip_candidates/peak_decisions — fehlt (v1-Akte/None) ->
     # load_analysis_results hat schon aus Peaks gebootstrappt, bleibt.
