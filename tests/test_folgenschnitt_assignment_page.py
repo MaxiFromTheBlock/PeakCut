@@ -160,3 +160,139 @@ def test_committed_person_name_becomes_option_without_prefilling_other_empty_fie
 def test_shot_combo_stylesheet_sets_readable_text_color():
     assert "color:" in SHOT_COMBO_STYLESHEET
     assert "#1D1D1F" in SHOT_COMBO_STYLESHEET
+
+
+# ---------------------------------------------------------------------
+# Slice B Task 7 — unused_clips_mode Toggle in AssignmentPage
+# ---------------------------------------------------------------------
+
+
+def test_assignment_state_default_unused_clips_mode_is_disable():
+    """Pure State: frische AssignmentState ohne Session traegt
+    DEFAULT_UNUSED_CLIPS_MODE."""
+    from core.folgenschnitt_multitrack_layout import (
+        DEFAULT_UNUSED_CLIPS_MODE,
+    )
+    from gui.assignment_page import AssignmentState
+
+    state = AssignmentState(camera_rows=[], mic_rows=[])
+    assert state.unused_clips_mode == DEFAULT_UNUSED_CLIPS_MODE
+
+
+def test_build_assignment_state_reads_mode_from_session():
+    """build_assignment_state liest session.folgenschnitt_unused_clips_mode."""
+    from core.folgenschnitt_multitrack_layout import UNUSED_CLIPS_REMOVE
+
+    session = _session(mic_assignments=_hm_mics())
+    session.folgenschnitt_unused_clips_mode = UNUSED_CLIPS_REMOVE
+    video_files = ["/material/Cam.mp4"]
+
+    state = build_assignment_state(session, video_files)
+    assert state.unused_clips_mode == UNUSED_CLIPS_REMOVE
+
+
+def test_build_assignment_state_default_when_session_attr_missing():
+    """Wenn Session das Attribut nicht hat (z.B. alte Test-Stubs),
+    faellt build_assignment_state auf den Default zurueck."""
+    from core.folgenschnitt_multitrack_layout import (
+        DEFAULT_UNUSED_CLIPS_MODE,
+    )
+
+    session = _session(mic_assignments=_hm_mics())
+    # Attribut bewusst NICHT setzen — der SimpleNamespace hat es nicht.
+    video_files = ["/material/Cam.mp4"]
+
+    state = build_assignment_state(session, video_files)
+    assert state.unused_clips_mode == DEFAULT_UNUSED_CLIPS_MODE
+
+
+def test_assignment_state_completeness_independent_of_mode():
+    """is_complete-Logik darf NICHT vom Toggle abhaengen — Folgenschnitt-
+    Qualitaet bleibt unberuehrt vom Layout-Mode."""
+    from core.folgenschnitt_models import CameraAssignment
+    from gui.assignment_page import (
+        AssignmentState, CameraRow, MicRow,
+    )
+
+    rows_complete = [
+        CameraRow("/A.mp4", "A.mp4", "weit", "Jan"),
+        CameraRow("/B.mp4", "B.mp4", "weit", "Tim"),
+    ]
+    mics_complete = [
+        MicRow(0, "/MIC1.wav", "MIC1.wav", "Jan", "mic_1"),
+        MicRow(1, "/MIC2.wav", "MIC2.wav", "Tim", "mic_2"),
+    ]
+
+    state_disable = AssignmentState(
+        camera_rows=rows_complete,
+        mic_rows=mics_complete,
+        unused_clips_mode="disable",
+    )
+    state_remove = AssignmentState(
+        camera_rows=rows_complete,
+        mic_rows=mics_complete,
+        unused_clips_mode="remove",
+    )
+    assert state_disable.is_complete() == state_remove.is_complete()
+
+
+def test_assignment_page_apply_writes_mode_to_session():
+    """apply_to_session schreibt _state.unused_clips_mode in
+    session.folgenschnitt_unused_clips_mode."""
+    from core.folgenschnitt_multitrack_layout import UNUSED_CLIPS_REMOVE
+
+    _app()
+    session = _session(mic_assignments=_hm_mics())
+    session.folgenschnitt_unused_clips_mode = "disable"
+
+    page = AssignmentPage()
+    page.set_session(session, ["/material/Cam.mp4"])
+
+    # User toggelt auf Remove
+    page._state.unused_clips_mode = UNUSED_CLIPS_REMOVE
+    page.apply_to_session()
+
+    assert session.folgenschnitt_unused_clips_mode == UNUSED_CLIPS_REMOVE
+
+
+def test_assignment_page_has_unused_clips_mode_toggle():
+    """AssignmentPage stellt einen Toggle (Radio-Buttons) fuer Remove/
+    Disable zur Verfuegung. Default-Selection = Disable."""
+    from core.folgenschnitt_multitrack_layout import (
+        UNUSED_CLIPS_DISABLE,
+        UNUSED_CLIPS_REMOVE,
+    )
+
+    _app()
+    session = _session(mic_assignments=_hm_mics())
+    session.folgenschnitt_unused_clips_mode = UNUSED_CLIPS_DISABLE
+
+    page = AssignmentPage()
+    page.set_session(session, ["/material/Cam.mp4"])
+
+    # Page exposes Radio-Buttons fuer beide Modi.
+    assert hasattr(page, "_unused_clips_disable_radio")
+    assert hasattr(page, "_unused_clips_remove_radio")
+    # Default-Selection entspricht Session-Wert.
+    assert page._unused_clips_disable_radio.isChecked()
+    assert not page._unused_clips_remove_radio.isChecked()
+
+    # Toggle auf Remove: Klick auf Remove-Radio wechselt _state-Mode.
+    page._unused_clips_remove_radio.setChecked(True)
+    assert page._state.unused_clips_mode == UNUSED_CLIPS_REMOVE
+
+
+def test_assignment_page_toggle_default_disable_when_session_has_no_attr():
+    """Wenn die Session das Attribut nicht traegt (Edge-Case), zeigt
+    der Toggle Default = Disable."""
+    from core.folgenschnitt_multitrack_layout import UNUSED_CLIPS_DISABLE
+
+    _app()
+    session = _session(mic_assignments=_hm_mics())
+    # Attribut bewusst nicht setzen.
+
+    page = AssignmentPage()
+    page.set_session(session, ["/material/Cam.mp4"])
+
+    assert page._state.unused_clips_mode == UNUSED_CLIPS_DISABLE
+    assert page._unused_clips_disable_radio.isChecked()

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QLabel, QComboBox, QScrollArea, QFrame,
+    QRadioButton, QButtonGroup,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
@@ -29,6 +30,16 @@ from core.folgenschnitt_pipeline import (
     has_minimum_folgenschnitt_assignment,
 )
 from core.audio_routing import is_mix_track
+from core.folgenschnitt_multitrack_layout import (
+    DEFAULT_UNUSED_CLIPS_MODE,
+    UNUSED_CLIPS_DISABLE,
+    UNUSED_CLIPS_REMOVE,
+    normalize_unused_clips_mode,
+)
+
+
+def _default_unused_clips_mode() -> str:
+    return DEFAULT_UNUSED_CLIPS_MODE
 
 SHOT_COMBO_STYLESHEET = f"""
 QComboBox {{
@@ -110,6 +121,11 @@ class AssignmentState:
     camera_rows: list[CameraRow]
     mic_rows: list[MicRow]
     people: list[str] = field(default_factory=list)
+    # Slice B Task 7 (Carl-Plan 2026-06-03): Multi-Track-Layout-Toggle
+    # auf der Zuordnungs-Seite. Default = "disable" (Max 2026-06-03).
+    unused_clips_mode: str = field(
+        default_factory=lambda: _default_unused_clips_mode()
+    )
 
     def to_mic_assignments(self) -> list[MicAssignment]:
         return [
@@ -165,7 +181,12 @@ def build_assignment_state(session, video_files) -> AssignmentState:
     ]
 
     # Shared person list starts empty; it grows from what the user types.
-    return AssignmentState(camera_rows, mic_rows, [])
+    # Slice B Task 7: Mode aus Session lesen (normalize_unused_clips_mode
+    # filtert missing/invalid → Default, kein Crash).
+    mode = normalize_unused_clips_mode(
+        getattr(session, "folgenschnitt_unused_clips_mode", None)
+    )
+    return AssignmentState(camera_rows, mic_rows, [], unused_clips_mode=mode)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -254,6 +275,12 @@ class AssignmentPage(QWidget):
         )
         layout.addWidget(self._status_label)
 
+        # Slice B Task 7 (Carl-Plan 2026-06-03): Export-Options-Block.
+        # Multi-Track-Toggle Disable vs. Remove. Liegt bewusst ueber
+        # dem Weiter-Button, NICHT im Kamera-Scroll — der Toggle ist
+        # eine Export-Einstellung, keine Kamera-Zeile.
+        layout.addWidget(self._build_export_options_block())
+
         bottom = QHBoxLayout()
         bottom.addStretch()
         self._continue_btn = QPushButton("Weiter ▶")
@@ -264,10 +291,98 @@ class AssignmentPage(QWidget):
         bottom.addWidget(self._continue_btn)
         layout.addLayout(bottom)
 
+    def _build_export_options_block(self) -> QFrame:
+        """Slice B Task 7: Multi-Track-Layout-Toggle als eigener
+        Export-Options-Block. Radio-Buttons Disable / Remove."""
+        frame = QFrame()
+        frame.setFrameShape(QFrame.Shape.StyledPanel)
+        frame.setStyleSheet(
+            f"QFrame {{ background: {COLORS['bg_secondary']}; "
+            f"border: 1px solid {COLORS['border_light']}; "
+            f"border-radius: 8px; padding: 8px; }}"
+        )
+        block_layout = QVBoxLayout(frame)
+        block_layout.setContentsMargins(12, 8, 12, 8)
+        block_layout.setSpacing(4)
+
+        title = QLabel("Export-Einstellungen")
+        title.setStyleSheet(
+            f"color: {COLORS['text_primary']}; "
+            f"font-size: 13px; font-weight: 600;"
+        )
+        block_layout.addWidget(title)
+
+        sub = QLabel("Layout für nicht-aktive Kameras")
+        sub.setStyleSheet(
+            f"color: {COLORS['text_secondary']}; font-size: 12px;"
+        )
+        block_layout.addWidget(sub)
+
+        radios = QHBoxLayout()
+        radios.setSpacing(16)
+        self._unused_clips_disable_radio = QRadioButton(
+            "Disable (deaktivierte Clips)"
+        )
+        self._unused_clips_remove_radio = QRadioButton(
+            "Remove (Lücken)"
+        )
+        self._unused_clips_disable_radio.setToolTip(
+            "Alle Kameras haben Clips, aber nur die aktive ist sichtbar. "
+            "Andere liegen daneben und können per Klick aktiviert werden."
+        )
+        self._unused_clips_remove_radio.setToolTip(
+            "Nur die ausgewählte Kamera-Spur hat Clips, andere sind Lücken. "
+            "Sauberer Schnitt-Look."
+        )
+
+        # ButtonGroup macht die beiden exklusiv (sonst koennten beide
+        # gleichzeitig aktiv sein, wenn sie nicht im selben Parent stehen).
+        self._unused_clips_group = QButtonGroup(self)
+        self._unused_clips_group.addButton(self._unused_clips_disable_radio)
+        self._unused_clips_group.addButton(self._unused_clips_remove_radio)
+        # Default-Selection. Wird in set_session ggf. ueberschrieben.
+        self._unused_clips_disable_radio.setChecked(True)
+
+        self._unused_clips_disable_radio.toggled.connect(
+            self._on_unused_clips_toggle
+        )
+        self._unused_clips_remove_radio.toggled.connect(
+            self._on_unused_clips_toggle
+        )
+
+        radios.addWidget(self._unused_clips_disable_radio)
+        radios.addWidget(self._unused_clips_remove_radio)
+        radios.addStretch()
+        block_layout.addLayout(radios)
+        return frame
+
+    def _on_unused_clips_toggle(self, checked: bool):
+        """Schreibt den aktuellen Radio-Stand in den State."""
+        if not checked:
+            # Beide Radios feuern 'toggled' — uns interessiert nur das
+            # "neu eingeschaltete".
+            return
+        if self._state is None:
+            return
+        if self._unused_clips_remove_radio.isChecked():
+            self._state.unused_clips_mode = UNUSED_CLIPS_REMOVE
+        else:
+            self._state.unused_clips_mode = UNUSED_CLIPS_DISABLE
+
+    def _sync_unused_clips_toggle_from_state(self):
+        """Setzt die Radio-Selection nach State (z.B. nach set_session)."""
+        if self._state is None:
+            return
+        if self._state.unused_clips_mode == UNUSED_CLIPS_REMOVE:
+            self._unused_clips_remove_radio.setChecked(True)
+        else:
+            self._unused_clips_disable_radio.setChecked(True)
+
     def set_session(self, session, video_files):
         self.session = session
         self._state = build_assignment_state(session, video_files)
         self._render_rows()
+        self._sync_unused_clips_toggle_from_state()
         self._start_thumbnails(list(video_files))
 
     def _start_thumbnails(self, video_paths):
@@ -458,6 +573,8 @@ class AssignmentPage(QWidget):
         self._collect_into_state()
         self.session.folgenschnitt_mic_assignments = self._state.to_mic_assignments()
         self.session.folgenschnitt_camera_assignments = self._state.to_camera_assignments()
+        # Slice B Task 7: Toggle-Wert ueberlebt Apply + Persistenz (Task 6).
+        self.session.folgenschnitt_unused_clips_mode = self._state.unused_clips_mode
         # User has been through the assignment step: an empty result is now
         # a deliberate "incomplete", not a cue to fall back to defaults.
         self.session.folgenschnitt_assignment_applied = True
