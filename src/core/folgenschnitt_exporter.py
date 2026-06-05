@@ -25,7 +25,6 @@ class FolgenschnittXMLExporter(BaseExporter):
         total_frames = ms_to_frames(total_duration_ms, fps)
 
         video_paths = list(session.project.videos)
-        audio_paths = list(session.project.mic_tracks)
         camera_assignments = list(
             getattr(session, "folgenschnitt_camera_assignments", []) or []
         )
@@ -50,8 +49,10 @@ class FolgenschnittXMLExporter(BaseExporter):
             vid_w, vid_h = _probe_video_info(video_paths[0])
 
         sample_rate, bit_depth, channels = 48000, 16, 2
-        if audio_paths:
-            sample_rate, bit_depth, channels = _probe_audio_info(audio_paths[0])
+        if layout.audio_tracks:
+            sample_rate, bit_depth, channels = _probe_audio_info(
+                layout.audio_tracks[0].file_path
+            )
 
         gastname = session.project.guest_name
         xml_path = os.path.join(session.project.export_dir, f"Folgenschnitt - {gastname}.xml")
@@ -163,40 +164,48 @@ class FolgenschnittXMLExporter(BaseExporter):
             f.write('          </samplecharacteristics>\n')
             f.write('        </format>\n')
 
-            for track_idx, audio_path in enumerate(audio_paths):
+            for track_idx, track in enumerate(layout.audio_tracks):
+                audio_path = track.file_path
                 audio_file = os.path.basename(audio_path)
-                audio_name = os.path.splitext(audio_file)[0]
+                audio_name = track.name or os.path.splitext(audio_file)[0]
                 file_id = f"file-folgenschnitt-audio-{track_idx + 1}"
                 audio_file_ids[audio_path] = file_id
 
                 f.write('        <track>\n')
-                f.write(f'          <clipitem id="clipitem-folgenschnitt-a{track_idx + 1}">\n')
-                f.write(f'            <name>{escape(audio_name)}</name>\n')
-                f.write(f'            <duration>{total_frames}</duration>\n')
-                f.write(f'            {rate_block}\n')
-                f.write('            <start>0</start>\n')
-                f.write(f'            <end>{total_frames}</end>\n')
-                f.write('            <in>0</in>\n')
-                f.write(f'            <out>{total_frames}</out>\n')
-                f.write(f'            <file id="{file_id}">\n')
-                f.write(f'              <name>{escape(audio_file)}</name>\n')
-                f.write(f'              <pathurl>{_file_url(audio_path)}</pathurl>\n')
-                f.write(f'              {rate_block}\n')
-                f.write(f'              {tc_block}\n')
-                f.write('              <media>\n')
-                f.write('                <audio>\n')
-                f.write('                  <samplecharacteristics>\n')
-                f.write(f'                    <samplerate>{sample_rate}</samplerate>\n')
-                f.write(f'                    <depth>{bit_depth}</depth>\n')
-                f.write('                  </samplecharacteristics>\n')
-                f.write(f'                  <channelcount>{channels}</channelcount>\n')
-                f.write('                </audio>\n')
-                f.write('              </media>\n')
-                f.write('            </file>\n')
-                f.write('            <sourcetrack>\n')
-                f.write('              <mediatype>audio</mediatype>\n')
-                f.write('            </sourcetrack>\n')
-                f.write('          </clipitem>\n')
+                for clip_idx, clip in enumerate(track.clips, start=1):
+                    rec_start_f = ms_to_frames(clip.start_ms, fps)
+                    rec_end_f = ms_to_frames(clip.end_ms, fps)
+                    source_in_f = ms_to_frames(clip.in_ms, fps)
+                    source_out_f = ms_to_frames(clip.out_ms, fps)
+                    clip_dur_f = rec_end_f - rec_start_f
+
+                    f.write(f'          <clipitem id="clipitem-folgenschnitt-a{track_idx + 1}-{clip_idx}">\n')
+                    f.write(f'            <name>{escape(audio_name)}</name>\n')
+                    f.write(f'            <duration>{clip_dur_f}</duration>\n')
+                    f.write(f'            {rate_block}\n')
+                    f.write(f'            <start>{rec_start_f}</start>\n')
+                    f.write(f'            <end>{rec_end_f}</end>\n')
+                    f.write(f'            <in>{source_in_f}</in>\n')
+                    f.write(f'            <out>{source_out_f}</out>\n')
+                    f.write(f'            <file id="{file_id}">\n')
+                    f.write(f'              <name>{escape(audio_file)}</name>\n')
+                    f.write(f'              <pathurl>{_file_url(audio_path)}</pathurl>\n')
+                    f.write(f'              {rate_block}\n')
+                    f.write(f'              {tc_block}\n')
+                    f.write('              <media>\n')
+                    f.write('                <audio>\n')
+                    f.write('                  <samplecharacteristics>\n')
+                    f.write(f'                    <samplerate>{sample_rate}</samplerate>\n')
+                    f.write(f'                    <depth>{bit_depth}</depth>\n')
+                    f.write('                  </samplecharacteristics>\n')
+                    f.write(f'                  <channelcount>{channels}</channelcount>\n')
+                    f.write('                </audio>\n')
+                    f.write('              </media>\n')
+                    f.write('            </file>\n')
+                    f.write('            <sourcetrack>\n')
+                    f.write('              <mediatype>audio</mediatype>\n')
+                    f.write('            </sourcetrack>\n')
+                    f.write('          </clipitem>\n')
                 f.write('        </track>\n')
 
             f.write('      </audio>\n')
@@ -204,5 +213,10 @@ class FolgenschnittXMLExporter(BaseExporter):
             f.write('  </sequence>\n')
             f.write('</xmeml>\n')
 
+        if layout.audio_tracks and not layout.uses_mix:
+            session.status_update.emit(
+                "Folgenschnitt-XML enthält Mic-Spuren statt Mix — "
+                "Phasing möglich, Mix-Datei fehlt."
+            )
         session.status_update.emit(f"Folgenschnitt XML exported: {os.path.basename(xml_path)}")
         return xml_path

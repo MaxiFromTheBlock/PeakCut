@@ -197,6 +197,42 @@ def test_audio_tracks_are_continuous_for_full_sequence(tmp_export_dir):
         assert clip.find("out").text == str(ms_to_frames(180_000, 25))
 
 
+def test_audio_uses_only_mix_when_mix_is_available(tmp_export_dir):
+    session = _make_session(tmp_export_dir)
+    session.project.mic_tracks = [
+        "/material/MIC1.wav",
+        "/material/MIC2.wav",
+        "/material/Podcast Mix.wav",
+    ]
+
+    root = _parse_export(session)
+    audio_tracks = _tracks(root, "audio")
+    audio_clips = _clipitems(root, "audio")
+
+    assert len(audio_tracks) == 1
+    assert len(audio_clips) == 1
+    assert audio_clips[0].find("name").text == "Mix"
+    assert audio_clips[0].find("start").text == "0"
+    assert audio_clips[0].find("end").text == str(ms_to_frames(180_000, 25))
+    assert "Podcast Mix.wav" in audio_clips[0].find("file/name").text
+
+
+def test_audio_fallback_to_mics_emits_phasing_warning_when_mix_missing(tmp_export_dir):
+    session = _make_session(tmp_export_dir)
+    session.project.mic_tracks = ["/material/MIC1.wav", "/material/MIC2.wav"]
+
+    root = _parse_export(session)
+    audio_tracks = _tracks(root, "audio")
+
+    assert len(audio_tracks) == 2
+    messages = [
+        call.args[0]
+        for call in session.status_update.emit.call_args_list
+        if call.args
+    ]
+    assert any("Mic-Spuren statt Mix" in m for m in messages)
+
+
 def test_empty_decisions_return_empty_string(tmp_export_dir):
     session = _make_session(tmp_export_dir)
     session.folgenschnitt_edit_decisions = []
