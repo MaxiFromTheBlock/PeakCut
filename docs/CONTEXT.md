@@ -118,12 +118,13 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 ## Offene Slices (Stand 2026-06-03)
 
 Reihenfolge nach #71a-Merge (2026-05-25) und Fremdmaterial-Test (2026-06-01):
-1. **Slice B — Multi-Track-Folgenschnitt-XML** (IN AKTIVER BAUARBEIT
-   2026-06-03): Task 0-4 fertig (Pin-1, Contracts, Layout-Planung,
-   Audio-Quellenwahl, Multi-Track-Video im Exporter). Carl arbeitet
-   gerade an Task 5 (Audio Mix-only). Offen: Task 6 (Schema-v3),
-   Task 7 (UI-Toggle), Task 8 (Integration), Task 9 (Premiere-Smoke).
-   Default-Mode = disable. 566 Tests grün, Pin-1 stabil.
+1. **Slice B — Multi-Track-Folgenschnitt-XML** (CODE-FERTIG 2026-06-06):
+   Tasks 0-8 alle durch (Pin-1, Contracts, Layout-Planung, Audio-
+   Quellenwahl, Multi-Track-Video, Audio-Mix-only, Schema-v3, UI-Toggle,
+   Integration). Carl Pre-Smoke-Review grün. **Offen: nur noch Task 9
+   = Max' Premiere-Smoke** (1plus1 in Disable+Remove, HM-Sanity), dann
+   Carl-Schluss-Review, dann Merge. Default-Mode = disable.
+   593 Tests grün, Pin-1 stabil.
 2. **#76 Wiedergabe-UX** — Spec abgenommen 2026-05-21, Carl-Plan steht aus.
 3. **Slice A — Dialog-Totale Cross-Talk-Pass**: Totale bei Cross-Talk-
    Phasen einfügen, NICHT genereller Zeit-Pass. Inhaltliche

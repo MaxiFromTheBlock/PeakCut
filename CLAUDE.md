@@ -782,20 +782,34 @@ macht XML-Writer.
   für Disable-Mode-Clips. Negative-Offset-Policy unverändert
   (`duration == end-start == out-in`). Audio bewusst noch unangetastet
   bis Task 5.
-- [ ] **Task 5 — Audio im Exporter Mix-only** (Carl, in Arbeit).
+- [x] **Task 5 — Audio im Exporter Mix-only** (Carl, Commit `dac95f4`).
   `audio_routing.get_mix_track` → eine Mix-Spur. Fallback echte Mics
   mit Status-Hinweis.
-- [ ] **Task 6 — Schema-v3 Persistenz** (offen). `CURRENT_SCHEMA_VERSION
-  = 3`, `assignments.folgenschnitt_unused_clips_mode`, v1/v2-Bootstrap
-  mit Default, ungültiger Wert → Default + Warning.
-- [ ] **Task 7 — AssignmentPage Toggle-UI** (Claude). Radio-Buttons
-  Remove/Disable als Export-Options-Block über Status/Weiter.
-- [ ] **Task 8 — Integration/Regression** (gemeinsam).
+- [x] **Task 6 — Schema-v3 Persistenz** (Claude, Commit `976a60e`).
+  `CURRENT_SCHEMA_VERSION = 3`, `assignments.folgenschnitt_unused_clips_mode`
+  serialisiert + ueber `normalize_unused_clips_mode` hydratisiert.
+  v1/v2-Bootstrap mit Default, ungueltiger Wert → Default (silent).
+  Carl Gate C grün. P3 (Loader-Warnung statt silent fallback) bewusst
+  geparkt — gehoert spaeter zentral in Hub/Import-Refactor.
+- [x] **Task 7 — AssignmentPage Toggle-UI** (Claude, Commit `e19ab72`).
+  Eigener QFrame-Block "Export-Einstellungen" mit QRadioButtons
+  Disable/Remove + Tooltips, zwischen Status-Label und Weiter-Button
+  (NICHT im Kamera-Scroll-Bereich). `apply_to_session` schreibt
+  `session.folgenschnitt_unused_clips_mode` zusammen mit Assignments.
+- [x] **Task 8 — Integration/Regression** (Claude, Commit `061ccb7`).
+  End-to-End Disable + Remove (Save→Load→Export), Pin-Tests fuer
+  pipeline/decisions/loosening/audio_routing-API, Assignments+Mode
+  Roundtrip-Pin.
 - [ ] **Task 9 — Premiere-Smoke / Merge-Gate** (Max + Claude, Carl
-  Schluss-Review). 1plus1 in beiden Modi + HM-Sanity.
+  Schluss-Review). 1plus1 in beiden Modi + HM-Sanity. **Offen — Max'
+  manueller Test in PeakCut + Premiere.**
 
-**Test-Stand 2026-06-03 22:00:** 566 Full Suite grün auf develop,
-Pin-1 stabil.
+**Test-Stand 2026-06-06:** 593 Full Suite grün auf develop, Pin-1
+stabil. Carl Pre-Smoke-Review grün (keine P1/P2; ein P3 geparkt).
+Slice B ist Code-fertig.
+
+**Reproduktions-Material fuer Task 9:** `~/Desktop/Fremdproduktion/Material für Peakcut/`
+(Teil 1 + Teil 2) liegt lokal mit `.peakcut`-Akten vom 2026-06-01.
 
 ### Gesundheits-Check-Backlog — abgegrenzt 2026-05-17 (KEIN Feature)
 
