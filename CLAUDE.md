@@ -800,15 +800,34 @@ macht XML-Writer.
   End-to-End Disable + Remove (Save→Load→Export), Pin-Tests fuer
   pipeline/decisions/loosening/audio_routing-API, Assignments+Mode
   Roundtrip-Pin.
-- [ ] **Task 9 — Premiere-Smoke / Merge-Gate** (Max + Claude, Carl
-  Schluss-Review). 1plus1 in beiden Modi + HM-Sanity. **Offen — Max'
-  manueller Test in PeakCut + Premiere.**
+- [ ] **Task 9 — Premiere-Smoke / Merge-Gate** (Max + Carl-Schluss-Review).
+  XMLs sind vorbereitet (siehe unten). Offen ist Max' Premiere-Import
+  + Sichtung beider Modi. HM-Sanity optional.
 
-**Test-Stand 2026-06-06:** 593 Full Suite grün auf develop, Pin-1
+**Test-Stand 2026-06-10:** 593 Full Suite grün auf develop, Pin-1
 stabil. Carl Pre-Smoke-Review grün (keine P1/P2; ein P3 geparkt).
 Slice B ist Code-fertig.
 
-**Reproduktions-Material fuer Task 9:** `~/Desktop/Fremdproduktion/Material für Peakcut/`
+**Premiere-Smoke-Vorbereitung 2026-06-10** (Commit `b54c23e`):
+`scripts/smoke_multitrack_export.py` exportiert die Folgenschnitt-XML
+aus der Teil 2-`.peakcut`-Akte vom 2026-06-01 in beiden Modi. Vermeidet
+dass Max die App nur fuer den Toggle-Wechsel mit Re-Zuordnung neu
+durchklicken muss. Beide XMLs liegen in:
+- `~/Downloads/Teil 2 - Smoke disable/Folgenschnitt - Teil 2.xml`
+  (135 Decisions, 135 disabled-Clips, V1 Totale + V2 Jan weit +
+   V3 Tim weit + Mix)
+- `~/Downloads/Teil 2 - Smoke remove/Folgenschnitt - Teil 2.xml`
+  (135 Decisions, 0 disabled-Clips, V2 Jan 67 mit Luecken,
+   V3 Tim 68 mit Luecken, V1 Totale durchgehend, Mix)
+Max importiert beide in frische Premiere-Projekte, schaut Layout +
+Playback (insbesondere: rendert Premiere disabled-Clips wirklich nicht?).
+
+Bei Premiere-Zicken im Disable-Modus: Default kippt auf Remove
+(Carl-Fallback-Strategie aus Spec), Architektur unveraendert.
+
+**App-UI-Smoke bleibt getrennt** — kann nach dem Merge laufen.
+
+**Reproduktions-Material:** `~/Desktop/Fremdproduktion/Material für Peakcut/`
 (Teil 1 + Teil 2) liegt lokal mit `.peakcut`-Akten vom 2026-06-01.
 
 ### Gesundheits-Check-Backlog — abgegrenzt 2026-05-17 (KEIN Feature)
