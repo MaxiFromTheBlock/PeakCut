@@ -19,9 +19,12 @@ DEFAULTS = {
     "lut_path": "",
     # #76 Wiedergabe-UX: aktiver Wiedergabe-Modus key/speak/smart.
     "playback_mode": "key",
-    # #76 Drift-Toleranz Ton<->Bild (ms). Default = Ziel; finaler Wert aus
-    # dem Drift-Spike (scripts/verify_qmediaplayer_position_resolution.py).
-    "playback_drift_tolerance_ms": 40,
+    # #76 Drift-Toleranz Ton<->Bild (ms). Empirisch aus dem Drift-Spike
+    # (2026-06-15, Teil-2-Material): zwei QMediaPlayer driften roh ~p95 94ms/
+    # max 116ms, position()-Kadenz ~50-100ms -> 40ms liegt unter dem
+    # Granularitaetsboden (Carls Flag 1 bestaetigt). Provisorisch 100ms
+    # (Carl-Vorabfreigabe); finaler Wert aus dem korrigierten Task-9-Lauf.
+    "playback_drift_tolerance_ms": 100,
     # Roadmap #3 — Smarte Clip-Grenzen (provisorisch, kalibrierbar).
     # smart_boundary_enabled=False = Notbremse: Stufe A+B laufen nicht.
     "smart_boundary_enabled": True,

@@ -13,7 +13,15 @@ Gebaut von Claude, TDD, je eigener Commit (`1f797ff..38c11b9` auf develop):
 - [x] **Task 1** playback_modes (Gate A). [x] **Task 2** playback_windows (Gate B).
 - [x] **Task 3** playback_audio_source (Gate C) + **P2-Fix** (Mic-Quellen-Fingerprint, Carl-Review).
 - [x] **Task 4** PeakVideoPreview Clip-API (Gate D).
-- [x] **Task 4.5** Drift-Spike-Skript (`scripts/verify_qmediaplayer_position_resolution.py`) — **Max muss es an echtem Material laufen lassen** → legt finale Schwelle fest (Gate D2).
+- [x] **Task 4.5** Drift-Spike (`scripts/verify_qmediaplayer_position_resolution.py`)
+  — **gelaufen 2026-06-15** an Teil-2-Material: Start-Latenz 60ms,
+  position()-Kadenz Audio ~99ms / Video ~51ms, **roh-Drift (free-run, ohne
+  Korrektur) p95 94ms / max 116ms**. Befund: 40ms liegt unter dem
+  Granularitätsboden (Carls Flag 1 bestätigt) → Schwelle provisorisch **100ms**
+  (`config.playback_drift_tolerance_ms`, Carl-Vorabfreigabe). Roh ≠ korrigiert:
+  der finale Wert kommt aus dem korrigierten Task-9-Lauf an einer echten Folge
+  mit gültigen In/Out-Punkten. **Offen für Carl-Methodik: ist 100ms (≈2,5 Frames)
+  als Boundary-Beurteilungs-Vorschau ok, oder enger korrigieren (mehr Bild-Snaps)?**
 - [x] **Task 5** ReviewPlaybackController (Gate E) — **wartet auf Carl-Cross-Review**, bevor die ReviewPage-Integration (Task 6) startet.
 - [x] **Task 9** echtes Drift-Messskript (`scripts/verify_playback_sync_real.py`) — Max läuft es nach der Integration (Gate I).
 - [ ] **Task 6** ReviewPage-Integration — **gesperrt bis Carl-Gate-E-OK** (riskanteste Naht: session.mode-Migration key/speak/smart, sinn_btn raus, play_current aus dem Review-Pfad).
