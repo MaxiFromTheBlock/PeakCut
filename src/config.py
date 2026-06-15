@@ -17,6 +17,8 @@ DEFAULTS = {
     "fps": 25,
     "tts_voice": "Anna",
     "lut_path": "",
+    # #76 Wiedergabe-UX: aktiver Wiedergabe-Modus key/speak/smart.
+    "playback_mode": "key",
     # Roadmap #3 — Smarte Clip-Grenzen (provisorisch, kalibrierbar).
     # smart_boundary_enabled=False = Notbremse: Stufe A+B laufen nicht.
     "smart_boundary_enabled": True,
