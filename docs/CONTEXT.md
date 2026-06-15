@@ -10,7 +10,7 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 ## Tech-Stack
 
 - Python 3.11 + PyQt6
-- 261 Tests, CI via GitHub Action (libegl1/libgl1-Fix — CI war seit Tagen rot)
+- 621 Tests, CI via GitHub Action (libegl1/libgl1-Fix — CI war seit Tagen rot)
 - Distribution: Launcher-App in /Applications, ruft Repo-Code direkt auf
   (PyInstaller-Bundle-Strategie geparkt — siehe Distribution-Sektion in CLAUDE.md)
 
@@ -115,7 +115,17 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 2. UI Revamp (Figma → PyQt6, oder Electron?)
 3. Versionsnummer + Code Signing (geparkt — erst noetig wenn PeakCut wieder extern verteilt wird)
 
-## Offene Slices (Stand 2026-06-03)
+## Offene Slices (Stand 2026-06-15)
+
+**Fundament-Health-Check 2026-06-15** (`docs/specs/2026-06-15-state-of-peakcut-health-check.md`):
+Urteil mostly-solid. **Daten-Integritäts-Riegel GELANDET auf develop** (atomare
+Writes DATA-1, Schema-Policy DATA-2, R2-Ausricht-Riegel KI-2, speaker_activity-
+Mix-Hub AUD-1a — 621 Tests grün, Pin-1 stabil; Plan:
+`docs/plans/2026-06-15-data-integritaets-riegel.md`). Reconciled Reihenfolge
+(Carl+Claude): Slice-B-Merge → #76 Wiedergabe (Gate vor jedem KI-Tuning) →
+#77 Import-Refactor (zieht den restlichen Klassifizierer-Merge mit) → #70
+Prompt-Tuning → Slice A (halb-automatisch) → Export-Orchestrierung aus dem GUI
+vor NAS. Tickende Uhr: pydub/audioop bei Python 3.13 + Python-Pin nicht erzwungen.
 
 Reihenfolge nach #71a-Merge (2026-05-25) und Fremdmaterial-Test (2026-06-01):
 1. **Slice B — Multi-Track-Folgenschnitt-XML** (CODE-FERTIG 2026-06-06,

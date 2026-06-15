@@ -998,6 +998,40 @@ Produkt):**
 
 ## Changelog
 
+### Daten-Integritäts-Riegel (auf develop, 2026-06-15)
+
+Erstes Paket nach dem Fundament-Health-Check
+(`docs/specs/2026-06-15-state-of-peakcut-health-check.md`, Urteil mostly-solid).
+Carl-Plan + Claude-Cross-Review (`docs/plans/2026-06-15-data-integritaets-riegel.md`),
+TDD, getrennte Commits + Gates. 593 → 621 Tests grün, Pin-1 byte-identisch stabil.
+
+- **DATA-1 (`7f032ad`):** neues neutrales Modul `core/atomic_io.py`
+  (`write_json_atomic`: tmp im selben Ordner → flush → fsync → `os.replace`
+  → best-effort dir-fsync; bei Abbruch tmp weg, alte Datei byte-identisch).
+  `save_project_archive` + `write_transcript_json` laufen darüber — ein Abbruch
+  mitten im Schreiben kann die zentrale `.peakcut/project.json` nicht mehr
+  truncieren (Risiko steigt auf NAS, G3).
+- **DATA-2 (`f6e9054`):** Schema-Versions-Policy. Zukunfts-Akte
+  (schema_version > CURRENT) wird beim **Laden** abgelehnt UND beim
+  **Speichern** nicht überschrieben (`_assert_archive_write_allowed` prüft die
+  vorhandene Datei) — sonst schneidet ein älterer Client beim nächsten Autosave
+  neuere Felder still weg. Bewusste Vertragsänderung: der alte „future loads
+  best effort"-Test ist gesplittet (Zukunft lehnt ab, uralt lädt).
+- **KI-2 (`3f86de8`):** R2-Ausricht-Riegel zentral in `prepare_smart_boundaries`.
+  Drift (Text-Spanne vs. Audiodauer > Toleranz) → `INFRA_FEHLT`, Decider nicht
+  aufgerufen, keine Kandidaten/Scores → die G5-`peak_decisions`-Sammlung wird
+  nicht mit zeitlich falschen Sinnabschnitten vergiftet. Nutzt die bestehende
+  `INFRA_FEHLT`-Semantik (kein neuer Contract).
+- **AUD-1a (`2875fa0`):** `speaker_activity._is_speaker_mic_candidate` erkennt
+  Mix über den zentralen `audio_routing.is_mix_track` (token-bewusst) statt
+  naivem `'mix' in basename` — `mixer_recording.wav` nicht mehr fälschlich als
+  Mix ausgeschlossen. keyboard/keys/klavier bleiben lokal bis #77;
+  `guest_name`/`_categorize_files` unangetastet (Pin-1/#77).
+
+Bewusst NICHT hier: Export-Orchestrierung raus aus GUI (ARCH-1 → vor NAS),
+großer Klassifizierer-Merge + `_categorize_files`/`guest_name` (→ #77).
+**Offen vor evtl. main-Merge:** Carl-Schluss-Cross-Review + Slice-B-Premiere-Smoke.
+
 ### #71a Audio-Routing-Mini-Slice (auf main gelandet 2026-05-25)
 
 Phasing-Wurzel-Fix für den Keyboardstellen-Cutter-MP3 und die Review-
