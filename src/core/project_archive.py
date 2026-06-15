@@ -182,6 +182,52 @@ def build_archive_payload(session, material_root, speaker_activity_csv_ref=None)
     }
 
 
+def _payload_schema_version(payload):
+    """schema_version als int. Fehlt/None -> 1 (alte Akte). Ungültiger
+    Wert -> kontrollierter ProjectArchiveError (kein roher ValueError)."""
+    raw = payload.get("schema_version", 1)
+    if raw is None:
+        return 1
+    try:
+        return int(raw)
+    except (TypeError, ValueError) as e:
+        raise ProjectArchiveError(
+            f"Projektakte hat ungültige schema_version: {raw!r}") from e
+
+
+def _assert_schema_readable(payload):
+    """DATA-2: Eine Akte aus der Zukunft NICHT laden — sonst würde ein
+    älterer Client beim nächsten Autosave neuere Felder still wegschneiden."""
+    v = _payload_schema_version(payload)
+    if v > CURRENT_SCHEMA_VERSION:
+        raise ProjectArchiveError(
+            f"Projektakte ist neuer (schema_version={v}) als dieser "
+            f"PeakCut-Stand (max {CURRENT_SCHEMA_VERSION}). Nicht laden, "
+            f"um keine Daten zu verlieren — bitte PeakCut aktualisieren.")
+
+
+def _assert_archive_write_allowed(archive_path):
+    """DATA-2: Nicht über eine vorhandene Zukunfts-Akte schreiben. Sonst
+    frisst der Normalflow/Autosave eine v-neuere Akte, nachdem das Laden
+    sie bereits abgelehnt hat. Kaputte/unlesbare Akte -> Schreiben darf
+    reparieren."""
+    if not os.path.isfile(archive_path):
+        return
+    try:
+        with open(archive_path) as f:
+            existing = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return
+    try:
+        v = _payload_schema_version(existing)
+    except ProjectArchiveError:
+        return  # ungültige Version in alter Datei -> Schreiben repariert
+    if v > CURRENT_SCHEMA_VERSION:
+        raise ProjectArchiveError(
+            f"Vorhandene Projektakte ist neuer (schema_version={v}) als "
+            f"dieser PeakCut-Stand — nicht überschreiben.")
+
+
 def parse_archive_payload(payload, fallback_config):
     if not isinstance(payload, dict):
         raise ProjectArchiveError("Projektakte ist kein gültiges Objekt")
@@ -190,6 +236,7 @@ def parse_archive_payload(payload, fallback_config):
         raise ProjectArchiveError(
             f"Projektakte unvollständig — fehlende Sektion(en): "
             f"{', '.join(missing)}")
+    _assert_schema_readable(payload)
     cfg = dict(fallback_config or {})
     cfg.update(payload.get("config", {}) or {})
     return {
@@ -223,6 +270,7 @@ def save_project_archive(session, root=None):
         root = material_root(_media_paths(project), project.keyboard_track)
     archive_dir = os.path.join(root, ARCHIVE_DIR)
     os.makedirs(archive_dir, exist_ok=True)
+    _assert_archive_write_allowed(os.path.join(archive_dir, ARCHIVE_FILE))
 
     csv_ref = None
     src_csv = getattr(session, "speaker_activity_csv", None)

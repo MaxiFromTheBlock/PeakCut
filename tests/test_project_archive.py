@@ -68,13 +68,23 @@ def test_unknown_future_fields_are_ignored():
     assert result["project"]["guest_name"] == "Hartmut Rosa"
 
 
-def test_lower_or_newer_schema_with_required_fields_loads_best_effort():
+def test_future_schema_refused_on_load():
+    # DATA-2 (2026-06-15): bewusste Vertragsänderung — eine Akte aus der
+    # Zukunft wird NICHT mehr "best effort" geladen (sonst still wegge-
+    # schnittene Felder beim nächsten Autosave). Details:
+    # docs/plans/2026-06-15-data-integritaets-riegel.md
     payload = build_archive_payload(_FakeSession(), material_root="/m")
     payload["schema_version"] = 999  # zukünftige Version
-    res_new = parse_archive_payload(payload, fallback_config={"fps": 25})
-    assert res_new["project"]["guest_name"] == "Hartmut Rosa"
+    try:
+        parse_archive_payload(payload, fallback_config={"fps": 25})
+        assert False, "Zukunfts-Akte muss abgelehnt werden"
+    except ProjectArchiveError:
+        pass
 
-    payload["schema_version"] = 0  # uralt
+
+def test_older_schema_with_required_fields_loads_best_effort():
+    payload = build_archive_payload(_FakeSession(), material_root="/m")
+    payload["schema_version"] = 0  # uralt -> lädt weiter
     res_old = parse_archive_payload(payload, fallback_config={"fps": 25})
     assert res_old["project"]["guest_name"] == "Hartmut Rosa"
 
