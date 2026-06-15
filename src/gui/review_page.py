@@ -19,10 +19,12 @@ from core.sinnabschnitt_exporter import (
 
 import config
 from utils import LUTS_DIR, ms_to_mmss, get_logger
-from core.playback import stop_playback, is_playing
+from core.playback_modes import label_for_mode
+from core.playback_windows import build_playback_window
+from core.playback_audio_source import resolve_playback_audio_source
+from .review_playback_controller import ReviewPlaybackController
 
 _log = get_logger("peakcut.review")
-_PLAYBACK_POLL_MS = 200
 
 
 class ResettableBrightnessSlider(QSlider):
@@ -60,10 +62,9 @@ class ReviewPage(QWidget):
         # oder durch einen neuen Lauf überschrieben wird.
         self._smart_status_text = ""
 
-        # Playback poll timer
-        self._play_timer = QTimer()
-        self._play_timer.setInterval(_PLAYBACK_POLL_MS)
-        self._play_timer.timeout.connect(self._poll_playback)
+        # #76: Wiedergabe läuft jetzt über den ReviewPlaybackController
+        # (in _setup_ui erzeugt, sobald video_preview existiert).
+        self._controller = None
 
         self._build_ui()
 
@@ -127,6 +128,13 @@ class ReviewPage(QWidget):
         self.video_preview.setMinimumHeight(350)
         layout.addWidget(self.video_preview, stretch=1)
 
+        # #76: gemeinsame Ton+Bild-Wiedergabe (Audio-Master).
+        self._controller = ReviewPlaybackController(
+            self.video_preview,
+            tolerance_ms=config.get("playback_drift_tolerance_ms"))
+        self._controller.finished.connect(self._stop_play_state)
+        self._controller.error.connect(self.status_message.emit)
+
         # Timeline slider
         timeline_row = QHBoxLayout()
         timeline_row.setSpacing(8)
@@ -166,12 +174,6 @@ class ReviewPage(QWidget):
         self.next_btn.setMinimumWidth(90)
         self.next_btn.clicked.connect(self.on_next)
         controls.addWidget(self.next_btn)
-
-        # Roadmap #3 Verifizierungs-Vorschau (Gate G: nice-to-have)
-        self.sinn_btn = QPushButton("Sinnabschnitt ▶")
-        self.sinn_btn.setMinimumWidth(120)
-        self.sinn_btn.clicked.connect(self._on_play_sinnabschnitt)
-        controls.addWidget(self.sinn_btn)
 
         controls.addSpacing(20)
 
@@ -249,6 +251,8 @@ class ReviewPage(QWidget):
             self.video_preview.screenshot_done.connect(self._on_screenshot_done)
 
         self._populate_lut_combo()
+        # #76: Modus-Label auf den geladenen Stand.
+        self.mode_btn.setText(f"Modus: {label_for_mode(session.mode)}")
         # #3-Rev Task 8: Status + Button-Gate auf den geladenen Stand.
         self._refresh_smart_status()
         self._refresh_sinn_btn()
@@ -332,9 +336,11 @@ class ReviewPage(QWidget):
         if self._video_files:
             self.video_preview.set_position(peak.position_ms)
 
-        self.session.play_current()
-        self._start_play_state()
-        # #3-Rev Task 8: Sinnabschnitt-▶ live an den neuen Peak hängen.
+        # #76: Peak-Wechsel stoppt laufende Wiedergabe, kein Auto-Play;
+        # statischer Frame steht (set_position oben). Play-Verfuegbarkeit
+        # fuer den neuen Peak aktualisieren.
+        self._controller.stop()
+        self._stop_play_state()
         self._refresh_sinn_btn()
 
     def on_back(self):
@@ -346,28 +352,33 @@ class ReviewPage(QWidget):
             self.navigate_to_peak(self.session.current_peak + 1)
 
     def on_play(self):
+        # #76: dispatcht den aktuellen Modus (key/speak/smart) ueber den
+        # Controller (Audio-Master + synchrones Video). Disabled-Fenster ->
+        # lauter Status, kein Start.
         if not self.session:
             return
-        if self._is_playing:
-            stop_playback()
+        if self._controller.is_playing():
+            self._controller.stop()
             self._stop_play_state()
-        else:
-            self.session.play_current()
-            self._start_play_state()
+            return
+        window = build_playback_window(self.session, self.session.mode)
+        if window.disabled:
+            self.status_message.emit(window.disabled_reason)
+            return
+        source = resolve_playback_audio_source(self.session, window)
+        if source.disabled:
+            self.status_message.emit(source.disabled_reason)
+            return
+        self._controller.play(window, source)
+        self._start_play_state()
 
     def _start_play_state(self):
         self._is_playing = True
         self.play_btn.setText("■ Stop")
-        self._play_timer.start()
 
     def _stop_play_state(self):
         self._is_playing = False
         self.play_btn.setText("▶ Play")
-        self._play_timer.stop()
-
-    def _poll_playback(self):
-        if not is_playing():
-            self._stop_play_state()
 
     def on_ignore(self):
         if not self.session:
@@ -380,12 +391,17 @@ class ReviewPage(QWidget):
         self.session_changed.emit()
 
     def _on_mode_toggle(self):
-        if self.session:
-            self.session.switch_mode()
-            mode_name = "Keyboard" if self.session.mode == "keyboard" else "Mikrofon"
-            self.status_message.emit(f"Mode: {mode_name}")
-            self.session.play_current()
-            self._start_play_state()
+        # #76: zyklischer Modus-Wechsel key/speak/smart, kein Auto-Play.
+        # Persistiert den Modus, aktualisiert Label + Play-Verfuegbarkeit.
+        if not self.session:
+            return
+        self._controller.stop()
+        self._stop_play_state()
+        self.session.switch_mode()
+        config.set_value("playback_mode", self.session.mode)
+        self.mode_btn.setText(f"Modus: {label_for_mode(self.session.mode)}")
+        self.status_message.emit(f"Modus: {label_for_mode(self.session.mode)}")
+        self._refresh_sinn_btn()
 
     # ══════════════════════════════════════════════════════════════
     # Screenshot
@@ -471,7 +487,8 @@ class ReviewPage(QWidget):
         if not self.session:
             return
 
-        stop_playback()
+        self._controller.stop()
+        self._stop_play_state()
         self.export_btn.setEnabled(False)
         self.status_message.emit("Export läuft...")
 
@@ -661,53 +678,19 @@ class ReviewPage(QWidget):
             getattr(self, "_smart_status_text", "") or "")
 
     def _refresh_sinn_btn(self):
-        """#3-Rev Task 8 / R5: Sinnabschnitt-▶ disabled bis Kandidat
-        für den aktuellen Drücker `score is not None` hat; Tooltip
-        erklärt den Grund."""
+        """#76 (historischer Name): Play-Verfügbarkeit für den aktuellen
+        Modus aktualisieren. Smart ohne gültigen Kandidaten -> Play disabled
+        + Tooltip (Modus bleibt wählbar); Key/Speak nur bei fehlender Quelle
+        disabled. Der frühere Sinnabschnitt-Button ist entfallen (#76)."""
         session = getattr(self, "session", None)
         peaks = getattr(session, "peaks", None) if session else None
         if not peaks:
-            self.sinn_btn.setEnabled(False)
-            self.sinn_btn.setToolTip("Kein Drücker ausgewählt.")
+            self.play_btn.setEnabled(False)
+            self.play_btn.setToolTip("Kein Drücker ausgewählt.")
             return
-        idx = getattr(session, "current_peak", 0)
-        if not (0 <= idx < len(peaks)):
-            self.sinn_btn.setEnabled(False)
-            self.sinn_btn.setToolTip("Kein Drücker ausgewählt.")
-            return
-        pid = peaks[idx].index
-        cands = getattr(session, "clip_candidates", []) or []
-        cand = next(
-            (c for c in cands
-             if getattr(c, "peak_id", None) == pid
-             and getattr(c, "score", None) is not None), None)
-        if cand is not None:
-            self.sinn_btn.setEnabled(True)
-            self.sinn_btn.setToolTip(
-                "Sinnabschnitt dieses Drückers abspielen.")
-            return
-        self.sinn_btn.setEnabled(False)
-        # Reihenfolge: erst die Aussage, die am meisten erklärt.
-        # `_smart_ready` (Ergebnisse liegen vor, dieser Drücker hat
-        # nur keinen) ist informativer als generelle Transkript-Zustände.
-        if getattr(self, "_smart_ready", False):
-            self.sinn_btn.setToolTip(
-                "Für diesen Drücker liegt kein Sinnabschnitt vor — "
-                "Standard-Fenster wird verwendet.")
-        elif getattr(self, "_smart_worker", None) is not None:
-            self.sinn_btn.setToolTip(
-                "Sinnabschnitte werden gerade berechnet…")
-        elif getattr(session, "transcript_error", None) is not None:
-            self.sinn_btn.setToolTip(
-                "Transkript fehlt oder ist kaputt — keine Sinnabschnitte.")
-        elif (getattr(session, "transcript", None) is None
-              and not getattr(session, "transcript_ref", None)):
-            self.sinn_btn.setToolTip(
-                "Warte auf Transkription, bevor Sinnabschnitte berechnet "
-                "werden können.")
-        else:
-            self.sinn_btn.setToolTip(
-                "Sinnabschnitte stehen noch nicht zur Verfügung.")
+        window = build_playback_window(session, getattr(session, "mode", "key"))
+        self.play_btn.setEnabled(not window.disabled)
+        self.play_btn.setToolTip(window.disabled_reason if window.disabled else "")
 
     def _maybe_write_sinnabschnitt_artifacts(self):
         """#3-Rev Task 7: Zusatzdateien (TXT/XML) GENAU dann schreiben,
@@ -727,33 +710,6 @@ class ReviewPage(QWidget):
                     f"Sinnabschnitte-Export übersprungen: {e}")
         self._sinnabschnitt_artifacts_written = True
 
-    def _on_play_sinnabschnitt(self):
-        """Verifizierungs-Vorschau: spielt den smarten Sinnabschnitt
-        des aktuellen Drückers. Kein Kandidat -> Hinweis, kein Crash
-        (Gate G: nice-to-have, bricht nie etwas)."""
-        if not self.session or not getattr(self.session, "peaks", None):
-            return
-        idx = self.session.current_peak
-        if not (0 <= idx < len(self.session.peaks)):
-            return
-        pid = self.session.peaks[idx].index
-        cand = next((c for c in getattr(self.session, "clip_candidates", [])
-                     if c.peak_id == pid and c.score is not None), None)
-        if cand is None:
-            self.status_message.emit(
-                "Kein Sinnabschnitt für diesen Drücker — Standard-Fenster.")
-            return
-        b = cand.boundary
-        dur_s = (b.end_ms - b.start_ms) // 1000
-        # Laufende Audio-Vorschau stoppen, bevor die Video-Vorschau
-        # startet (sonst doppelte Wiedergabe) — Carl-UX-Notiz Gate G.
-        stop_playback()
-        self._stop_play_state()
-        self.video_preview.play_from(b.start_ms, b.end_ms)
-        self.status_message.emit(
-            f"Sinnabschnitt: {dur_s}s · Konfidenz {cand.score} · "
-            f"{cand.reason}")
-
     def _on_export_error(self, msg):
         _log.error("Export error: %s", msg)
         self.export_btn.setEnabled(True)
@@ -767,7 +723,8 @@ class ReviewPage(QWidget):
 
     def cleanup(self):
         """Stop timers and workers. Called from MainWindow.closeEvent."""
-        self._play_timer.stop()
+        if getattr(self, "_controller", None) is not None:
+            self._controller.cleanup()
         self.video_preview.cleanup()
         if self._export_worker and self._export_worker.isRunning():
             self._export_worker.wait(3000)

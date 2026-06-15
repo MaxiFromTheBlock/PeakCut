@@ -172,8 +172,10 @@ def test_set_session_invokes_maybe_start():
         _maybe_start_smart_worker=lambda: called.setdefault("yes", True),
         _refresh_smart_status=lambda: None,
         _refresh_sinn_btn=lambda: None,
+        mode_btn=types.SimpleNamespace(setText=lambda t: None),
         camera_label=types.SimpleNamespace(setText=lambda t: None))
-    session = types.SimpleNamespace(folgenschnitt_camera_assignments=[])
+    session = types.SimpleNamespace(folgenschnitt_camera_assignments=[],
+                                    mode="key")
     ReviewPage.set_session(fs, session, [])
     assert called.get("yes") is True
 

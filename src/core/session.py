@@ -6,6 +6,7 @@ from pydub import AudioSegment
 from utils import parse_timecode_to_ms
 
 from .audio_routing import get_speech_audio_segment
+from .playback_modes import normalize_playback_mode, next_playback_mode
 from .project import PeakCutProject
 from .peak import Peak
 from .playback import play_audio
@@ -43,7 +44,8 @@ class PeakCutSession:
         # Peak state
         self.peaks: list[Peak] = []
         self.current_peak: int = 0
-        self.mode: str = "keyboard"
+        # #76: Wiedergabe-Modus key/speak/smart (aus Config, normalisiert).
+        self.mode: str = normalize_playback_mode(config.get("playback_mode"))
 
         # Audio data
         self.keyboard_audio: AudioSegment | None = None
@@ -116,9 +118,9 @@ class PeakCutSession:
         play_audio(segment)
 
     def switch_mode(self):
-        """Toggle between keyboard and mic mode."""
-        self.mode = "mic" if self.mode == "keyboard" else "keyboard"
-        self.play_current()
+        """#76: zyklischer Modus-Wechsel key -> speak -> smart. KEIN Auto-Play
+        mehr — die Wiedergabe steuert die ReviewPage über den Controller."""
+        self.mode = next_playback_mode(self.mode)
 
     def _bootstrap_clip_candidates(self):
         """Roadmap #2: pro Peak ein ClipCandidate (nicht ignoriert ->
@@ -246,7 +248,7 @@ class PeakCutSession:
         self.speaker_activity_csv = results.get("speaker_activity_csv")
 
         self.current_peak = 0
-        self.mode = "keyboard"
+        self.mode = normalize_playback_mode(self.mode)
 
     def load_audio_lazy(self):
         """Load audio segments on demand (after analysis results are loaded).

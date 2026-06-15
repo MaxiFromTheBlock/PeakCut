@@ -221,10 +221,12 @@ def test_set_session_resets_barrier_flags():
         _refresh_smart_status=lambda: None,
         _refresh_sinn_btn=lambda: None,
         camera_label=types.SimpleNamespace(setText=lambda t: None),
+        mode_btn=types.SimpleNamespace(setText=lambda t: None),
         _base_export_done_for_run=True,
         _smart_ready=True,
         _sinnabschnitt_artifacts_written=True)
-    session = types.SimpleNamespace(folgenschnitt_camera_assignments=[])
+    session = types.SimpleNamespace(folgenschnitt_camera_assignments=[],
+                                    mode="key")
     ReviewPage.set_session(fs, session, [])
     assert fs._base_export_done_for_run is False
     assert fs._smart_ready is False
