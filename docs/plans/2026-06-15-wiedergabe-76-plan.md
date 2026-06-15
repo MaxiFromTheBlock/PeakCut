@@ -27,8 +27,15 @@ Gebaut von Claude, TDD, je eigener Commit (`1f797ff..38c11b9` auf develop):
   corrected-Signal). Controller-Sanity-Gate (Task 9 an Teil-2, key-Modus)
   **BESTANDEN: Restdrift max 85ms ≤ 100ms, 6 Korrekturen**. → Task 6 frei.
 - [x] **Task 9** echtes Drift-Messskript (`scripts/verify_playback_sync_real.py`) — Max läuft es nach der Integration (Gate I).
-- [ ] **Task 6** ReviewPage-Integration — **gesperrt bis Carl-Gate-E-OK** (riskanteste Naht: session.mode-Migration key/speak/smart, sinn_btn raus, play_current aus dem Review-Pfad).
-- [ ] **Task 7** Session/Legacy entkoppeln. [ ] **Task 8** UI-State. [ ] **Task 10** Schluss-Gate.
+- [x] **Task 6+7** ReviewPage-Integration + session.mode-Migration: Controller-Dispatch
+  key/speak/smart, sinn_btn + _on_play_sinnabschnitt raus, Auto-Play raus, _on_export
+  stoppt den Controller, session.mode aus Config normalisiert, switch_mode zyklt ohne
+  Auto-Play. **Gate F: wartet auf Carl-Cross-Review.** Rest-Cleanup: play_current formal
+  entfernen (ist bereits raus aus dem Review-Pfad, Gate G erfüllt).
+- [x] **Task 8** UI-State weitgehend in Task 6 gefaltet (Play ▶/■, Modus-Label Key/Speak/
+  Smart, Smart-ohne-Kandidat -> Play disabled + Tooltip).
+- [ ] **Task 10** Schluss-Gate: **Max-App-Smoke** (key/speak/smart synchron in der echten
+  App) + Task 9 an echter Folge -> finale Drift-Schwelle; dann Merge. 681 Tests grün.
 
 Volle Suite zuletzt 674 grün. Drift-Toleranz config-gesteuert
 (`playback_drift_tolerance_ms=40`, finaler Wert aus dem Spike).
