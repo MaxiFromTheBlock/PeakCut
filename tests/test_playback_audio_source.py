@@ -110,3 +110,30 @@ def test_render_is_cached(tmp_path, monkeypatch):
     src2 = resolve_playback_audio_source(s, w)
     assert src1.path == src2.path
     assert calls["n"] == 1  # zweiter Aufruf nutzt die gecachte WAV
+
+
+def test_cache_key_changes_when_mic_set_changes(tmp_path, monkeypatch):
+    # P2 (Carl 2026-06-15): andere Mic-Auswahl, gleiches Keyboard+Fenster
+    # -> anderer Preview-Pfad (sonst stale Audio).
+    s = _session(tmp_path, with_mix=False)
+    monkeypatch.setattr("core.audio_routing.get_speech_audio_segment",
+                        lambda session, a, b: AudioSegment.silent(b - a))
+    w = PlaybackWindow("speak", 50000, 51000)
+    p1 = resolve_playback_audio_source(s, w).path
+    mic2 = _touch(tmp_path / "ep" / "MIC2.wav")
+    s.project.set_files(s.project.keyboard_track, [mic2], list(s.project.videos))
+    p2 = resolve_playback_audio_source(s, w).path
+    assert p1 != p2
+
+
+def test_cache_key_changes_when_mic_content_changes(tmp_path, monkeypatch):
+    # Geänderter Mic-Inhalt (size/mtime) -> anderer Key -> Neu-Render.
+    s = _session(tmp_path, with_mix=False)
+    monkeypatch.setattr("core.audio_routing.get_speech_audio_segment",
+                        lambda session, a, b: AudioSegment.silent(b - a))
+    w = PlaybackWindow("speak", 50000, 51000)
+    p1 = resolve_playback_audio_source(s, w).path
+    with open(s.project.mic_tracks[0], "wb") as f:
+        f.write(b"xxxxxxxxxxxxxxxx")  # Größe geändert
+    p2 = resolve_playback_audio_source(s, w).path
+    assert p1 != p2

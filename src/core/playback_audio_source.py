@@ -51,12 +51,27 @@ def _file_source(path, window):
         timeline_start_ms=window.start_ms, timeline_end_ms=window.end_ms)
 
 
+def _source_fingerprint(project):
+    """Fingerabdruck der echten Mic-Quellen (P2, Carl 2026-06-15): der
+    Fallback rendert aus den Mics — wechselt eine Mic-Datei oder ihr Inhalt,
+    muss der Cache-Key sich ändern, sonst spielt PeakCut stale Audio."""
+    parts = []
+    for p in audio_routing.get_source_mic_tracks(project):
+        try:
+            st = os.stat(p)
+            parts.append(f"{p}:{st.st_size}:{st.st_mtime_ns}")
+        except OSError:
+            parts.append(f"{p}:?")
+    return "|".join(parts)
+
+
 def _preview_path(project, window):
     root = material_root(_media_paths(project),
                          getattr(project, "keyboard_track", None))
     out_dir = os.path.join(root, ARCHIVE_DIR, _PREVIEW_DIR)
     key = (f"{window.mode}|{window.start_ms}|{window.end_ms}|"
-           f"{getattr(project, 'keyboard_track', '')}")
+           f"{getattr(project, 'keyboard_track', '')}|"
+           f"{_source_fingerprint(project)}")
     name = hashlib.sha1(key.encode("utf-8")).hexdigest()[:16] + ".wav"
     return out_dir, os.path.join(out_dir, name)
 
