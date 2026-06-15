@@ -478,7 +478,8 @@ class PeakVideoPreview(QWidget):
         out = self._clip_out_ms if out_ms is None else out_ms
         self._clip_playback_active = False
         self.player.pause()
-        if self._duration_ms > 0:
+        # #76 (A): out kann None sein (offenes Ende / Free-Play) -> kein Seek.
+        if out is not None and self._duration_ms > 0:
             self.player.setPosition(self._mix_to_video_ms(out))
 
     def _try_deferred_play(self):
@@ -548,8 +549,10 @@ class PeakVideoPreview(QWidget):
             # Convert video position to mix position for external consumers
             mix_position = self._video_to_mix_ms(position)
             self.position_changed.emit(mix_position)
-            # Stop at out-point during clip playback (compare in MIX coordinates)
-            if self._clip_playback_active and mix_position >= self._clip_out_ms:
+            # Stop at out-point during clip playback (compare in MIX coordinates).
+            # #76 (A): _clip_out_ms None = offenes Ende -> kein Auto-Stop.
+            if (self._clip_playback_active and self._clip_out_ms is not None
+                    and mix_position >= self._clip_out_ms):
                 self._clip_playback_active = False
                 self.player.pause()
                 # Seek to exact out point in VIDEO coordinates

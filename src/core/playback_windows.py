@@ -21,7 +21,7 @@ _SMART_DISABLED = "Kein Sinnabschnitt für diesen Drücker."
 class PlaybackWindow:
     mode: str
     start_ms: int
-    end_ms: int
+    end_ms: int | None       # None = offenes Ende (#76 A: Free-Play bis Medienende)
     disabled_reason: str = ""
 
     @property

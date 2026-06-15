@@ -95,6 +95,10 @@ def resolve_playback_audio_source(session, window):
         return _file_source(mix, window)
 
     # Fallback ohne Mix: echte Mics zu einer Vorschau-WAV rendern (gecacht).
+    # #76 (A): Free-Play (offenes Ende) ohne Mix wird nicht gerendert —
+    # on_play erlaubt Free-Play nur bei seekbarer Datei-Quelle.
+    if window.end_ms is None:
+        return _disabled("Free-Play ohne Mix nicht unterstützt.")
     out_dir, path = _preview_path(project, window)
     dur = window.end_ms - window.start_ms
     if os.path.isfile(path):

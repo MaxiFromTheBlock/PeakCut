@@ -25,7 +25,8 @@ class ReviewPlaybackController(QObject):
     error = pyqtSignal(str)
 
     def __init__(self, video_preview, *, tolerance_ms=40, ready_timeout_ms=5000,
-                 tick_ms=100, audio_player_factory=None, audio_ready_states=None):
+                 tick_ms=100, audio_player_factory=None, audio_ready_states=None,
+                 audio_end_states=None):
         super().__init__()
         self._video = video_preview
         self._tolerance = tolerance_ms
@@ -42,10 +43,13 @@ class ReviewPlaybackController(QObject):
             if audio_ready_states is None:
                 audio_ready_states = {QMediaPlayer.MediaStatus.LoadedMedia,
                                       QMediaPlayer.MediaStatus.BufferedMedia}
+            if audio_end_states is None:
+                audio_end_states = {QMediaPlayer.MediaStatus.EndOfMedia}
         else:
             self._audio = audio_player_factory()
             self._audio_out = None
         self._ready_states = set(audio_ready_states or ())
+        self._end_states = set(audio_end_states or ())
 
         self._tick = QTimer(self)
         self._tick.setInterval(tick_ms)
@@ -59,13 +63,18 @@ class ReviewPlaybackController(QObject):
         # Async-Readiness: erneut versuchen, sobald Audio ODER Video lädt.
         # (P1 Carl-Gate-E: nur auf Audio zu warten lief in den Timeout, wenn
         # das Video seine Duration erst nach dem Audio meldet.)
-        for sig in (getattr(self._audio, "mediaStatusChanged", None),
-                    getattr(self._video, "duration_changed", None)):
-            if sig is not None and hasattr(sig, "connect"):
-                try:
-                    sig.connect(lambda *a: self._try_begin())
-                except (TypeError, RuntimeError):
-                    pass
+        asig = getattr(self._audio, "mediaStatusChanged", None)
+        if asig is not None and hasattr(asig, "connect"):
+            try:
+                asig.connect(self._on_audio_status)
+            except (TypeError, RuntimeError):
+                pass
+        vsig = getattr(self._video, "duration_changed", None)
+        if vsig is not None and hasattr(vsig, "connect"):
+            try:
+                vsig.connect(lambda *a: self._try_begin())
+            except (TypeError, RuntimeError):
+                pass
 
     # --- öffentliche API ---
 
@@ -121,6 +130,14 @@ class ReviewPlaybackController(QObject):
         self._begin()
         return True
 
+    def _on_audio_status(self, *args):
+        # #76 (A): offenes Ende (Free-Play ueber das Clip-Ende hinaus) endet
+        # am Medienende sauber. Sonst Readiness-Retry wie beim Video-Signal.
+        if self._started and self._audio.mediaStatus() in self._end_states:
+            self._finish()
+            return
+        self._try_begin()
+
     def _begin(self):
         self._started = True
         self._ready_timer.stop()
@@ -137,7 +154,9 @@ class ReviewPlaybackController(QObject):
         if not (self._active and self._started):
             return
         audio_t = self._audio_timeline_ms()
-        if audio_t >= self._window.end_ms:
+        # #76 (A): end_ms None = offenes Ende (Free-Play) -> kein Auto-Stop
+        # per Tick; das Ende kommt ueber das Medienende (_on_audio_status).
+        if self._window.end_ms is not None and audio_t >= self._window.end_ms:
             self._finish()
             return
         video_t = self._video.current_mix_position()

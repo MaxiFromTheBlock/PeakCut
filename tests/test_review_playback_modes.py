@@ -61,6 +61,10 @@ def _fs(mode="key", candidates=None, playing=False):
     ns._start_play_state = lambda: ReviewPage._start_play_state(ns)
     ns._stop_play_state = lambda: ReviewPage._stop_play_state(ns)
     ns._refresh_play_availability = lambda: None
+    # Default: kein Scrub -> _resume_window aendert nichts (Clip-Preview).
+    ns.video_preview = types.SimpleNamespace(current_mix_position=lambda: None)
+    ns._resume_window = lambda w: ReviewPage._resume_window(ns, w)
+    ns._has_file_source = lambda: ReviewPage._has_file_source(ns)
     return ns
 
 
@@ -164,3 +168,21 @@ def test_slider_pressed_stops_controller():
     fs.position_slider = types.SimpleNamespace(value=lambda: 5000)
     ReviewPage._on_slider_pressed(fs)
     assert "stop" in fs._controller.calls
+
+
+def test_on_play_resumes_within_clip_from_playhead():
+    # #76 (A): Scrub innerhalb des Clips -> Play ab Scrub-Stelle bis Clip-Ende.
+    fs = _fs(mode="speak")     # speak-Fenster 50000-80000
+    fs.video_preview = types.SimpleNamespace(current_mix_position=lambda: 65000)
+    ReviewPage.on_play(fs)
+    w = _played(fs)[0][1]
+    assert w.start_ms == 65000 and w.end_ms == 80000
+
+
+def test_on_play_free_play_past_clip_open_end():
+    # #76 (A): Scrub hinter das Clip-Ende -> frei ab Scrub-Stelle (offenes Ende).
+    fs = _fs(mode="speak")     # Mix vorhanden im _fs-Projekt
+    fs.video_preview = types.SimpleNamespace(current_mix_position=lambda: 200000)
+    ReviewPage.on_play(fs)
+    w = _played(fs)[0][1]
+    assert w.start_ms == 200000 and w.end_ms is None

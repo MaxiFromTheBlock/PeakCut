@@ -97,7 +97,7 @@ class FakeVideo:
 def _ctrl(fa, fv, tol=40):
     return ReviewPlaybackController(
         fv, tolerance_ms=tol, audio_player_factory=lambda: fa,
-        audio_ready_states={"loaded", "buffered"})
+        audio_ready_states={"loaded", "buffered"}, audio_end_states={"end"})
 
 
 _WIN = PlaybackWindow("speak", 50000, 80000)
@@ -231,6 +231,37 @@ def test_ready_timeout_aborts_controlled():
     c._on_ready_timeout()
     assert errs and not c.is_playing()
     assert "play" not in fa.calls
+
+
+_OPEN_SRC = PlaybackAudioSource(path="/a.wav", media_start_ms=50000,
+                                media_end_ms=0, timeline_start_ms=50000,
+                                timeline_end_ms=0)
+_OPEN_WIN = PlaybackWindow("speak", 50000, None)   # offenes Ende (Free-Play)
+
+
+def test_open_end_does_not_autostop_on_tick():
+    # #76 (A): end_ms None -> kein Auto-Stop per Tick, auch weit hinter Start.
+    fa, fv = FakeAudio(), FakeVideo()
+    c = _ctrl(fa, fv)
+    done = {"n": 0}
+    c.finished.connect(lambda: done.__setitem__("n", done["n"] + 1))
+    c.play(_OPEN_WIN, _OPEN_SRC)
+    fa._pos = 999999
+    c._on_tick()
+    assert done["n"] == 0
+    assert c.is_playing() is True
+
+
+def test_end_of_media_finishes_open_end():
+    # #76 (A): Free-Play endet sauber am Medienende.
+    fa, fv = FakeAudio(), FakeVideo()
+    c = _ctrl(fa, fv)
+    done = {"n": 0}
+    c.finished.connect(lambda: done.__setitem__("n", done["n"] + 1))
+    c.play(_OPEN_WIN, _OPEN_SRC)
+    fa.set_status("end")
+    assert done["n"] == 1
+    assert c.is_playing() is False
 
 
 def test_cleanup_deletes_audio():

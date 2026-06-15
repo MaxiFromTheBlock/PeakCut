@@ -1,6 +1,7 @@
 # review_page.py - Peak Review Page (Video + Controls + Navigation)
 
 import os
+from dataclasses import replace
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
@@ -364,6 +365,7 @@ class ReviewPage(QWidget):
         if window.disabled:
             self.status_message.emit(window.disabled_reason)
             return
+        window = self._resume_window(window)   # #76 (A): ab Abspielkopf
         source = resolve_playback_audio_source(self.session, window)
         if source.disabled:
             self.status_message.emit(source.disabled_reason)
@@ -378,6 +380,27 @@ class ReviewPage(QWidget):
     def _stop_play_state(self):
         self._is_playing = False
         self.play_btn.setText("▶ Play")
+
+    def _resume_window(self, window):
+        """#76 (A, Max 2026-06-16): Wiedergabe ab dem aktuellen Abspielkopf.
+        Innerhalb des Clips -> ab Scrub-Stelle bis Clip-Ende; ausserhalb ->
+        frei ab Scrub-Stelle bis Medienende (nur bei seekbarer Datei-Quelle,
+        sonst unveraenderter Clip)."""
+        pos = self.video_preview.current_mix_position()
+        if pos is None:
+            return window
+        if window.start_ms <= pos < window.end_ms:
+            return replace(window, start_ms=pos)
+        if self._has_file_source():
+            return replace(window, start_ms=pos, end_ms=None)
+        return window
+
+    def _has_file_source(self):
+        from core import audio_routing
+        project = self.session.project
+        if self.session.mode == "key":
+            return bool(getattr(project, "keyboard_track", None))
+        return audio_routing.get_mix_track(project) is not None
 
     def on_ignore(self):
         if not self.session:
