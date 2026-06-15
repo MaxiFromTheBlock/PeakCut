@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from gui.review_page import ReviewPage  # noqa: E402
 from core.peak import Peak  # noqa: E402
 from core.clip_candidates import ClipCandidate, ClipBoundary  # noqa: E402
+from core.playback_windows import build_playback_window  # noqa: E402
 
 
 class FakeController:
@@ -62,7 +63,9 @@ def _fs(mode="key", candidates=None, playing=False):
     ns._stop_play_state = lambda: ReviewPage._stop_play_state(ns)
     ns._refresh_play_availability = lambda: None
     # Default: kein Scrub -> _resume_window aendert nichts (Clip-Preview).
-    ns.video_preview = types.SimpleNamespace(current_mix_position=lambda: None)
+    ns._scrubbed_pos = None
+    ns.video_preview = types.SimpleNamespace(
+        current_mix_position=lambda: None, set_position=lambda p: None)
     ns._resume_window = lambda w: ReviewPage._resume_window(ns, w)
     ns._has_file_source = lambda: ReviewPage._has_file_source(ns)
     return ns
@@ -170,10 +173,10 @@ def test_slider_pressed_stops_controller():
     assert "stop" in fs._controller.calls
 
 
-def test_on_play_resumes_within_clip_from_playhead():
+def test_on_play_resumes_within_clip_from_scrub():
     # #76 (A): Scrub innerhalb des Clips -> Play ab Scrub-Stelle bis Clip-Ende.
     fs = _fs(mode="speak")     # speak-Fenster 50000-80000
-    fs.video_preview = types.SimpleNamespace(current_mix_position=lambda: 65000)
+    fs._scrubbed_pos = 65000
     ReviewPage.on_play(fs)
     w = _played(fs)[0][1]
     assert w.start_ms == 65000 and w.end_ms == 80000
@@ -182,7 +185,32 @@ def test_on_play_resumes_within_clip_from_playhead():
 def test_on_play_free_play_past_clip_open_end():
     # #76 (A): Scrub hinter das Clip-Ende -> frei ab Scrub-Stelle (offenes Ende).
     fs = _fs(mode="speak")     # Mix vorhanden im _fs-Projekt
-    fs.video_preview = types.SimpleNamespace(current_mix_position=lambda: 200000)
+    fs._scrubbed_pos = 200000
     ReviewPage.on_play(fs)
     w = _played(fs)[0][1]
     assert w.start_ms == 200000 and w.end_ms is None
+
+
+def test_on_play_no_scrub_plays_clip_window():
+    # Regression "nichts spielt beim ersten Play": ohne Scrub bleibt es beim
+    # Clip-Fenster (kein async-Positions-Stale, kein Free-Play ab 0).
+    fs = _fs(mode="speak")     # speak-Fenster 50000-80000, kein Scrub
+    ReviewPage.on_play(fs)
+    w = _played(fs)[0][1]
+    assert w.start_ms == 50000 and w.end_ms == 80000
+
+
+def test_on_play_key_ignores_scrub_stays_clip():
+    # Regression "nichts spielt / Bild springt" im KEY-Modus: Scrub weit hinter
+    # das Marker-Fenster darf KEIN Free-Play in die kurze Keyboard-Datei oeffnen.
+    fs = _fs(mode="key")       # key-Fenster 60000-61000
+    fs._scrubbed_pos = 600000  # weit hinter dem Fenster
+    w = fs._resume_window(build_playback_window(fs.session, "key"))
+    assert w.start_ms == 60000 and w.end_ms == 61000   # unveraendert, kein None
+
+
+def test_slider_records_scrubbed_pos():
+    fs = _fs(playing=True)
+    fs.video_preview = types.SimpleNamespace(set_position=lambda p: None)
+    ReviewPage._on_slider_moved(fs, 123456)
+    assert fs._scrubbed_pos == 123456

@@ -66,6 +66,9 @@ class ReviewPage(QWidget):
         # #76: Wiedergabe läuft jetzt über den ReviewPlaybackController
         # (in _setup_ui erzeugt, sobald video_preview existiert).
         self._controller = None
+        # #76 (A): zuletzt GESCRUBBTE Mix-Position (None = kein Scrub seit
+        # Navigation/Moduswechsel -> Play spielt das Clip-Fenster).
+        self._scrubbed_pos = None
 
         self._build_ui()
 
@@ -339,6 +342,7 @@ class ReviewPage(QWidget):
         # ueberschreibt den neuen Frame. Erst danach den Frame setzen.
         self._controller.stop()
         self._stop_play_state()
+        self._scrubbed_pos = None          # #76 (A): neuer Peak -> Clip-Preview
         if self._video_files:
             self.video_preview.set_position(peak.position_ms)
         self._refresh_play_availability()
@@ -382,12 +386,16 @@ class ReviewPage(QWidget):
         self.play_btn.setText("▶ Play")
 
     def _resume_window(self, window):
-        """#76 (A, Max 2026-06-16): Wiedergabe ab dem aktuellen Abspielkopf.
-        Innerhalb des Clips -> ab Scrub-Stelle bis Clip-Ende; ausserhalb ->
-        frei ab Scrub-Stelle bis Medienende (nur bei seekbarer Datei-Quelle,
-        sonst unveraenderter Clip)."""
-        pos = self.video_preview.current_mix_position()
-        if pos is None:
+        """#76 (A, Max 2026-06-16): Wiedergabe ab der zuletzt GESCRUBBTEN
+        Stelle. Ohne Scrub -> unveraendertes Clip-Fenster (verlaesslich, kein
+        async-Positions-Stale beim ersten Play). KEY bleibt IMMER beim
+        Marker-Clip — die Key-Tonquelle ist ein kurzer Klick-Track ohne
+        Episoden-Timeline, ein Seek auf die Scrub-Position wuerde dort
+        ausserhalb der Datei klemmen (gar kein Ton + Bild-Sprung). speak/smart
+        (echte Mix-Datei): innerhalb des Clips ab Scrub bis Clip-Ende,
+        ausserhalb frei ab Scrub bis Medienende."""
+        pos = self._scrubbed_pos
+        if pos is None or self.session.mode == "key":
             return window
         if window.start_ms <= pos < window.end_ms:
             return replace(window, start_ms=pos)
@@ -396,11 +404,9 @@ class ReviewPage(QWidget):
         return window
 
     def _has_file_source(self):
+        # Nur speak/smart erreichen das (KEY ist in _resume_window ausgenommen).
         from core import audio_routing
-        project = self.session.project
-        if self.session.mode == "key":
-            return bool(getattr(project, "keyboard_track", None))
-        return audio_routing.get_mix_track(project) is not None
+        return audio_routing.get_mix_track(self.session.project) is not None
 
     def on_ignore(self):
         if not self.session:
@@ -419,6 +425,7 @@ class ReviewPage(QWidget):
             return
         self._controller.stop()
         self._stop_play_state()
+        self._scrubbed_pos = None          # #76 (A): Moduswechsel -> Clip-Preview
         self.session.switch_mode()
         config.set_value("playback_mode", self.session.mode)
         self.mode_btn.setText(f"Modus: {label_for_mode(self.session.mode)}")
@@ -486,13 +493,16 @@ class ReviewPage(QWidget):
 
     def _on_slider_moved(self, value):
         # #76 (P2 Carl-Gate-F): Seek stoppt laufende Wiedergabe.
+        # #76 (A): Scrub-Stelle merken -> naechster Play setzt dort auf.
         self._controller.stop()
         self._stop_play_state()
+        self._scrubbed_pos = value
         self.video_preview.set_position(value)
 
     def _on_slider_pressed(self):
         self._controller.stop()
         self._stop_play_state()
+        self._scrubbed_pos = self.position_slider.value()
         self.video_preview.set_position(self.position_slider.value())
 
     def _on_position_update(self, position_ms):
