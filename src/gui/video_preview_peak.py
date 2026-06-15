@@ -257,8 +257,9 @@ class PeakVideoPreview(QWidget):
         self._camera_names = {}
         self._screenshot_counters = {}
 
-        # Deferred play (when video not ready yet)
-        self._deferred_play = None
+        # Clip-Vorbereitung / verschobener Start (Video noch nicht geladen)
+        self._pending_clip = None
+        self._pending_autoplay = False
 
         # Screenshot workers (parallel queue — each runs independently)
         self._screenshot_workers: list[ScreenshotWorker] = []
@@ -442,30 +443,57 @@ class PeakVideoPreview(QWidget):
 
     # --- Playback ---
 
-    def play_from(self, in_ms: int, out_ms: int):
-        """Play video from in_ms, stop at out_ms. Positions are in MIX coordinates."""
-        # Store out point in MIX coordinates for comparison
+    def prepare_clip(self, in_ms: int, out_ms: int):
+        """#76 Task 4: Clip vorbereiten (MIX-Koordinaten) — Clip-Out setzen,
+        auf den In-Punkt springen, aber NICHT starten. Ist das Video noch
+        nicht geladen, werden Seek + Start verschoben (Readiness)."""
         self._clip_out_ms = out_ms
         self._clip_playback_active = True
         if self._duration_ms > 0:
-            # Convert mix position to video position
-            video_in = self._mix_to_video_ms(in_ms)
-            self.player.setPosition(video_in)
+            self.player.setPosition(self._mix_to_video_ms(in_ms))
+            self._pending_clip = None
+        else:
+            self._pending_clip = (in_ms, out_ms)
+            self._pending_autoplay = False
+
+    def play_prepared(self):
+        """#76 Task 4: zuvor mit prepare_clip vorbereitete Wiedergabe starten."""
+        if self._duration_ms > 0 and self._pending_clip is None:
             self.player.play()
         else:
-            # Video not ready yet — defer until duration is known (store MIX coordinates)
-            self._deferred_play = (in_ms, out_ms)
+            self._pending_autoplay = True
+
+    def play_from(self, in_ms: int, out_ms: int):
+        """Abwärtskompatibel: prepare_clip + play_prepared (MIX-Koordinaten)."""
+        self.prepare_clip(in_ms, out_ms)
+        self.play_prepared()
+
+    def pause_clip(self):
+        """Clip-Wiedergabe pausieren (Clip-Modus bleibt aktiv)."""
+        self.player.pause()
+
+    def stop_clip_at(self, out_ms: int | None = None):
+        """Clip-Wiedergabe beenden: deaktivieren, pausieren, exakt auf den
+        Out-Punkt setzen (MIX-Koordinaten)."""
+        out = self._clip_out_ms if out_ms is None else out_ms
+        self._clip_playback_active = False
+        self.player.pause()
+        # #76 (A): out kann None sein (offenes Ende / Free-Play) -> kein Seek.
+        if out is not None and self._duration_ms > 0:
+            self.player.setPosition(self._mix_to_video_ms(out))
 
     def _try_deferred_play(self):
-        """Execute deferred play_from after video loads."""
-        if hasattr(self, '_deferred_play') and self._deferred_play:
-            in_ms, out_ms = self._deferred_play  # MIX coordinates
-            self._deferred_play = None
-            self._clip_out_ms = out_ms  # Keep in MIX coordinates
-            self._clip_playback_active = True
-            # Convert mix position to video position
-            video_in = self._mix_to_video_ms(in_ms)
-            self.player.setPosition(video_in)
+        """Nach dem Laden (Duration bekannt): vorbereiteten Clip seeken und —
+        falls play_prepared bereits gerufen wurde — starten."""
+        if self._pending_clip is None:
+            return
+        in_ms, out_ms = self._pending_clip
+        self._pending_clip = None
+        self._clip_out_ms = out_ms
+        self._clip_playback_active = True
+        self.player.setPosition(self._mix_to_video_ms(in_ms))
+        if self._pending_autoplay:
+            self._pending_autoplay = False
             self.player.play()
 
     def play(self):
@@ -496,6 +524,10 @@ class PeakVideoPreview(QWidget):
         """Get current position in MIX coordinates."""
         return self._video_to_mix_ms(self.player.position())
 
+    def current_mix_position(self) -> int:
+        """#76 Task 4: Alias für get_position() (aktuelle MIX-Position)."""
+        return self.get_position()
+
     def set_position(self, position_ms: int):
         """Set position using MIX coordinates."""
         video_pos = self._mix_to_video_ms(position_ms)
@@ -517,8 +549,10 @@ class PeakVideoPreview(QWidget):
             # Convert video position to mix position for external consumers
             mix_position = self._video_to_mix_ms(position)
             self.position_changed.emit(mix_position)
-            # Stop at out-point during clip playback (compare in MIX coordinates)
-            if self._clip_playback_active and mix_position >= self._clip_out_ms:
+            # Stop at out-point during clip playback (compare in MIX coordinates).
+            # #76 (A): _clip_out_ms None = offenes Ende -> kein Auto-Stop.
+            if (self._clip_playback_active and self._clip_out_ms is not None
+                    and mix_position >= self._clip_out_ms):
                 self._clip_playback_active = False
                 self.player.pause()
                 # Seek to exact out point in VIDEO coordinates

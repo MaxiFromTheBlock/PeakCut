@@ -1,10 +1,10 @@
-"""#3-Revision Task 8 — Smart-Statuszeile + Sinnabschnitt-Knopf-Gate.
+"""#3-Revision Task 8 / #76 — Smart-Statuszeile + Play-Verfügbarkeit.
 
-Spec §11 R5, Carl Task 8: eine durchgängige Smart-Statuszeile im
-Review zeigt den aktuellen Zustand, der Sinnabschnitt-▶-Knopf ist
-disabled mit Tooltip, solange für den aktuellen Drücker kein
-Kandidat mit score is not None vorliegt. Tests gegen Fake-Self,
-ohne echte Qt-Widgets.
+Statuszeile (Spec §11 R5) unverändert. Der frühere Sinnabschnitt-▶-Knopf
+ist mit #76 entfallen; _refresh_play_availability (hist. Name) steuert jetzt die
+Play-Verfügbarkeit für den aktuellen Modus: in 'smart' disabled ohne
+gültigen Kandidaten, in 'key'/'speak' bei vorhandener Quelle enabled.
+Tests gegen Fake-Self, ohne echte Qt-Widgets.
 """
 
 import os
@@ -14,6 +14,7 @@ import types
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from gui.review_page import ReviewPage  # noqa: E402
+from core.clip_candidates import ClipBoundary, PROPOSED  # noqa: E402
 
 
 def _label():
@@ -28,19 +29,20 @@ def _label():
 
 def _fs(*, transcript=None, transcript_ref=None, transcript_error=None,
         peaks=None, current_peak=0, candidates=None, smart_worker=None,
-        smart_ready=False, smart_status_text=""):
+        smart_ready=False, smart_status_text="", mode="key"):
     label, btn, cap = _label()
     ns = types.SimpleNamespace()
-    cfg = {"smart_boundary_alignment_tolerance_ms": 120000}
+    cfg = {"smart_boundary_alignment_tolerance_ms": 120000,
+           "preview_duration_ms": 1000}
     ns.session = types.SimpleNamespace(
-        config=cfg,
+        config=cfg, mode=mode,
         peaks=peaks if peaks is not None else [],
         current_peak=current_peak,
         transcript=transcript, transcript_ref=transcript_ref,
         transcript_error=transcript_error,
         clip_candidates=candidates if candidates is not None else [])
     ns.smart_status_label = label
-    ns.sinn_btn = btn
+    ns.play_btn = btn
     ns._smart_worker = smart_worker
     ns._smart_ready = smart_ready
     ns._smart_status_text = smart_status_text
@@ -48,24 +50,29 @@ def _fs(*, transcript=None, transcript_ref=None, transcript_error=None,
 
 
 def _peak(idx):
-    return types.SimpleNamespace(index=idx, position_ms=idx * 1000)
+    return types.SimpleNamespace(index=idx, position_ms=idx * 1000,
+                                 in_point_ms=idx * 1000,
+                                 out_point_ms=idx * 1000 + 30000,
+                                 ignored=False)
 
 
 def _cand(peak_id, score=None):
-    return types.SimpleNamespace(peak_id=peak_id, score=score)
+    return types.SimpleNamespace(
+        peak_id=peak_id, score=score, status=PROPOSED,
+        boundary=ClipBoundary(start_ms=peak_id * 1000,
+                              end_ms=peak_id * 1000 + 40000))
 
 
-# --- Statuszeile: 5 Zustände aus Carls Plan ----------------------------
+# --- Statuszeile: 5 Zustände aus Carls Plan (unverändert) --------------
 
 def test_status_transkription_laeuft_when_nothing_yet():
-    fs, cap = _fs()                            # nichts da
+    fs, cap = _fs()
     ReviewPage._refresh_smart_status(fs)
     assert "Transkription läuft" in cap["text"]
 
 
 def test_status_transkript_bereit_berechne_sinnabschnitte():
-    fs, cap = _fs(transcript="T",
-                   smart_worker=types.SimpleNamespace())     # läuft
+    fs, cap = _fs(transcript="T", smart_worker=types.SimpleNamespace())
     ReviewPage._refresh_smart_status(fs)
     assert "berechne Sinnabschnitte" in cap["text"]
 
@@ -96,7 +103,6 @@ def test_status_drift_visible_from_ref():
 
 
 def test_status_ready_with_drift_combines_not_silences():
-    # Carl-Gegenreview [P2]: Drift darf "bereit" nicht ganz untergehen.
     fs, cap = _fs(transcript="T", smart_ready=True,
                    candidates=[_cand(1, 0.8)],
                    transcript_ref={"path": "x",
@@ -117,68 +123,52 @@ def test_status_transkript_error_visible():
         "kaputt" in cap["text"] or "fehlt" in cap["text"])
 
 
-# --- Sinnabschnitt-▶-Knopf: enabled bei Treffer für aktuellen Peak ----
+# --- Play-Verfügbarkeit (#76, modusbasiert) ---------------------------
 
-def test_button_enabled_when_current_peak_has_score():
-    fs, cap = _fs(peaks=[_peak(1), _peak(2)], current_peak=0,
+def test_play_enabled_in_smart_mode_with_candidate():
+    fs, cap = _fs(mode="smart", peaks=[_peak(1), _peak(2)], current_peak=0,
                    candidates=[_cand(1, 0.8), _cand(2, None)],
                    smart_ready=True)
-    ReviewPage._refresh_sinn_btn(fs)
+    ReviewPage._refresh_play_availability(fs)
     assert cap["enabled"] is True
-    assert cap["tooltip"]                            # nicht leer
 
 
-def test_button_disabled_when_current_peak_lacks_score():
-    fs, cap = _fs(peaks=[_peak(1), _peak(2)], current_peak=1,
+def test_play_disabled_in_smart_mode_without_candidate():
+    fs, cap = _fs(mode="smart", peaks=[_peak(1), _peak(2)], current_peak=1,
                    candidates=[_cand(1, 0.8), _cand(2, None)],
                    smart_ready=True)
-    ReviewPage._refresh_sinn_btn(fs)
+    ReviewPage._refresh_play_availability(fs)
     assert cap["enabled"] is False
-    assert "kein Sinnabschnitt" in cap["tooltip"].lower() \
-        or "diesen drücker" in cap["tooltip"].lower()
+    assert "sinnabschnitt" in cap["tooltip"].lower() \
+        or "drücker" in cap["tooltip"].lower()
 
 
-def test_button_disabled_during_smart_run_with_reason_tooltip():
-    fs, cap = _fs(peaks=[_peak(1)], candidates=[_cand(1, None)],
-                   smart_worker=types.SimpleNamespace())
-    ReviewPage._refresh_sinn_btn(fs)
-    assert cap["enabled"] is False
-    assert "berechn" in cap["tooltip"].lower()
+def test_play_enabled_in_key_mode():
+    fs, cap = _fs(mode="key", peaks=[_peak(1)], current_peak=0)
+    ReviewPage._refresh_play_availability(fs)
+    assert cap["enabled"] is True
 
 
-def test_button_disabled_without_transcript_with_reason():
-    fs, cap = _fs(peaks=[_peak(1)], candidates=[_cand(1, None)])
-    ReviewPage._refresh_sinn_btn(fs)
-    assert cap["enabled"] is False
-    assert "transkri" in cap["tooltip"].lower()
+def test_play_enabled_in_speak_mode():
+    fs, cap = _fs(mode="speak", peaks=[_peak(1)], current_peak=0)
+    ReviewPage._refresh_play_availability(fs)
+    assert cap["enabled"] is True
 
 
-def test_button_disabled_when_transcript_error_with_reason():
-    fs, cap = _fs(peaks=[_peak(1)], candidates=[_cand(1, None)],
-                   transcript_ref={"path": "x"},
-                   transcript_error="Sidecar kaputt")
-    ReviewPage._refresh_sinn_btn(fs)
-    assert cap["enabled"] is False
-    assert "transkri" in cap["tooltip"].lower()
-
-
-def test_button_disabled_when_no_peak_selected():
+def test_play_disabled_when_no_peak_selected():
     fs, cap = _fs(peaks=[])
-    ReviewPage._refresh_sinn_btn(fs)
+    ReviewPage._refresh_play_availability(fs)
     assert cap["enabled"] is False
 
 
 # --- Carl-Gegenreview ---------------------------------------------------
 
 def test_on_smart_done_infra_with_running_worker_shows_infra_message():
-    # [P2] Bei INFRA war der _smart_worker noch gesetzt, deshalb
-    # gewann "berechne…"; nach Cleanup muss die INFRA-Meldung
-    # tatsächlich in der Statuszeile stehen.
     from core.clip_boundary.models import (
         SmartBoundaryRunResult, BoundaryOutcome)
     fs, cap = _fs(transcript="T")
     fs._refresh_smart_status = lambda: ReviewPage._refresh_smart_status(fs)
-    fs._refresh_sinn_btn = lambda: ReviewPage._refresh_sinn_btn(fs)
+    fs._refresh_play_availability = lambda: ReviewPage._refresh_play_availability(fs)
     fs._maybe_write_sinnabschnitt_artifacts = \
         lambda: ReviewPage._maybe_write_sinnabschnitt_artifacts(fs)
     fs._smart_worker = types.SimpleNamespace(deleteLater=lambda: None)
@@ -193,31 +183,24 @@ def test_on_smart_done_infra_with_running_worker_shows_infra_message():
 
 
 def test_persisted_scores_refresh_status_and_button_immediately():
-    # [P3] Score-Guard öffnete den Riegel ohne Refresh -> Tooltip blieb
-    # für nicht-aktuellen Peak bis zum Peak-Wechsel auf "steht noch
-    # nicht zur Verfügung". Jetzt soll der Refresh sofort laufen.
     fs, cap = _fs(transcript="T", peaks=[_peak(1), _peak(2)],
-                   current_peak=1,
+                   current_peak=1, mode="smart",
                    candidates=[_cand(1, 0.8), _cand(2, None)])
     fs.session.config = {"smart_boundary_enabled": True,
-                          "smart_boundary_claude_model": "m"}
+                          "smart_boundary_claude_model": "m",
+                          "preview_duration_ms": 1000}
     fs._refresh_smart_status = lambda: ReviewPage._refresh_smart_status(fs)
-    fs._refresh_sinn_btn = lambda: ReviewPage._refresh_sinn_btn(fs)
+    fs._refresh_play_availability = lambda: ReviewPage._refresh_play_availability(fs)
     fs._maybe_write_sinnabschnitt_artifacts = \
         lambda: ReviewPage._maybe_write_sinnabschnitt_artifacts(fs)
     fs._base_export_done_for_run = False
     fs._sinnabschnitt_artifacts_written = False
     ReviewPage._maybe_start_smart_worker(fs)
     assert "bereit" in cap["text"].lower()
-    assert cap["enabled"] is False
-    assert "diesen drücker" in cap["tooltip"].lower() \
-        or "kein sinnabschnitt" in cap["tooltip"].lower()
+    assert cap["enabled"] is False          # Peak 2 (smart) ohne Kandidat
 
 
 def test_set_session_clears_sticky_infra_status():
-    # [P3] set_session resettete die drei Riegel-Flags, aber NICHT
-    # _smart_status_text — eine alte INFRA-Meldung konnte ohne
-    # neuen Status durchscheinen.
     label, btn, cap = _label()
     fs = types.SimpleNamespace(
         camera_combo=types.SimpleNamespace(
@@ -228,11 +211,13 @@ def test_set_session_clears_sticky_infra_status():
         _populate_lut_combo=lambda: None,
         _maybe_start_smart_worker=lambda: None,
         _refresh_smart_status=lambda: None,
-        _refresh_sinn_btn=lambda: None,
-        smart_status_label=label, sinn_btn=btn,
+        _refresh_play_availability=lambda: None,
+        smart_status_label=label, play_btn=btn,
+        mode_btn=types.SimpleNamespace(setText=lambda t: None),
         _smart_status_text="alte INFRA-Meldung",
         _base_export_done_for_run=True, _smart_ready=True,
         _sinnabschnitt_artifacts_written=True)
-    session = types.SimpleNamespace(folgenschnitt_camera_assignments=[])
+    session = types.SimpleNamespace(folgenschnitt_camera_assignments=[],
+                                    mode="key")
     ReviewPage.set_session(fs, session, [])
     assert fs._smart_status_text == ""

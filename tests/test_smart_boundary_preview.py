@@ -66,7 +66,7 @@ def _fs(events):
     ns._maybe_write_sinnabschnitt_artifacts = \
         lambda: ReviewPage._maybe_write_sinnabschnitt_artifacts(ns)
     ns._refresh_smart_status = lambda: None
-    ns._refresh_sinn_btn = lambda: None
+    ns._refresh_play_availability = lambda: None
     return ns
 
 
@@ -91,53 +91,6 @@ def test_stale_worker_finish_does_not_clear_new_worker():
         assert fs._smart_worker is None
         assert w2.deleted is True
 
-
-# --- Vorschau ----------------------------------------------------------
-
-def test_preview_plays_candidate_boundary_and_shows_meta():
-    events = []
-    fs = _fs(events)
-    fs.session.peaks = [types.SimpleNamespace(index=7, position_ms=120000)]
-    fs.session.current_peak = 0
-    fs.session.clip_candidates = [ClipCandidate(
-        peak_id=7, boundary=ClipBoundary(95000, 150000), status=PROPOSED,
-        reason="Frage bis Pointe", score=0.82)]
-    ReviewPage._on_play_sinnabschnitt(fs)
-    assert ("play_from", 95000, 150000) in events
-    txt = " ".join(str(a) for n, *a in events if n == "status")
-    assert "0.82" in txt and "Frage bis Pointe" in txt
-
-
-def test_preview_stops_running_audio_before_video(tmp_path=None):
-    events = []
-    fs = _fs(events)
-    fs.session.peaks = [types.SimpleNamespace(index=7, position_ms=120000)]
-    fs.session.current_peak = 0
-    fs.session.clip_candidates = [ClipCandidate(
-        peak_id=7, boundary=ClipBoundary(95000, 150000), status=PROPOSED,
-        reason="r", score=0.5)]
-    with patch("gui.review_page.stop_playback") as sp:
-        ReviewPage._on_play_sinnabschnitt(fs)
-    sp.assert_called_once()
-    names = [e[0] for e in events]
-    # Audio-Stop + Play-State-Reset VOR play_from
-    assert names.index("stop_play_state") < names.index("play_from")
-
-
-def test_preview_without_candidate_is_graceful_no_play():
-    events = []
-    fs = _fs(events)
-    fs.session.peaks = [types.SimpleNamespace(index=3, position_ms=1000)]
-    fs.session.current_peak = 0
-    fs.session.clip_candidates = []            # kein Kandidat
-    ReviewPage._on_play_sinnabschnitt(fs)      # darf nicht krachen
-    assert not any(n == "play_from" for n, *_ in events)
-    assert any(n == "status" for n, *_ in events)   # Hinweis
-
-
-def test_preview_no_session_is_noop():
-    events = []
-    fs = _fs(events)
-    fs.session = None
-    ReviewPage._on_play_sinnabschnitt(fs)      # kein Crash
-    assert not any(n == "play_from" for n, *_ in events)
+# Die frühere Sinnabschnitt-Vorschau (_on_play_sinnabschnitt) ist mit #76
+# entfallen — Wiedergabe läuft jetzt modusbasiert über den Controller
+# (siehe test_review_playback_modes.py). Der Worker-Race-Test oben bleibt.

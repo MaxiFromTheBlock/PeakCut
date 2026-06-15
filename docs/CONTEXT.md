@@ -115,7 +115,7 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 2. UI Revamp (Figma → PyQt6, oder Electron?)
 3. Versionsnummer + Code Signing (geparkt — erst noetig wenn PeakCut wieder extern verteilt wird)
 
-## Offene Slices (Stand 2026-06-15)
+## Offene Slices (Stand 2026-06-16)
 
 **Fundament-Health-Check 2026-06-15** (`docs/specs/2026-06-15-state-of-peakcut-health-check.md`):
 Urteil mostly-solid. **Slice B + Daten-Integritäts-Riegel GELANDET auf main
@@ -128,6 +128,13 @@ Mix-Hub AUD-1a — 621 Tests grün, Pin-1 stabil; Plan:
 Prompt-Tuning → Slice A (halb-automatisch) → Export-Orchestrierung aus dem GUI
 vor NAS. Tickende Uhr: pydub/audioop bei Python 3.13 + Python-Pin nicht erzwungen.
 
+**#76 Wiedergabe-UX GELANDET auf main (2026-06-16):** synchrone Ton+Bild-Vorschau
+über `ReviewPlaybackController` (Audio = Master, Drift-Korrektur, Schwelle 100ms
+provisorisch), Modus key/speak/smart, Play ab Scrub-Stelle (speak/smart auf der
+Mix-Spur, key = Marker-Clip). App-Smoke (Max) + Gate E/F (Carl) bestanden,
+689 Tests grün. Plan: `docs/plans/2026-06-15-wiedergabe-76-plan.md`.
+**Nächster Slice: #77 Import-Refactor.**
+
 Reihenfolge nach #71a-Merge (2026-05-25) und Fremdmaterial-Test (2026-06-01):
 1. **Slice B — Multi-Track-Folgenschnitt-XML** (CODE-FERTIG 2026-06-06,
    Premiere-Smoke vorbereitet 2026-06-10): Tasks 0-8 alle durch
@@ -138,7 +145,7 @@ Reihenfolge nach #71a-Merge (2026-05-25) und Fremdmaterial-Test (2026-06-01):
    erzeugt durch `scripts/smoke_multitrack_export.py`), dann Carl-
    Schluss-Review, dann Merge. Default-Mode = disable. 593 Tests grün,
    Pin-1 stabil.
-2. **#76 Wiedergabe-UX** — Spec abgenommen 2026-05-21, Carl-Plan steht aus.
+2. **#76 Wiedergabe-UX** — GELANDET auf main 2026-06-16 (siehe oben).
 3. **Slice A — Dialog-Totale Cross-Talk-Pass**: Totale bei Cross-Talk-
    Phasen einfügen, NICHT genereller Zeit-Pass. Inhaltliche
    Unterscheidung (Cross-Talk vs. humorvoller Schlagabtausch).

@@ -6,6 +6,40 @@
 > **Bau-Freigabe (Carl):** auf sauberem Stand NACH dem Slice-B/Integritäts-
 > Merge nach main. Konstellation: Carl plant, Claude baut TDD, Max entscheidet.
 
+## Bau-Status (2026-06-15)
+
+Gebaut von Claude, TDD, je eigener Commit (`1f797ff..38c11b9` auf develop):
+- [x] **Task 0** Baseline (621 grün beim Merge).
+- [x] **Task 1** playback_modes (Gate A). [x] **Task 2** playback_windows (Gate B).
+- [x] **Task 3** playback_audio_source (Gate C) + **P2-Fix** (Mic-Quellen-Fingerprint, Carl-Review).
+- [x] **Task 4** PeakVideoPreview Clip-API (Gate D).
+- [x] **Task 4.5** Drift-Spike (`scripts/verify_qmediaplayer_position_resolution.py`)
+  — **gelaufen 2026-06-15** an Teil-2-Material: Start-Latenz 60ms,
+  position()-Kadenz Audio ~99ms / Video ~51ms, **roh-Drift (free-run, ohne
+  Korrektur) p95 94ms / max 116ms**. Befund: 40ms liegt unter dem
+  Granularitätsboden (Carls Flag 1 bestätigt) → Schwelle provisorisch **100ms**
+  (`config.playback_drift_tolerance_ms`, Carl-Vorabfreigabe). Roh ≠ korrigiert:
+  der finale Wert kommt aus dem korrigierten Task-9-Lauf an einer echten Folge
+  mit gültigen In/Out-Punkten. **Offen für Carl-Methodik: ist 100ms (≈2,5 Frames)
+  als Boundary-Beurteilungs-Vorschau ok, oder enger korrigieren (mehr Bild-Snaps)?**
+- [x] **Task 5** ReviewPlaybackController (Gate E) — **Carl-Review durch**, zwei
+  P1s gefixt (Video-Readiness-Signal + Post-Korrektur-Restdrift als Gate-Wert,
+  corrected-Signal). Controller-Sanity-Gate (Task 9 an Teil-2, key-Modus)
+  **BESTANDEN: Restdrift max 85ms ≤ 100ms, 6 Korrekturen**. → Task 6 frei.
+- [x] **Task 9** echtes Drift-Messskript (`scripts/verify_playback_sync_real.py`) — Max läuft es nach der Integration (Gate I).
+- [x] **Task 6+7** ReviewPage-Integration + session.mode-Migration: Controller-Dispatch
+  key/speak/smart, sinn_btn + _on_play_sinnabschnitt raus, Auto-Play raus, _on_export
+  stoppt den Controller, session.mode aus Config normalisiert, switch_mode zyklt ohne
+  Auto-Play. **Gate F: wartet auf Carl-Cross-Review.** Rest-Cleanup: play_current formal
+  entfernen (ist bereits raus aus dem Review-Pfad, Gate G erfüllt).
+- [x] **Task 8** UI-State weitgehend in Task 6 gefaltet (Play ▶/■, Modus-Label Key/Speak/
+  Smart, Smart-ohne-Kandidat -> Play disabled + Tooltip).
+- [ ] **Task 10** Schluss-Gate: **Max-App-Smoke** (key/speak/smart synchron in der echten
+  App) + Task 9 an echter Folge -> finale Drift-Schwelle; dann Merge. 681 Tests grün.
+
+Volle Suite zuletzt 674 grün. Drift-Toleranz config-gesteuert
+(`playback_drift_tolerance_ms=40`, finaler Wert aus dem Spike).
+
 ## Architektur-Call
 Zwei QMediaPlayer, **Audio als Master-Uhr**, Video folgt und wird bei Drift korrigiert.
 - **Video:** bestehender `PeakVideoPreview.player`, bleibt stumm.

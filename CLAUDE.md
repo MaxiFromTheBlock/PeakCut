@@ -1002,6 +1002,39 @@ Produkt):**
 
 ## Changelog
 
+### #76 Wiedergabe-UX (auf main gelandet 2026-06-16)
+
+Synchrone Ton+Bild-Vorschau zum Beurteilen der Schnittgrenzen. Carl-Plan +
+Claude-Cross-Review (`docs/plans/2026-06-15-wiedergabe-76-plan.md`), TDD,
+Gate E/F (Carl) + App-Smoke (Max) bestanden. 593 → 689 Tests, Pin-1 stabil.
+
+- **Architektur:** statt zweier unsynchronisierter Engines (simpleaudio-Ton +
+  stummes QMediaPlayer-Bild) jetzt `gui/review_playback_controller.py` —
+  eigener Audio-QMediaPlayer als **Master**, Video folgt; bei Drift >
+  Toleranz schnappt das Bild auf die Audio-Timeline. Readiness-Gate (beide
+  Medien geladen, Timeout) + harte stop()/cleanup() (deleteLater, schließt
+  CONC-3 mit). simpleaudio ist aus dem Review-Pfad raus (bleibt nur für
+  MicPreviewWorker; play_current entfernt).
+- **Kern-Bausteine (Qt-frei):** `core/playback_modes.py` (key/speak/smart),
+  `core/playback_windows.py` (Fenster pro Modus, Smart-disabled wenn kein
+  Kandidat), `core/playback_audio_source.py` (Key=Keyboard, Speak/Smart=Mix;
+  ohne Mix gecachte Vorschau-WAV mit Mic-Quellen-Fingerprint).
+- **Modus-Zyklus** über den Mode-Button (key→speak→smart), persistiert in
+  `config.playback_mode`; kein Auto-Play mehr bei Navigation/Moduswechsel.
+- **Drift-Schwelle 100ms** (provisorisch): der Spike
+  (`scripts/verify_qmediaplayer_position_resolution.py`) zeigte
+  position()-Kadenz ~50-100ms auf macOS → 40ms unter dem Granularitätsboden.
+  Korrigierter Restdrift an echter Folge ≤85ms (`verify_playback_sync_real.py`).
+- **Play ab Scrub-Stelle (A):** nach echtem Scrub setzt Play dort auf
+  (speak/smart auf der vollen Mix-Spur: innerhalb des Clips bis Clip-Ende,
+  dahinter frei bis Medienende). **KEY bleibt immer beim Marker-Clip** — die
+  Key-Tonquelle ist ein kurzer Klick-Track ohne Episoden-Timeline (Produkt-
+  entscheidung Max+Carl). Resume nur bei echtem Scrub (`_scrubbed_pos`-Flag),
+  nicht über die unzuverlässige async-Position.
+- **Geparkt/offen:** finale Drift-Schwelle nach mehr Real-Material; optionale
+  defensive Klemmung von media_start gegen Quellendauer; Slider-Click-to-Seek
+  (ScrubSlider) als spätere UX-Politur.
+
 ### Daten-Integritäts-Riegel (auf main gelandet 2026-06-15)
 
 Erstes Paket nach dem Fundament-Health-Check
