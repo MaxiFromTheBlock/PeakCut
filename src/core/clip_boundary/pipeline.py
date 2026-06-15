@@ -78,6 +78,23 @@ def prepare_smart_boundaries(session, decider, *, config,
             tuple(cands), BoundaryOutcome.INFRA_FEHLT,
             "Sinnabschnitte nicht berechnet: Transkript fehlt.", 0, 0)
 
+    # KI-2 (R2, 2026-06-15): zeitlich fehlausgerichtetes Transkript darf
+    # KEINE Kandidaten erzeugen — sonst landen plausible, aber zeitlich
+    # falsche Sinnabschnitte mit Score in peak_decisions (G5-Burggraben,
+    # nicht reparierbar). Die Drift ist im transcript_ref bereits messbar
+    # (audio_duration_ms vom TranscriptWorker). Fehlt die Dauer -> nicht
+    # blockieren (kein Fehlalarm; der Worker meldet das separat).
+    ref = getattr(session, "transcript_ref", None)
+    duration_ms = ref.get("audio_duration_ms") if isinstance(ref, dict) else None
+    if duration_ms is not None:
+        from ..transcript_archive import transcript_span_ms, alignment_drift
+        tol = _cfg(config, "smart_boundary_alignment_tolerance_ms", 120000)
+        if alignment_drift(transcript_span_ms(transcript), duration_ms, tol):
+            return SmartBoundaryRunResult(
+                tuple(cands), BoundaryOutcome.INFRA_FEHLT,
+                "Sinnabschnitte nicht berechnet: Transkript passt zeitlich "
+                "nicht zum Audio.", 0, 0)
+
     if not peaks:
         return SmartBoundaryRunResult(tuple(cands), BoundaryOutcome.OK,
                                        "", 0, 0)
