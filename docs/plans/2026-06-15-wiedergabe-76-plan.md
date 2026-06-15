@@ -6,6 +6,22 @@
 > **Bau-Freigabe (Carl):** auf sauberem Stand NACH dem Slice-B/Integritäts-
 > Merge nach main. Konstellation: Carl plant, Claude baut TDD, Max entscheidet.
 
+## Bau-Status (2026-06-15)
+
+Gebaut von Claude, TDD, je eigener Commit (`1f797ff..38c11b9` auf develop):
+- [x] **Task 0** Baseline (621 grün beim Merge).
+- [x] **Task 1** playback_modes (Gate A). [x] **Task 2** playback_windows (Gate B).
+- [x] **Task 3** playback_audio_source (Gate C) + **P2-Fix** (Mic-Quellen-Fingerprint, Carl-Review).
+- [x] **Task 4** PeakVideoPreview Clip-API (Gate D).
+- [x] **Task 4.5** Drift-Spike-Skript (`scripts/verify_qmediaplayer_position_resolution.py`) — **Max muss es an echtem Material laufen lassen** → legt finale Schwelle fest (Gate D2).
+- [x] **Task 5** ReviewPlaybackController (Gate E) — **wartet auf Carl-Cross-Review**, bevor die ReviewPage-Integration (Task 6) startet.
+- [x] **Task 9** echtes Drift-Messskript (`scripts/verify_playback_sync_real.py`) — Max läuft es nach der Integration (Gate I).
+- [ ] **Task 6** ReviewPage-Integration — **gesperrt bis Carl-Gate-E-OK** (riskanteste Naht: session.mode-Migration key/speak/smart, sinn_btn raus, play_current aus dem Review-Pfad).
+- [ ] **Task 7** Session/Legacy entkoppeln. [ ] **Task 8** UI-State. [ ] **Task 10** Schluss-Gate.
+
+Volle Suite zuletzt 674 grün. Drift-Toleranz config-gesteuert
+(`playback_drift_tolerance_ms=40`, finaler Wert aus dem Spike).
+
 ## Architektur-Call
 Zwei QMediaPlayer, **Audio als Master-Uhr**, Video folgt und wird bei Drift korrigiert.
 - **Video:** bestehender `PeakVideoPreview.player`, bleibt stumm.
