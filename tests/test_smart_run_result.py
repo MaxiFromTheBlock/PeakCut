@@ -234,3 +234,7 @@ def test_handler_skips_exporters_on_infra_fehlt_loud_status():
         X.assert_not_called()
     # Lauter Status statt stiller Stille
     assert "status" in events
+    # P3 (Carl 2026-06-15): INFRA löst KEINEN Smart-Ergebnis-Autosave aus —
+    # es gibt keinen neuen Stand zu sichern (transcript_ref wird separat beim
+    # TranscriptWorker-Finish persistiert).
+    assert "session_changed" not in events

@@ -16,6 +16,7 @@ Besitz-Vertrag (Carl-Gate-A-Zusatz, Claude-verifiziert):
 import json
 import os
 
+from . import atomic_io
 from .project_archive import ARCHIVE_DIR, material_root, _media_paths, _rel
 from .transcription import Transcript
 
@@ -78,11 +79,7 @@ def write_transcript_json(path, transcript):
     """Low-level atomarer Schreiber (tmp + os.replace). Legt den
     Zielordner selbst an. Wird vom Child-Teil des Workers benutzt
     (P1: nicht das volle Transcript durch die Queue schieben)."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(transcript.to_dict(), f, ensure_ascii=False)
-    os.replace(tmp, path)
+    atomic_io.write_json_atomic(path, transcript.to_dict(), ensure_ascii=False)
 
 
 def write_transcript_sidecar(project, transcript, *, engine, model,

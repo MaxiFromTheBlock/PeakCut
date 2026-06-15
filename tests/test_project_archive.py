@@ -42,7 +42,8 @@ class _FakeSession:
 
 
 def test_constants_are_frozen():
-    assert CURRENT_SCHEMA_VERSION == 2  # v2: + clip_candidates/peak_decisions
+    # Slice B 2026-06-03: bump auf v3 (+ folgenschnitt_unused_clips_mode).
+    assert CURRENT_SCHEMA_VERSION == 3
     assert ARCHIVE_DIR == ".peakcut"
     assert ARCHIVE_FILE == "project.json"
 
@@ -67,13 +68,23 @@ def test_unknown_future_fields_are_ignored():
     assert result["project"]["guest_name"] == "Hartmut Rosa"
 
 
-def test_lower_or_newer_schema_with_required_fields_loads_best_effort():
+def test_future_schema_refused_on_load():
+    # DATA-2 (2026-06-15): bewusste Vertragsänderung — eine Akte aus der
+    # Zukunft wird NICHT mehr "best effort" geladen (sonst still wegge-
+    # schnittene Felder beim nächsten Autosave). Details:
+    # docs/plans/2026-06-15-data-integritaets-riegel.md
     payload = build_archive_payload(_FakeSession(), material_root="/m")
     payload["schema_version"] = 999  # zukünftige Version
-    res_new = parse_archive_payload(payload, fallback_config={"fps": 25})
-    assert res_new["project"]["guest_name"] == "Hartmut Rosa"
+    try:
+        parse_archive_payload(payload, fallback_config={"fps": 25})
+        assert False, "Zukunfts-Akte muss abgelehnt werden"
+    except ProjectArchiveError:
+        pass
 
-    payload["schema_version"] = 0  # uralt
+
+def test_older_schema_with_required_fields_loads_best_effort():
+    payload = build_archive_payload(_FakeSession(), material_root="/m")
+    payload["schema_version"] = 0  # uralt -> lädt weiter
     res_old = parse_archive_payload(payload, fallback_config={"fps": 25})
     assert res_old["project"]["guest_name"] == "Hartmut Rosa"
 
@@ -325,11 +336,13 @@ def test_folgenschnitt_roundtrip_new_root_after_move(tmp_path):
 from core.clip_candidates import PROPOSED, DISCARDED, SELECTED
 
 
-def test_schema_is_v2_and_archive_has_both_sections(tmp_path):
+def test_schema_is_current_and_archive_has_both_sections(tmp_path):
+    # Slice B 2026-06-03: bump auf v3. v2-Vertraege (clip_candidates,
+    # peak_decisions) bleiben drin.
     s, *_ = _session(tmp_path, "Mat")
     path = save_project_archive(s)
     data = _json.loads(open(path).read())
-    assert data["schema_version"] == 2
+    assert data["schema_version"] == CURRENT_SCHEMA_VERSION
     assert "clip_candidates" in data and "peak_decisions" in data
     assert len(data["clip_candidates"]) == len(s.peaks)  # bootstrap je Peak
 

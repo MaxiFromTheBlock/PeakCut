@@ -10,7 +10,13 @@ import json
 import os
 import shutil
 
-CURRENT_SCHEMA_VERSION = 2  # v2: + clip_candidates/peak_decisions (additiv)
+from . import atomic_io
+from .folgenschnitt_multitrack_layout import (
+    DEFAULT_UNUSED_CLIPS_MODE,
+    normalize_unused_clips_mode as _normalize_clips_mode,
+)
+
+CURRENT_SCHEMA_VERSION = 3  # v3: + assignments.folgenschnitt_unused_clips_mode (Slice B)
 ARCHIVE_DIR = ".peakcut"
 ARCHIVE_FILE = "project.json"
 _CSV_NAME = "speaker_activity.csv"
@@ -158,6 +164,11 @@ def build_archive_payload(session, material_root, speaker_activity_csv_ref=None)
             "folgenschnitt_camera_assignments": _map_assignment_paths(
                 _to_dict_list(getattr(
                     session, "folgenschnitt_camera_assignments", [])), _rel_p),
+            # Slice B v3 (Carl-Plan 2026-06-03): Toggle "Unused Clips"
+            # ueberlebt App-Neustart. normalize_unused_clips_mode beim
+            # Loader filtert ungueltige Werte → Default.
+            "folgenschnitt_unused_clips_mode": _normalize_clips_mode(
+                getattr(session, "folgenschnitt_unused_clips_mode", None)),
         },
         # v2 additiv (Roadmap #2): keine Pfade -> keine Relativierung.
         "clip_candidates": _to_dict_list(
@@ -171,6 +182,52 @@ def build_archive_payload(session, material_root, speaker_activity_csv_ref=None)
     }
 
 
+def _payload_schema_version(payload):
+    """schema_version als int. Fehlt/None -> 1 (alte Akte). Ungültiger
+    Wert -> kontrollierter ProjectArchiveError (kein roher ValueError)."""
+    raw = payload.get("schema_version", 1)
+    if raw is None:
+        return 1
+    try:
+        return int(raw)
+    except (TypeError, ValueError) as e:
+        raise ProjectArchiveError(
+            f"Projektakte hat ungültige schema_version: {raw!r}") from e
+
+
+def _assert_schema_readable(payload):
+    """DATA-2: Eine Akte aus der Zukunft NICHT laden — sonst würde ein
+    älterer Client beim nächsten Autosave neuere Felder still wegschneiden."""
+    v = _payload_schema_version(payload)
+    if v > CURRENT_SCHEMA_VERSION:
+        raise ProjectArchiveError(
+            f"Projektakte ist neuer (schema_version={v}) als dieser "
+            f"PeakCut-Stand (max {CURRENT_SCHEMA_VERSION}). Nicht laden, "
+            f"um keine Daten zu verlieren — bitte PeakCut aktualisieren.")
+
+
+def _assert_archive_write_allowed(archive_path):
+    """DATA-2: Nicht über eine vorhandene Zukunfts-Akte schreiben. Sonst
+    frisst der Normalflow/Autosave eine v-neuere Akte, nachdem das Laden
+    sie bereits abgelehnt hat. Kaputte/unlesbare Akte -> Schreiben darf
+    reparieren."""
+    if not os.path.isfile(archive_path):
+        return
+    try:
+        with open(archive_path) as f:
+            existing = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return
+    try:
+        v = _payload_schema_version(existing)
+    except ProjectArchiveError:
+        return  # ungültige Version in alter Datei -> Schreiben repariert
+    if v > CURRENT_SCHEMA_VERSION:
+        raise ProjectArchiveError(
+            f"Vorhandene Projektakte ist neuer (schema_version={v}) als "
+            f"dieser PeakCut-Stand — nicht überschreiben.")
+
+
 def parse_archive_payload(payload, fallback_config):
     if not isinstance(payload, dict):
         raise ProjectArchiveError("Projektakte ist kein gültiges Objekt")
@@ -179,6 +236,7 @@ def parse_archive_payload(payload, fallback_config):
         raise ProjectArchiveError(
             f"Projektakte unvollständig — fehlende Sektion(en): "
             f"{', '.join(missing)}")
+    _assert_schema_readable(payload)
     cfg = dict(fallback_config or {})
     cfg.update(payload.get("config", {}) or {})
     return {
@@ -212,6 +270,7 @@ def save_project_archive(session, root=None):
         root = material_root(_media_paths(project), project.keyboard_track)
     archive_dir = os.path.join(root, ARCHIVE_DIR)
     os.makedirs(archive_dir, exist_ok=True)
+    _assert_archive_write_allowed(os.path.join(archive_dir, ARCHIVE_FILE))
 
     csv_ref = None
     src_csv = getattr(session, "speaker_activity_csv", None)
@@ -234,8 +293,8 @@ def save_project_archive(session, root=None):
 
     payload = build_archive_payload(session, root, csv_ref)
     archive_path = os.path.join(archive_dir, ARCHIVE_FILE)
-    with open(archive_path, "w") as f:
-        json.dump(payload, f, indent=2, ensure_ascii=False)
+    atomic_io.write_json_atomic(archive_path, payload, indent=2,
+                                ensure_ascii=False)
     return archive_path
 
 
@@ -328,6 +387,11 @@ def load_project_archive(archive_path_or_root, fallback_config):
         CameraAssignment.from_dict(d)
         for d in _map_assignment_paths(
             asg.get("folgenschnitt_camera_assignments", []), _abs_p)]
+    # Slice B v3 (Carl-Plan 2026-06-03): Toggle-Wert hydratisieren.
+    # Fehlt (v1/v2) ODER ungueltig (Tippfehler/Migration-Schaden) →
+    # Default. normalize_unused_clips_mode wirft nicht.
+    session.folgenschnitt_unused_clips_mode = _normalize_clips_mode(
+        asg.get("folgenschnitt_unused_clips_mode"))
 
     # v2: clip_candidates/peak_decisions — fehlt (v1-Akte/None) ->
     # load_analysis_results hat schon aus Peaks gebootstrappt, bleibt.

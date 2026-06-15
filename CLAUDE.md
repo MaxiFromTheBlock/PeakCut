@@ -689,10 +689,150 @@ Backlog, kein offenes Feature mehr:
 - [ ] **Cutter-Qualitäts-Sign-off:** braucht 1 aufbewahrten sauberen Export
   (vollständige Zuordnung). XML ist regression-locked frame-identisch zur
   bereits gelobten reaktiven Version — Bestätigung, kein Blocker.
-- [ ] **Fremdmaterial-Test (Max):** echte Fremdproduktion durchspielen.
-  Produktionsunabhängigkeit ist testbewiesen — reale Bestätigung.
+- [x] ~~**Fremdmaterial-Test (Max):** echte Fremdproduktion durchspielen.~~
+  **DURCHGEFÜHRT 2026-06-01** an "1plus1" (Tim Mälzer / Jan Ullrich,
+  zwei Folgen-Teile à ~57min + ~46min). Ablauf: kein Marker im
+  Material → Fake-Keyboard (30s WAV mit Klick bei 5s) als Trigger-
+  Spur, sonst regulärer Flow. Folgenschnitt-XML beide Male sauber
+  generiert; Max-Sichtung in Premiere: Sprecher-Wechsel Jan/Tim
+  überzeugend. Produktionsunabhängigkeit damit real bestätigt.
+  Drei Befunde aus der Sichtung → eigene Slice-Kandidaten (siehe
+  „Fremdmaterial-Test-Befunde" unten).
 - [ ] Competitor-Recherche (autocut.com, Resolve Scene-Cut, GitHub-Repos) —
   Inspiration, geparkt.
+
+### Fremdmaterial-Test-Befunde + Slice-Kandidaten — 2026-06-01
+
+Aus dem Fremdmaterial-Test (1plus1, Mälzer/Ullrich) entstanden drei
+saubere Slice-Kandidaten. Reihenfolge per Carl-Take (2026-06-01):
+A → B, Profile später. Stand-In für (A) + (B) während des Tests war
+ein **Postprocess-Skript** `~/Desktop/Fremdproduktion/multitrack_postprocess.py`
+(argparse-generisch: `--input/--output/--totale-video/--person-a/--person-b`)
+— produziert die gewünschte XML, ist aber kein PeakCut-Code. Wird
+durch die richtigen Slices abgelöst.
+
+- [ ] **Slice A — Dialog-Totale Cross-Talk-Pass.** Heutige
+  `_insert_totale`-Logik streut Totale nur in Monolog-Blöcken ≥ 90s ein
+  (mit Intervall 240s). Bei dialogischem Material (Median 4.8s Blöcke,
+  243 Cuts in 57min) greift sie nie. **Max' Wunsch (Korrektur zu Carls
+  ursprünglichem „globaler Pass alle X Min"):** Totale soll bei
+  *Cross-Talk* zwischen den Sprechern reinkommen — wenn beide im
+  schnellen Wechsel reden — aber *nicht* bei humorvollem
+  Schlagabtausch (da bleibt's beim Einzelkamera-Wechsel). Inhaltliche
+  Unterscheidung, automatisch nicht trivial zu erkennen. Eigene Spec
+  + Carl-Plan + TDD-Bau. Beispiele aus echtem Material in die Spec.
+- [ ] **Slice B — Multi-Track-Folgenschnitt-XML.** Aktueller Exporter
+  schreibt eine Video-Spur mit nahtlosen Cuts. Max will pro Kamera
+  eigene Spur mit Lücken: V1 (unten) = Totale, V2 = Person A, V3 = Person B.
+  Premiere-Logik „oberste sichtbare gewinnt" greift; bei A/B-Lücken
+  fällt V1-Totale als Sicherheit durch. Carls Unterscheidung
+  *Partitioned* vs. *Overlay* in der Spec entscheiden — Max' Variante
+  (V1-Totale an JEDER Decision-Position, V2/V3 mit Lücken nur an
+  ihren Decisions) ist **Overlay**, weil Premiere-Fallback genau
+  funktioniert. Pin: Keyboardstellen-XML byte-identisch. Spec → Carl-Plan
+  → TDD-Bau (siehe Audio-Hinweis unten).
+- [ ] **Slice C (in B integriert oder als Mini-Slice davor) —
+  Folgenschnitt-XML Audio = Mix-only.** Heute exportiert PeakCut alle
+  drei Audio-Spuren (Jan-Mic, Tim-Mic, Mix) in die Folgenschnitt-XML.
+  Carl-Hinweis (2026-06-01): wenn alle drei in der NLE gleichzeitig
+  laufen, holen wir uns dieselbe Phasing-Klasse wie #71a in die
+  Premiere-Timeline. Richtige Default-Semantik: **Mix vorhanden → nur
+  Mix-Spur. Fallback auf echte Mics nur wenn kein Mix.** Postprocess-
+  Skript macht das schon. Keyboardstellen-XML bleibt byte-identisch
+  (Pin-1, anderer Exporter).
+- [ ] **Profile als Datenmodell — *deutlich* später**, nicht in dieses
+  Slice-Paket ziehen (Roadmap-Pkt 4). Aktuelle Tuning-Achsen
+  (Totale-Schwellen, Loosening-Defaults, Schnittfrequenz) gehören
+  langfristig in Per-Produktion-Profile (HM ≠ 1plus1). Erst bewährte
+  Slice-A/B-Realität schaffen, dann Datenmodell-Migration.
+
+**Inhaltliche Lektion aus dem Test:** Das Tool **funktioniert
+produktionsunabhängig** — Schnitt-Logik, Zuordnung, Sync-Pfad
+greifen unverändert. Aber die *Layout-Annahmen* der Folgenschnitt-XML
+(eine Video-Spur, alle drei Audio-Spuren) sind HM-Standard und für
+fremde Cutter-Workflows nicht ideal. Beide Slices oben adressieren
+genau das.
+
+### Slice B Bau-Status — Stand 2026-06-03 21:55
+
+**In aktiver Bauarbeit nach Carl-Plan vom 2026-06-03.** Default-Mode
+= disable (Max final). Pin-1 (Keyboardstellen-XML byte-identisch)
+hält durchgehend. Aufteilung: Claude macht Datenstruktur/UI, Carl
+macht XML-Writer.
+
+- [x] **Task 0 — Safety-Harness / Pin-1** (Claude, Commit `ce52833`).
+  5 Tests: Keyboardstellen-XML byte-identisch unabhängig vom Mode,
+  `core/exporters.py` API stabil.
+- [x] **Task 1 — Contracts + Defaults** (Claude, Commit `722a823`).
+  `core/folgenschnitt_multitrack_layout.py` mit Konstanten,
+  `normalize_unused_clips_mode`, frozen Dataclasses (VideoClipPlan,
+  VideoTrackPlan, AudioClipPlan, AudioTrackPlan, MultitrackLayoutPlan).
+  Session-Default-Attribut. Gate-A grün von Carl.
+- [x] **Task 2+3 — Layout-Planung + Audio-Quellenwahl** (Claude,
+  Commit `fef9c28`, P2-Fix `579a14b`).
+  `build_video_track_order` (Carl-Algorithmus), `build_video_track_layout`
+  (Remove + Disable), `build_audio_track_plan` (Mix-only via #71a-
+  Helper, Fallback echte Mics), `build_multitrack_layout`.
+  Carl-P2-Fix: nur erste Totale ist Fallback-Schicht (Mehrfach-Totale-
+  Edge-Case). Plan-Vertrag: `in_ms = start_ms`, Offset-Logik bleibt
+  im Exporter.
+- [x] **Task 4 — XMLExporter Video auf Multi-Track** (Carl, Commit
+  `140ecd0`). `FolgenschnittXMLExporter` schreibt Video über
+  MultitrackLayoutPlan. `<enabled>FALSE</enabled>` als Kind-Element
+  für Disable-Mode-Clips. Negative-Offset-Policy unverändert
+  (`duration == end-start == out-in`). Audio bewusst noch unangetastet
+  bis Task 5.
+- [x] **Task 5 — Audio im Exporter Mix-only** (Carl, Commit `dac95f4`).
+  `audio_routing.get_mix_track` → eine Mix-Spur. Fallback echte Mics
+  mit Status-Hinweis.
+- [x] **Task 6 — Schema-v3 Persistenz** (Claude, Commit `976a60e`).
+  `CURRENT_SCHEMA_VERSION = 3`, `assignments.folgenschnitt_unused_clips_mode`
+  serialisiert + ueber `normalize_unused_clips_mode` hydratisiert.
+  v1/v2-Bootstrap mit Default, ungueltiger Wert → Default (silent).
+  Carl Gate C grün. P3 (Loader-Warnung statt silent fallback) bewusst
+  geparkt — gehoert spaeter zentral in Hub/Import-Refactor.
+- [x] **Task 7 — AssignmentPage Toggle-UI** (Claude, Commit `e19ab72`).
+  Eigener QFrame-Block "Export-Einstellungen" mit QRadioButtons
+  Disable/Remove + Tooltips, zwischen Status-Label und Weiter-Button
+  (NICHT im Kamera-Scroll-Bereich). `apply_to_session` schreibt
+  `session.folgenschnitt_unused_clips_mode` zusammen mit Assignments.
+- [x] **Task 8 — Integration/Regression** (Claude, Commit `061ccb7`).
+  End-to-End Disable + Remove (Save→Load→Export), Pin-Tests fuer
+  pipeline/decisions/loosening/audio_routing-API, Assignments+Mode
+  Roundtrip-Pin.
+- [x] **Task 9 — Premiere-Smoke / Merge-Gate** (2026-06-15, BESTANDEN).
+  Max hat beide XMLs (disable + remove) in Premiere importiert + gesichtet:
+  Kamerawechsel folgt dem Gespräch, Ton (Mix) sauber, disable-Modus
+  respektiert deaktivierte Clips. Totale erscheint nicht — verifiziert an
+  der XML: V1-Totale 135 Clips alle aktiv, aber an jeder Decision liegt eine
+  Person drüber → Totale stets verdeckt; die Schnittlogik wählt auf Dialog-
+  Material nie die Totale (Slice-A-Thema, kein Slice-B-Bug). Nach main gelandet.
+
+**Test-Stand 2026-06-10:** 593 Full Suite grün auf develop, Pin-1
+stabil. Carl Pre-Smoke-Review grün (keine P1/P2; ein P3 geparkt).
+Slice B ist Code-fertig.
+
+**Premiere-Smoke-Vorbereitung 2026-06-10** (Commit `b54c23e`):
+`scripts/smoke_multitrack_export.py` exportiert die Folgenschnitt-XML
+aus der Teil 2-`.peakcut`-Akte vom 2026-06-01 in beiden Modi. Vermeidet
+dass Max die App nur fuer den Toggle-Wechsel mit Re-Zuordnung neu
+durchklicken muss. Beide XMLs liegen in:
+- `~/Downloads/Teil 2 - Smoke disable/Folgenschnitt - Teil 2.xml`
+  (135 Decisions, 135 disabled-Clips, V1 Totale + V2 Jan weit +
+   V3 Tim weit + Mix)
+- `~/Downloads/Teil 2 - Smoke remove/Folgenschnitt - Teil 2.xml`
+  (135 Decisions, 0 disabled-Clips, V2 Jan 67 mit Luecken,
+   V3 Tim 68 mit Luecken, V1 Totale durchgehend, Mix)
+Max importiert beide in frische Premiere-Projekte, schaut Layout +
+Playback (insbesondere: rendert Premiere disabled-Clips wirklich nicht?).
+
+Bei Premiere-Zicken im Disable-Modus: Default kippt auf Remove
+(Carl-Fallback-Strategie aus Spec), Architektur unveraendert.
+
+**App-UI-Smoke bleibt getrennt** — kann nach dem Merge laufen.
+
+**Reproduktions-Material:** `~/Desktop/Fremdproduktion/Material für Peakcut/`
+(Teil 1 + Teil 2) liegt lokal mit `.peakcut`-Akten vom 2026-06-01.
 
 ### Gesundheits-Check-Backlog — abgegrenzt 2026-05-17 (KEIN Feature)
 
@@ -861,6 +1001,42 @@ Produkt):**
 ---
 
 ## Changelog
+
+### Daten-Integritäts-Riegel (auf main gelandet 2026-06-15)
+
+Erstes Paket nach dem Fundament-Health-Check
+(`docs/specs/2026-06-15-state-of-peakcut-health-check.md`, Urteil mostly-solid).
+Carl-Plan + Claude-Cross-Review (`docs/plans/2026-06-15-data-integritaets-riegel.md`),
+TDD, getrennte Commits + Gates. 593 → 621 Tests grün, Pin-1 byte-identisch stabil.
+
+- **DATA-1 (`7f032ad`):** neues neutrales Modul `core/atomic_io.py`
+  (`write_json_atomic`: tmp im selben Ordner → flush → fsync → `os.replace`
+  → best-effort dir-fsync; bei Abbruch tmp weg, alte Datei byte-identisch).
+  `save_project_archive` + `write_transcript_json` laufen darüber — ein Abbruch
+  mitten im Schreiben kann die zentrale `.peakcut/project.json` nicht mehr
+  truncieren (Risiko steigt auf NAS, G3).
+- **DATA-2 (`f6e9054`):** Schema-Versions-Policy. Zukunfts-Akte
+  (schema_version > CURRENT) wird beim **Laden** abgelehnt UND beim
+  **Speichern** nicht überschrieben (`_assert_archive_write_allowed` prüft die
+  vorhandene Datei) — sonst schneidet ein älterer Client beim nächsten Autosave
+  neuere Felder still weg. Bewusste Vertragsänderung: der alte „future loads
+  best effort"-Test ist gesplittet (Zukunft lehnt ab, uralt lädt).
+- **KI-2 (`3f86de8`):** R2-Ausricht-Riegel zentral in `prepare_smart_boundaries`.
+  Drift (Text-Spanne vs. Audiodauer > Toleranz) → `INFRA_FEHLT`, Decider nicht
+  aufgerufen, keine Kandidaten/Scores → die G5-`peak_decisions`-Sammlung wird
+  nicht mit zeitlich falschen Sinnabschnitten vergiftet. Nutzt die bestehende
+  `INFRA_FEHLT`-Semantik (kein neuer Contract).
+- **AUD-1a (`2875fa0`):** `speaker_activity._is_speaker_mic_candidate` erkennt
+  Mix über den zentralen `audio_routing.is_mix_track` (token-bewusst) statt
+  naivem `'mix' in basename` — `mixer_recording.wav` nicht mehr fälschlich als
+  Mix ausgeschlossen. keyboard/keys/klavier bleiben lokal bis #77;
+  `guest_name`/`_categorize_files` unangetastet (Pin-1/#77).
+
+Bewusst NICHT hier: Export-Orchestrierung raus aus GUI (ARCH-1 → vor NAS),
+großer Klassifizierer-Merge + `_categorize_files`/`guest_name` (→ #77).
+**Gelandet 2026-06-15:** Carl-Schluss-Review grün (P3 eingearbeitet); Premiere-Smoke
+(Slice B, beide Varianten) + App-Smoke (echte Akte: v2 laden → v3 atomar speichern →
+neu laden) bestanden. Gemeinsam mit Slice B nach main gemergt.
 
 ### #71a Audio-Routing-Mini-Slice (auf main gelandet 2026-05-25)
 

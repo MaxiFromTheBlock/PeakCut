@@ -1,20 +1,17 @@
 """Stufe-2 XML smoke: a mixed wide/close/totale decision list (as the
-loosening layer produces) must export as a valid, gapless FCP7-XML.
-The exporter itself is unchanged — this only guards the integration."""
+loosening layer produces) must export as valid, gapless-per-track
+Multi-Track FCP7-XML."""
 
 import xml.etree.ElementTree as ET
 from unittest.mock import MagicMock, patch
 
 from core.folgenschnitt_exporter import FolgenschnittXMLExporter
-from core.folgenschnitt_models import EditDecision
+from core.folgenschnitt_models import CameraAssignment, EditDecision
+from core.folgenschnitt_multitrack_layout import UNUSED_CLIPS_DISABLE
 
 
-def _clipitems(root, media_type):
-    section = root.find("sequence/media").find(media_type)
-    clips = []
-    for track in section.findall("track"):
-        clips.extend(track.findall("clipitem"))
-    return clips
+def _tracks(root, media_type):
+    return root.find("sequence/media").find(media_type).findall("track")
 
 
 def test_stage2_mixed_decisions_export_gapless_and_consistent(tmp_export_dir):
@@ -31,6 +28,12 @@ def test_stage2_mixed_decisions_export_gapless_and_consistent(tmp_export_dir):
         EditDecision(135_000, 225_000, "/m/CAM_C.mp4", "Gast", "loosen_rotation"),
         EditDecision(225_000, 360_000, "/m/CAM_W.mp4", "Gast", "loosen_rotation"),
     ]
+    session.folgenschnitt_camera_assignments = [
+        CameraAssignment("/m/CAM_W.mp4", "weit", "Gast"),
+        CameraAssignment("/m/CAM_C.mp4", "nah_close", "Gast"),
+        CameraAssignment("/m/TOTALE.mov", "totale"),
+    ]
+    session.folgenschnitt_unused_clips_mode = UNUSED_CLIPS_DISABLE
     project = MagicMock()
     project.export_dir = tmp_export_dir
     project.guest_name = "Hartmut Rosa"
@@ -44,17 +47,29 @@ def test_stage2_mixed_decisions_export_gapless_and_consistent(tmp_export_dir):
                return_value=(48000, 16, 1)):
         xml_path = FolgenschnittXMLExporter().export(session)
 
-    clips = _clipitems(ET.parse(xml_path).getroot(), "video")
+    tracks = _tracks(ET.parse(xml_path).getroot(), "video")
 
-    assert [c.find("name").text for c in clips] == [
-        "CAM_W", "TOTALE", "CAM_C", "CAM_W"
+    assert len(tracks) == 3
+    assert [t.findall("clipitem")[0].find("name").text for t in tracks] == [
+        "Totale", "Gast weit", "Gast nah_close"
     ]
-    starts = [int(c.find("start").text) for c in clips]
-    ends = [int(c.find("end").text) for c in clips]
-    assert starts[0] == 0
-    for i in range(len(clips) - 1):
-        assert ends[i] == starts[i + 1]                       # gapless
-    for c in clips:                                            # duration consistent
-        s, e = int(c.find("start").text), int(c.find("end").text)
-        i_, o = int(c.find("in").text), int(c.find("out").text)
-        assert o - i_ == e - s
+
+    for track in tracks:
+        clips = track.findall("clipitem")
+        assert len(clips) == 4
+        starts = [int(c.find("start").text) for c in clips]
+        ends = [int(c.find("end").text) for c in clips]
+        assert starts[0] == 0
+        for i in range(len(clips) - 1):
+            assert ends[i] == starts[i + 1]                    # gapless per track
+        for c in clips:                                        # duration consistent
+            s, e = int(c.find("start").text), int(c.find("end").text)
+            i_, o = int(c.find("in").text), int(c.find("out").text)
+            assert o - i_ == e - s
+
+    # V1 is the fallback totale and must never be disabled.
+    assert all(c.find("enabled") is None for c in tracks[0].findall("clipitem"))
+    assert any(
+        c.find("enabled") is not None and c.find("enabled").text == "FALSE"
+        for c in tracks[1].findall("clipitem") + tracks[2].findall("clipitem")
+    )

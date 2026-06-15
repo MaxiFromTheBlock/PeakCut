@@ -570,7 +570,9 @@ class ReviewPage(QWidget):
         # Smart-Seite des Riegels öffnen und schreiben prüfen
         # (Task 7: Zwei-Bedingungen-Barriere).
         from core.clip_boundary.models import BoundaryOutcome
-        if getattr(result, "category", None) is BoundaryOutcome.INFRA_FEHLT:
+        is_infra = (getattr(result, "category", None)
+                    is BoundaryOutcome.INFRA_FEHLT)
+        if is_infra:
             msg = (getattr(result, "message", None)
                    or "Sinnabschnitte: nicht berechnet (Infrastruktur fehlt).")
             self.status_message.emit(msg)
@@ -593,9 +595,13 @@ class ReviewPage(QWidget):
         # Status + Button-Gate nach Abschluss aktualisieren.
         self._refresh_smart_status()
         self._refresh_sinn_btn()
-        # Autosave: aktualisierte ClipCandidates + transcript_ref in
-        # die .peakcut-Akte (MainWindow lauscht auf session_changed).
-        self.session_changed.emit()
+        # Autosave NUR bei echten Ergebnissen (OK/DECIDER): aktualisierte
+        # ClipCandidates in die .peakcut-Akte (MainWindow lauscht auf
+        # session_changed). Bei INFRA_FEHLT gibt es keinen neuen Stand zu
+        # sichern — der transcript_ref wird bereits beim TranscriptWorker-
+        # Finish autosaved (KI-2/P3, Carl 2026-06-15).
+        if not is_infra:
+            self.session_changed.emit()
 
     def _refresh_smart_status(self):
         """#3-Rev Task 8 / R5: durchgängige Smart-Statuszeile aus dem

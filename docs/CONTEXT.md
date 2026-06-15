@@ -10,7 +10,7 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 ## Tech-Stack
 
 - Python 3.11 + PyQt6
-- 261 Tests, CI via GitHub Action (libegl1/libgl1-Fix — CI war seit Tagen rot)
+- 621 Tests, CI via GitHub Action (libegl1/libgl1-Fix — CI war seit Tagen rot)
 - Distribution: Launcher-App in /Applications, ruft Repo-Code direkt auf
   (PyInstaller-Bundle-Strategie geparkt — siehe Distribution-Sektion in CLAUDE.md)
 
@@ -57,8 +57,24 @@ Dieses Dokument ist die Kurzversion fuer den PO.
   Tausch der Implementierung, kein Neubau.
 - Smoke 2026-05-21 an Sheila-de-Liz-Material: 35/36 Peaks haben
   narrative Sinnabschnitt-Vorschläge mit Konfidenz 0.78–0.80,
-  R4-Disziplin live bewährt. Wiedergabe-UX-Slice (#76) ist Voraussetzung
-  fürs eigentliche Hör-Urteil → vor dem Prompt-Tuning-Slice (#70).
+  R4-Disziplin live bewährt.
+- **#71a Audio-Routing-Mini-Slice auf main 2026-05-25:** Phasing-
+  Wurzel im Cutter-MP3 und in der Review-Speak-Mode-Wiedergabe
+  behoben. Mix-Datei wurde beim Import in `project.mic_tracks`
+  einsortiert und von MP3Exporter + `session.play_current` mit den
+  Einzel-Mics overlay-summiert — jeder Sprecher doppelt. Zentraler
+  Helfer `core/audio_routing.py` mit Token-Heuristik wurde
+  eingeführt, alle Hör-/Renderpfade hängen sich daran auf. XML-
+  Pfade + `.peakcut`-Schema unangetastet (Pin-1 stabil). Max-O-Ton
+  „kein Phasing mehr" am realen Re-Export. **Wichtige Übergangs-
+  Asymmetrie (Absicht, kein Vergessen):** Mix liegt strukturell
+  weiter in `project.mic_tracks`, der `audio_routing`-Helper
+  filtert ihn nur zur Laufzeit raus. Strukturelle Trennung (eigenes
+  `project.mix_track`-Feld, Mix nicht mehr in mic_tracks, Schema-v3)
+  kommt erst mit **#77 Import-Refactor** — bis dahin ist das so
+  korrekt. Nächste Slices: **#76 Wiedergabe-UX** (baufertig auf
+  dem Helper-Fundament) → **Import-Refactor + Marker-Rename (#37,
+  #77)** → **Prompt-Tuning (#70)**.
 
 ## Folgenschnitt Stufe 2 / Track 1 (auf main gelandet 2026-05-17)
 
@@ -98,6 +114,40 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 1. V3 Vision: Smart Scan, Create Mix, Screenshots Page, Hub-Architektur
 2. UI Revamp (Figma → PyQt6, oder Electron?)
 3. Versionsnummer + Code Signing (geparkt — erst noetig wenn PeakCut wieder extern verteilt wird)
+
+## Offene Slices (Stand 2026-06-15)
+
+**Fundament-Health-Check 2026-06-15** (`docs/specs/2026-06-15-state-of-peakcut-health-check.md`):
+Urteil mostly-solid. **Slice B + Daten-Integritäts-Riegel GELANDET auf main
+(2026-06-15, Premiere- + App-Smoke bestanden)** (atomare
+Writes DATA-1, Schema-Policy DATA-2, R2-Ausricht-Riegel KI-2, speaker_activity-
+Mix-Hub AUD-1a — 621 Tests grün, Pin-1 stabil; Plan:
+`docs/plans/2026-06-15-data-integritaets-riegel.md`). Reconciled Reihenfolge
+(Carl+Claude): Slice-B-Merge → #76 Wiedergabe (Gate vor jedem KI-Tuning) →
+#77 Import-Refactor (zieht den restlichen Klassifizierer-Merge mit) → #70
+Prompt-Tuning → Slice A (halb-automatisch) → Export-Orchestrierung aus dem GUI
+vor NAS. Tickende Uhr: pydub/audioop bei Python 3.13 + Python-Pin nicht erzwungen.
+
+Reihenfolge nach #71a-Merge (2026-05-25) und Fremdmaterial-Test (2026-06-01):
+1. **Slice B — Multi-Track-Folgenschnitt-XML** (CODE-FERTIG 2026-06-06,
+   Premiere-Smoke vorbereitet 2026-06-10): Tasks 0-8 alle durch
+   (Pin-1, Contracts, Layout-Planung, Audio-Quellenwahl, Multi-Track-
+   Video, Audio-Mix-only, Schema-v3, UI-Toggle, Integration). Carl
+   Pre-Smoke-Review grün. **Offen: nur noch Max' Premiere-Sichtung**
+   beider XMLs (liegen in `~/Downloads/Teil 2 - Smoke {disable,remove}/`,
+   erzeugt durch `scripts/smoke_multitrack_export.py`), dann Carl-
+   Schluss-Review, dann Merge. Default-Mode = disable. 593 Tests grün,
+   Pin-1 stabil.
+2. **#76 Wiedergabe-UX** — Spec abgenommen 2026-05-21, Carl-Plan steht aus.
+3. **Slice A — Dialog-Totale Cross-Talk-Pass**: Totale bei Cross-Talk-
+   Phasen einfügen, NICHT genereller Zeit-Pass. Inhaltliche
+   Unterscheidung (Cross-Talk vs. humorvoller Schlagabtausch).
+   Wartet auf Max' Material-Markierung aus 1plus1.
+4. **#37/#77 Import-Refactor + Marker-Rename** — strukturelle Mix-Trennung.
+5. **#70 Prompt-Tuning** — Few-Shot + A/B-Harness.
+
+Details + Bau-Status pro Task: App/CLAUDE.md, Sektion „Slice B
+Bau-Status — Stand 2026-06-03".
 
 ## Branches
 

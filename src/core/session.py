@@ -75,6 +75,10 @@ class PeakCutSession:
         # deliberately empty assignment must NOT silently fall back to
         # analysis/default mics.
         self.folgenschnitt_assignment_applied = False
+        # Slice B: Multi-Track-Folgenschnitt-XML — Toggle "Unused Clips".
+        # Default kommt aus folgenschnitt_multitrack_layout (single source).
+        from .folgenschnitt_multitrack_layout import DEFAULT_UNUSED_CLIPS_MODE
+        self.folgenschnitt_unused_clips_mode = DEFAULT_UNUSED_CLIPS_MODE
 
     def play_current(self, index=None):
         """Play the current peak (keyboard or mic mode)."""
