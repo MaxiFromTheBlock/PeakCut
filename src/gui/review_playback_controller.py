@@ -20,7 +20,8 @@ from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtSignal
 
 class ReviewPlaybackController(QObject):
     finished = pyqtSignal()
-    drift_updated = pyqtSignal(int)
+    drift_updated = pyqtSignal(int)   # POST-Korrektur-Restdrift (Gate-Wert)
+    corrected = pyqtSignal()          # separate Diagnose: eine Korrektur
     error = pyqtSignal(str)
 
     def __init__(self, video_preview, *, tolerance_ms=40, ready_timeout_ms=5000,
@@ -55,13 +56,16 @@ class ReviewPlaybackController(QObject):
         self._ready_timer.setInterval(ready_timeout_ms)
         self._ready_timer.timeout.connect(self._on_ready_timeout)
 
-        # Async-Readiness: sobald der Audio-Player lädt, erneut versuchen.
-        sig = getattr(self._audio, "mediaStatusChanged", None)
-        if sig is not None and hasattr(sig, "connect"):
-            try:
-                sig.connect(lambda *a: self._try_begin())
-            except (TypeError, RuntimeError):
-                pass
+        # Async-Readiness: erneut versuchen, sobald Audio ODER Video lädt.
+        # (P1 Carl-Gate-E: nur auf Audio zu warten lief in den Timeout, wenn
+        # das Video seine Duration erst nach dem Audio meldet.)
+        for sig in (getattr(self._audio, "mediaStatusChanged", None),
+                    getattr(self._video, "duration_changed", None)):
+            if sig is not None and hasattr(sig, "connect"):
+                try:
+                    sig.connect(lambda *a: self._try_begin())
+                except (TypeError, RuntimeError):
+                    pass
 
     # --- öffentliche API ---
 
@@ -133,14 +137,21 @@ class ReviewPlaybackController(QObject):
         if not (self._active and self._started):
             return
         audio_t = self._audio_timeline_ms()
-        video_t = self._video.current_mix_position()
-        drift = abs(video_t - audio_t)
-        self.drift_updated.emit(int(drift))
         if audio_t >= self._window.end_ms:
             self._finish()
             return
+        video_t = self._video.current_mix_position()
+        drift = abs(video_t - audio_t)
+        # P1 Carl-Gate-E: bei Drift > Toleranz Bild auf die Audio-Timeline
+        # schnappen; gemeldet wird der RESTdrift (Gate-Wert), nicht der
+        # Vor-Korrektur-Wert. Korrekturen separat zählen (Diagnose).
         if drift > self._tolerance:
             self._video.set_position(audio_t)
+            self.corrected.emit()
+            residual = 0
+        else:
+            residual = drift
+        self.drift_updated.emit(int(residual))
 
     def _finish(self):
         self._tick.stop()

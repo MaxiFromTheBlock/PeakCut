@@ -84,12 +84,13 @@ def main(argv=None):
     corrections = {"n": 0}
     t0 = time.monotonic()
 
-    def on_drift(d):
-        samples.append({"t_ms": (time.monotonic() - t0) * 1000, "drift_ms": d})
-        if d > threshold:
-            corrections["n"] += 1
-
-    ctrl.drift_updated.connect(on_drift)
+    # drift_updated = POST-Korrektur-Restdrift (Gate-Wert); Korrekturen
+    # separat über das corrected-Signal zählen (P1 Carl-Gate-E).
+    ctrl.drift_updated.connect(
+        lambda d: samples.append(
+            {"t_ms": (time.monotonic() - t0) * 1000, "drift_ms": d}))
+    ctrl.corrected.connect(
+        lambda: corrections.__setitem__("n", corrections["n"] + 1))
     done = {"f": False}
     ctrl.finished.connect(lambda: done.__setitem__("f", True))
     ctrl.play(window, source)

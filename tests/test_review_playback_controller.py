@@ -2,7 +2,9 @@
 
 Gemeinsame Uhr: Audio = Master, Video folgt und wird bei Drift korrigiert.
 Mit Fake-Playern getestet (kein echtes Medium). Readiness-Gate vor dem
-gemeinsamen Start, harte stop()/cleanup(). Drift-Schwelle config-gesteuert.
+gemeinsamen Start (Audio UND Video, P1 Carl-Gate-E), harte stop()/cleanup().
+drift_updated meldet den POST-Korrektur-Restdrift (P1 Carl-Gate-E),
+corrected zählt Korrekturen separat.
 """
 
 import os
@@ -15,18 +17,24 @@ from core.playback_windows import PlaybackWindow  # noqa: E402
 from core.playback_audio_source import PlaybackAudioSource  # noqa: E402
 
 
-class _Sig:
-    def connect(self, *a):
-        pass
+class _Signal:
+    def __init__(self):
+        self._cbs = []
+
+    def connect(self, cb):
+        self._cbs.append(cb)
+
+    def emit(self, *a):
+        for cb in list(self._cbs):
+            cb(*a)
 
 
 class FakeAudio:
-    mediaStatusChanged = _Sig()
-
     def __init__(self, status="loaded"):
         self.calls = []
         self._pos = 0
         self._status = status
+        self.mediaStatusChanged = _Signal()
 
     def setSource(self, url):
         self.calls.append("setSource")
@@ -47,6 +55,10 @@ class FakeAudio:
     def mediaStatus(self):
         return self._status
 
+    def set_status(self, s):
+        self._status = s
+        self.mediaStatusChanged.emit(s)
+
     def deleteLater(self):
         self.calls.append("deleteLater")
 
@@ -56,6 +68,7 @@ class FakeVideo:
         self.calls = []
         self._dur = duration
         self._mix = 0
+        self.duration_changed = _Signal()
 
     def prepare_clip(self, a, b):
         self.calls.append(("prepare", a, b))
@@ -75,6 +88,10 @@ class FakeVideo:
 
     def get_duration(self):
         return self._dur
+
+    def set_duration(self, d):
+        self._dur = d
+        self.duration_changed.emit(d)
 
 
 def _ctrl(fa, fv, tol=40):
@@ -98,17 +115,36 @@ def test_play_starts_both_when_ready():
     assert ("prepare", 50000, 80000) in fv.calls
     assert "play_prepared" in fv.calls
     assert "play" in fa.calls
-    assert ("setPos", 50000) in fa.calls  # Audio auf media_start
+    assert ("setPos", 50000) in fa.calls
+
+
+def test_video_readiness_retriggers_begin():
+    # P1.1: Audio ready, Video noch nicht -> kein Start; kommt die Video-
+    # Duration nach, startet der Controller (kein Timeout).
+    fa, fv = FakeAudio(status="loaded"), FakeVideo(duration=0)
+    _ctrl(fa, fv).play(_WIN, _SRC)
+    assert "play" not in fa.calls
+    fv.set_duration(100000)
+    assert "play" in fa.calls
+
+
+def test_audio_readiness_retriggers_begin():
+    # symmetrisch: Video ready, Audio kommt nach.
+    fa, fv = FakeAudio(status="loading"), FakeVideo(duration=100000)
+    _ctrl(fa, fv).play(_WIN, _SRC)
+    assert "play" not in fa.calls
+    fa.set_status("loaded")
+    assert "play" in fa.calls
 
 
 def test_audio_is_master_drift_corrects_video():
     fa, fv = FakeAudio(), FakeVideo()
     c = _ctrl(fa, fv)
     c.play(_WIN, _SRC)
-    fa._pos = 60000          # timeline 60000
-    fv._mix = 60100          # drift 100 > 40
+    fa._pos = 60000
+    fv._mix = 60100          # Vor-Korrektur-Drift 100 > 40
     c._on_tick()
-    assert ("setpos", 60000) in fv.calls  # Video auf Audio-Timeline korrigiert
+    assert ("setpos", 60000) in fv.calls
 
 
 def test_small_drift_not_corrected():
@@ -116,10 +152,43 @@ def test_small_drift_not_corrected():
     c = _ctrl(fa, fv)
     c.play(_WIN, _SRC)
     fa._pos = 60000
-    fv._mix = 60030          # drift 30 <= 40
+    fv._mix = 60030
     fv.calls.clear()
     c._on_tick()
     assert _setpos_calls(fv) == []
+
+
+def test_drift_updated_is_post_correction_residual():
+    # P1.2: bei Korrektur wird der RESTdrift (~0) gemeldet, nicht der
+    # Vor-Korrektur-Wert; ohne Korrektur der echte (kleine) Drift.
+    fa, fv = FakeAudio(), FakeVideo()
+    c = _ctrl(fa, fv)
+    seen = []
+    c.drift_updated.connect(lambda d: seen.append(d))
+    c.play(_WIN, _SRC)
+    fa._pos = 60000
+    fv._mix = 60100          # 100 > 40 -> korrigiert
+    c._on_tick()
+    assert seen[-1] == 0
+    fa._pos = 61000
+    fv._mix = 61020          # 20 <= 40 -> keine Korrektur
+    c._on_tick()
+    assert seen[-1] == 20
+
+
+def test_corrected_signal_counts_corrections():
+    fa, fv = FakeAudio(), FakeVideo()
+    c = _ctrl(fa, fv)
+    n = {"c": 0}
+    c.corrected.connect(lambda: n.__setitem__("c", n["c"] + 1))
+    c.play(_WIN, _SRC)
+    fa._pos = 60000
+    fv._mix = 60100
+    c._on_tick()             # korrigiert
+    fa._pos = 61000
+    fv._mix = 61010
+    c._on_tick()             # drift 10, keine Korrektur
+    assert n["c"] == 1
 
 
 def test_out_point_stops_both_and_finishes():
@@ -128,7 +197,7 @@ def test_out_point_stops_both_and_finishes():
     done = {"n": 0}
     c.finished.connect(lambda: done.__setitem__("n", done["n"] + 1))
     c.play(_WIN, _SRC)
-    fa._pos = 80000          # timeline 80000 >= window.end 80000
+    fa._pos = 80000
     c._on_tick()
     assert "stop" in fa.calls
     assert any(isinstance(x, tuple) and x[0] == "stop_clip_at" for x in fv.calls)
@@ -141,18 +210,8 @@ def test_stop_is_idempotent():
     c = _ctrl(fa, fv)
     c.play(_WIN, _SRC)
     c.stop()
-    c.stop()  # darf nicht krachen
+    c.stop()
     assert c.is_playing() is False
-
-
-def test_not_ready_defers_then_begins():
-    fa, fv = FakeAudio(status="loading"), FakeVideo()
-    c = _ctrl(fa, fv)
-    c.play(_WIN, _SRC)
-    assert "play" not in fa.calls  # noch nicht ready -> verschoben
-    fa._status = "loaded"
-    c._try_begin()
-    assert "play" in fa.calls
 
 
 def test_disabled_source_does_not_play():
