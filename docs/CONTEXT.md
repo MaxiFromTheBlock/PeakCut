@@ -118,7 +118,8 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 ## Offene Slices (Stand 2026-06-15)
 
 **Fundament-Health-Check 2026-06-15** (`docs/specs/2026-06-15-state-of-peakcut-health-check.md`):
-Urteil mostly-solid. **Daten-Integritäts-Riegel GELANDET auf develop** (atomare
+Urteil mostly-solid. **Slice B + Daten-Integritäts-Riegel GELANDET auf main
+(2026-06-15, Premiere- + App-Smoke bestanden)** (atomare
 Writes DATA-1, Schema-Policy DATA-2, R2-Ausricht-Riegel KI-2, speaker_activity-
 Mix-Hub AUD-1a — 621 Tests grün, Pin-1 stabil; Plan:
 `docs/plans/2026-06-15-data-integritaets-riegel.md`). Reconciled Reihenfolge

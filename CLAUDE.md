@@ -800,9 +800,13 @@ macht XML-Writer.
   End-to-End Disable + Remove (Save→Load→Export), Pin-Tests fuer
   pipeline/decisions/loosening/audio_routing-API, Assignments+Mode
   Roundtrip-Pin.
-- [ ] **Task 9 — Premiere-Smoke / Merge-Gate** (Max + Carl-Schluss-Review).
-  XMLs sind vorbereitet (siehe unten). Offen ist Max' Premiere-Import
-  + Sichtung beider Modi. HM-Sanity optional.
+- [x] **Task 9 — Premiere-Smoke / Merge-Gate** (2026-06-15, BESTANDEN).
+  Max hat beide XMLs (disable + remove) in Premiere importiert + gesichtet:
+  Kamerawechsel folgt dem Gespräch, Ton (Mix) sauber, disable-Modus
+  respektiert deaktivierte Clips. Totale erscheint nicht — verifiziert an
+  der XML: V1-Totale 135 Clips alle aktiv, aber an jeder Decision liegt eine
+  Person drüber → Totale stets verdeckt; die Schnittlogik wählt auf Dialog-
+  Material nie die Totale (Slice-A-Thema, kein Slice-B-Bug). Nach main gelandet.
 
 **Test-Stand 2026-06-10:** 593 Full Suite grün auf develop, Pin-1
 stabil. Carl Pre-Smoke-Review grün (keine P1/P2; ein P3 geparkt).
@@ -998,7 +1002,7 @@ Produkt):**
 
 ## Changelog
 
-### Daten-Integritäts-Riegel (auf develop, 2026-06-15)
+### Daten-Integritäts-Riegel (auf main gelandet 2026-06-15)
 
 Erstes Paket nach dem Fundament-Health-Check
 (`docs/specs/2026-06-15-state-of-peakcut-health-check.md`, Urteil mostly-solid).
@@ -1030,7 +1034,9 @@ TDD, getrennte Commits + Gates. 593 → 621 Tests grün, Pin-1 byte-identisch st
 
 Bewusst NICHT hier: Export-Orchestrierung raus aus GUI (ARCH-1 → vor NAS),
 großer Klassifizierer-Merge + `_categorize_files`/`guest_name` (→ #77).
-**Offen vor evtl. main-Merge:** Carl-Schluss-Cross-Review + Slice-B-Premiere-Smoke.
+**Gelandet 2026-06-15:** Carl-Schluss-Review grün (P3 eingearbeitet); Premiere-Smoke
+(Slice B, beide Varianten) + App-Smoke (echte Akte: v2 laden → v3 atomar speichern →
+neu laden) bestanden. Gemeinsam mit Slice B nach main gemergt.
 
 ### #71a Audio-Routing-Mini-Slice (auf main gelandet 2026-05-25)
 
