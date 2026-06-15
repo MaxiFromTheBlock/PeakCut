@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 
+from . import atomic_io
 from .folgenschnitt_multitrack_layout import (
     DEFAULT_UNUSED_CLIPS_MODE,
     normalize_unused_clips_mode as _normalize_clips_mode,
@@ -244,8 +245,8 @@ def save_project_archive(session, root=None):
 
     payload = build_archive_payload(session, root, csv_ref)
     archive_path = os.path.join(archive_dir, ARCHIVE_FILE)
-    with open(archive_path, "w") as f:
-        json.dump(payload, f, indent=2, ensure_ascii=False)
+    atomic_io.write_json_atomic(archive_path, payload, indent=2,
+                                ensure_ascii=False)
     return archive_path
 
 
