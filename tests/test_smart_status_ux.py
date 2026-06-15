@@ -1,7 +1,7 @@
 """#3-Revision Task 8 / #76 — Smart-Statuszeile + Play-Verfügbarkeit.
 
 Statuszeile (Spec §11 R5) unverändert. Der frühere Sinnabschnitt-▶-Knopf
-ist mit #76 entfallen; _refresh_sinn_btn (hist. Name) steuert jetzt die
+ist mit #76 entfallen; _refresh_play_availability (hist. Name) steuert jetzt die
 Play-Verfügbarkeit für den aktuellen Modus: in 'smart' disabled ohne
 gültigen Kandidaten, in 'key'/'speak' bei vorhandener Quelle enabled.
 Tests gegen Fake-Self, ohne echte Qt-Widgets.
@@ -129,7 +129,7 @@ def test_play_enabled_in_smart_mode_with_candidate():
     fs, cap = _fs(mode="smart", peaks=[_peak(1), _peak(2)], current_peak=0,
                    candidates=[_cand(1, 0.8), _cand(2, None)],
                    smart_ready=True)
-    ReviewPage._refresh_sinn_btn(fs)
+    ReviewPage._refresh_play_availability(fs)
     assert cap["enabled"] is True
 
 
@@ -137,7 +137,7 @@ def test_play_disabled_in_smart_mode_without_candidate():
     fs, cap = _fs(mode="smart", peaks=[_peak(1), _peak(2)], current_peak=1,
                    candidates=[_cand(1, 0.8), _cand(2, None)],
                    smart_ready=True)
-    ReviewPage._refresh_sinn_btn(fs)
+    ReviewPage._refresh_play_availability(fs)
     assert cap["enabled"] is False
     assert "sinnabschnitt" in cap["tooltip"].lower() \
         or "drücker" in cap["tooltip"].lower()
@@ -145,19 +145,19 @@ def test_play_disabled_in_smart_mode_without_candidate():
 
 def test_play_enabled_in_key_mode():
     fs, cap = _fs(mode="key", peaks=[_peak(1)], current_peak=0)
-    ReviewPage._refresh_sinn_btn(fs)
+    ReviewPage._refresh_play_availability(fs)
     assert cap["enabled"] is True
 
 
 def test_play_enabled_in_speak_mode():
     fs, cap = _fs(mode="speak", peaks=[_peak(1)], current_peak=0)
-    ReviewPage._refresh_sinn_btn(fs)
+    ReviewPage._refresh_play_availability(fs)
     assert cap["enabled"] is True
 
 
 def test_play_disabled_when_no_peak_selected():
     fs, cap = _fs(peaks=[])
-    ReviewPage._refresh_sinn_btn(fs)
+    ReviewPage._refresh_play_availability(fs)
     assert cap["enabled"] is False
 
 
@@ -168,7 +168,7 @@ def test_on_smart_done_infra_with_running_worker_shows_infra_message():
         SmartBoundaryRunResult, BoundaryOutcome)
     fs, cap = _fs(transcript="T")
     fs._refresh_smart_status = lambda: ReviewPage._refresh_smart_status(fs)
-    fs._refresh_sinn_btn = lambda: ReviewPage._refresh_sinn_btn(fs)
+    fs._refresh_play_availability = lambda: ReviewPage._refresh_play_availability(fs)
     fs._maybe_write_sinnabschnitt_artifacts = \
         lambda: ReviewPage._maybe_write_sinnabschnitt_artifacts(fs)
     fs._smart_worker = types.SimpleNamespace(deleteLater=lambda: None)
@@ -190,7 +190,7 @@ def test_persisted_scores_refresh_status_and_button_immediately():
                           "smart_boundary_claude_model": "m",
                           "preview_duration_ms": 1000}
     fs._refresh_smart_status = lambda: ReviewPage._refresh_smart_status(fs)
-    fs._refresh_sinn_btn = lambda: ReviewPage._refresh_sinn_btn(fs)
+    fs._refresh_play_availability = lambda: ReviewPage._refresh_play_availability(fs)
     fs._maybe_write_sinnabschnitt_artifacts = \
         lambda: ReviewPage._maybe_write_sinnabschnitt_artifacts(fs)
     fs._base_export_done_for_run = False
@@ -211,7 +211,7 @@ def test_set_session_clears_sticky_infra_status():
         _populate_lut_combo=lambda: None,
         _maybe_start_smart_worker=lambda: None,
         _refresh_smart_status=lambda: None,
-        _refresh_sinn_btn=lambda: None,
+        _refresh_play_availability=lambda: None,
         smart_status_label=label, play_btn=btn,
         mode_btn=types.SimpleNamespace(setText=lambda t: None),
         _smart_status_text="alte INFRA-Meldung",

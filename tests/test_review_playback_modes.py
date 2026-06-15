@@ -60,7 +60,7 @@ def _fs(mode="key", candidates=None, playing=False):
     ns._is_playing = False
     ns._start_play_state = lambda: ReviewPage._start_play_state(ns)
     ns._stop_play_state = lambda: ReviewPage._stop_play_state(ns)
-    ns._refresh_sinn_btn = lambda: None
+    ns._refresh_play_availability = lambda: None
     return ns
 
 
@@ -118,3 +118,49 @@ def test_navigate_stops_playback_no_autoplay():
     ReviewPage.navigate_to_peak(fs, 0)
     assert "stop" in fs._controller.calls
     assert not _played(fs)                  # kein Auto-Play
+
+
+def test_navigate_stops_controller_before_setting_frame():
+    # P1 Carl-Gate-F: erst stoppen (sonst seekt stop_clip_at auf das alte
+    # Clip-Out und überschreibt den neuen Frame), dann set_position.
+    order = []
+    fs = _fs(playing=True)
+    fs.session.set_current_peak = lambda i: setattr(
+        fs.session, "current_peak", i)
+    fs.peak_label = types.SimpleNamespace(setText=lambda t: None)
+    fs._video_files = ["/a.mp4"]
+    fs.video_preview = types.SimpleNamespace(
+        set_position=lambda p: order.append("set_position"))
+    fs._controller.stop = lambda: order.append("stop")
+    ReviewPage.navigate_to_peak(fs, 0)
+    assert order.index("stop") < order.index("set_position")
+
+
+def test_camera_change_stops_controller():
+    # P2 Carl-Gate-F: Kamerawechsel während Playback stoppt den Controller.
+    fs = _fs(playing=True)
+    fs._video_files = ["/a.mp4"]
+    fs.video_preview = types.SimpleNamespace(
+        load_video_at_index=lambda i: None,
+        get_current_brightness=lambda: 0,
+        set_position=lambda p: None)
+    fs.brightness_slider = types.SimpleNamespace(
+        blockSignals=lambda b: None, setValue=lambda v: None)
+    fs._update_brightness_label = lambda v: None
+    ReviewPage._on_camera_changed(fs, 0)
+    assert "stop" in fs._controller.calls
+
+
+def test_slider_moved_stops_controller():
+    fs = _fs(playing=True)
+    fs.video_preview = types.SimpleNamespace(set_position=lambda p: None)
+    ReviewPage._on_slider_moved(fs, 12345)
+    assert "stop" in fs._controller.calls
+
+
+def test_slider_pressed_stops_controller():
+    fs = _fs(playing=True)
+    fs.video_preview = types.SimpleNamespace(set_position=lambda p: None)
+    fs.position_slider = types.SimpleNamespace(value=lambda: 5000)
+    ReviewPage._on_slider_pressed(fs)
+    assert "stop" in fs._controller.calls

@@ -78,7 +78,7 @@ def _fake_self(events, enabled=True):
     ns._maybe_write_sinnabschnitt_artifacts = \
         lambda: ReviewPage._maybe_write_sinnabschnitt_artifacts(ns)
     ns._refresh_smart_status = lambda: None
-    ns._refresh_sinn_btn = lambda: None
+    ns._refresh_play_availability = lambda: None
     return ns
 
 

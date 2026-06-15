@@ -255,7 +255,7 @@ class ReviewPage(QWidget):
         self.mode_btn.setText(f"Modus: {label_for_mode(session.mode)}")
         # #3-Rev Task 8: Status + Button-Gate auf den geladenen Stand.
         self._refresh_smart_status()
-        self._refresh_sinn_btn()
+        self._refresh_play_availability()
         # #3-Rev Task 6 (R1): Job B im Review-Hintergrund anstoßen,
         # sobald die Vorbedingungen stimmen (Notbremse, Peaks,
         # Transkript, kein laufender Worker, keine fertigen Scores).
@@ -333,15 +333,14 @@ class ReviewPage(QWidget):
         total = len(self.session.peaks)
         self.peak_label.setText(f"Peak {index + 1} / {total}")
 
-        if self._video_files:
-            self.video_preview.set_position(peak.position_ms)
-
-        # #76: Peak-Wechsel stoppt laufende Wiedergabe, kein Auto-Play;
-        # statischer Frame steht (set_position oben). Play-Verfuegbarkeit
-        # fuer den neuen Peak aktualisieren.
+        # #76 (P1 Carl-Gate-F): ZUERST laufende Wiedergabe stoppen — sonst
+        # seekt der Controller (stop_clip_at) auf das alte Clip-Out und
+        # ueberschreibt den neuen Frame. Erst danach den Frame setzen.
         self._controller.stop()
         self._stop_play_state()
-        self._refresh_sinn_btn()
+        if self._video_files:
+            self.video_preview.set_position(peak.position_ms)
+        self._refresh_play_availability()
 
     def on_back(self):
         if self.session and self.session.current_peak > 0:
@@ -401,7 +400,7 @@ class ReviewPage(QWidget):
         config.set_value("playback_mode", self.session.mode)
         self.mode_btn.setText(f"Modus: {label_for_mode(self.session.mode)}")
         self.status_message.emit(f"Modus: {label_for_mode(self.session.mode)}")
-        self._refresh_sinn_btn()
+        self._refresh_play_availability()
 
     # ══════════════════════════════════════════════════════════════
     # Screenshot
@@ -426,6 +425,10 @@ class ReviewPage(QWidget):
     # ══════════════════════════════════════════════════════════════
 
     def _on_camera_changed(self, index):
+        # #76 (P2 Carl-Gate-F): Kamerawechsel stoppt laufende Wiedergabe,
+        # sonst laeuft Audio weiter waehrend das Bild springt.
+        self._controller.stop()
+        self._stop_play_state()
         if 0 <= index < len(self._video_files):
             self.video_preview.load_video_at_index(index)
             brightness = self.video_preview.get_current_brightness()
@@ -459,9 +462,14 @@ class ReviewPage(QWidget):
     # ══════════════════════════════════════════════════════════════
 
     def _on_slider_moved(self, value):
+        # #76 (P2 Carl-Gate-F): Seek stoppt laufende Wiedergabe.
+        self._controller.stop()
+        self._stop_play_state()
         self.video_preview.set_position(value)
 
     def _on_slider_pressed(self):
+        self._controller.stop()
+        self._stop_play_state()
         self.video_preview.set_position(self.position_slider.value())
 
     def _on_position_update(self, position_ms):
@@ -557,7 +565,7 @@ class ReviewPage(QWidget):
             # Carl-Gegenreview Task 8 [P3]: Status + Button sofort
             # aktualisieren, nicht erst beim nächsten Peak-Wechsel.
             self._refresh_smart_status()
-            self._refresh_sinn_btn()
+            self._refresh_play_availability()
             return
         # #3-Rev Task 7: neuer Smart-Lauf -> Riegel-Hälfte „Smart" und
         # "schon geschrieben" zurücksetzen. Ein bewusst neuer Lauf
@@ -578,7 +586,7 @@ class ReviewPage(QWidget):
         worker.start()
         # #3-Rev Task 8: laufender Smart-Status sichtbar.
         self._refresh_smart_status()
-        self._refresh_sinn_btn()
+        self._refresh_play_availability()
 
     def _on_smart_boundaries_done(self, result, worker=None):
         # #3-Rev Task 5: Worker liefert ein SmartBoundaryRunResult.
@@ -611,7 +619,7 @@ class ReviewPage(QWidget):
             self._smart_worker = None
         # Status + Button-Gate nach Abschluss aktualisieren.
         self._refresh_smart_status()
-        self._refresh_sinn_btn()
+        self._refresh_play_availability()
         # Autosave NUR bei echten Ergebnissen (OK/DECIDER): aktualisierte
         # ClipCandidates in die .peakcut-Akte (MainWindow lauscht auf
         # session_changed). Bei INFRA_FEHLT gibt es keinen neuen Stand zu
@@ -677,7 +685,7 @@ class ReviewPage(QWidget):
         self.smart_status_label.setText(
             getattr(self, "_smart_status_text", "") or "")
 
-    def _refresh_sinn_btn(self):
+    def _refresh_play_availability(self):
         """#76 (historischer Name): Play-Verfügbarkeit für den aktuellen
         Modus aktualisieren. Smart ohne gültigen Kandidaten -> Play disabled
         + Tooltip (Modus bleibt wählbar); Key/Speak nur bei fehlender Quelle

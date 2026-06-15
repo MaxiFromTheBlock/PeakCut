@@ -5,11 +5,9 @@ from pydub import AudioSegment
 
 from utils import parse_timecode_to_ms
 
-from .audio_routing import get_speech_audio_segment
 from .playback_modes import normalize_playback_mode, next_playback_mode
 from .project import PeakCutProject
 from .peak import Peak
-from .playback import play_audio
 
 
 class StatusUpdate:
@@ -81,41 +79,6 @@ class PeakCutSession:
         # Default kommt aus folgenschnitt_multitrack_layout (single source).
         from .folgenschnitt_multitrack_layout import DEFAULT_UNUSED_CLIPS_MODE
         self.folgenschnitt_unused_clips_mode = DEFAULT_UNUSED_CLIPS_MODE
-
-    def play_current(self, index=None):
-        """Play the current peak (keyboard or mic mode)."""
-        if not self.peaks:
-            return
-
-        if index is not None:
-            self.current_peak = index
-
-        if self.current_peak >= len(self.peaks):
-            return
-
-        self.load_audio_lazy()
-
-        if not self.keyboard_audio:
-            return
-
-        peak = self.peaks[self.current_peak]
-        time_ms = peak.position_ms
-        preview_duration = self.config.get("preview_duration_ms", 1000)
-
-        if self.mode == "keyboard":
-            segment = self.keyboard_audio[time_ms:time_ms + preview_duration]
-        else:
-            # #71a Task 4 (2026-05-21): Mic-/Speak-Mode delegiert die
-            # Audio-Wahl an den zentralen audio_routing-Helper.
-            # Phasing-Wurzel (Mix-mit-Mics-Overlay) ist damit auch
-            # im Review-Pfad behoben, nicht nur im MP3-Export.
-            start = peak.in_point_ms
-            end = peak.out_point_ms
-            segment = get_speech_audio_segment(self, start, end)
-            if segment is None:
-                return
-
-        play_audio(segment)
 
     def switch_mode(self):
         """#76: zyklischer Modus-Wechsel key -> speak -> smart. KEIN Auto-Play
