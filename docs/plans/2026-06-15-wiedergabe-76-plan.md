@@ -22,7 +22,10 @@ Gebaut von Claude, TDD, je eigener Commit (`1f797ff..38c11b9` auf develop):
   der finale Wert kommt aus dem korrigierten Task-9-Lauf an einer echten Folge
   mit gültigen In/Out-Punkten. **Offen für Carl-Methodik: ist 100ms (≈2,5 Frames)
   als Boundary-Beurteilungs-Vorschau ok, oder enger korrigieren (mehr Bild-Snaps)?**
-- [x] **Task 5** ReviewPlaybackController (Gate E) — **wartet auf Carl-Cross-Review**, bevor die ReviewPage-Integration (Task 6) startet.
+- [x] **Task 5** ReviewPlaybackController (Gate E) — **Carl-Review durch**, zwei
+  P1s gefixt (Video-Readiness-Signal + Post-Korrektur-Restdrift als Gate-Wert,
+  corrected-Signal). Controller-Sanity-Gate (Task 9 an Teil-2, key-Modus)
+  **BESTANDEN: Restdrift max 85ms ≤ 100ms, 6 Korrekturen**. → Task 6 frei.
 - [x] **Task 9** echtes Drift-Messskript (`scripts/verify_playback_sync_real.py`) — Max läuft es nach der Integration (Gate I).
 - [ ] **Task 6** ReviewPage-Integration — **gesperrt bis Carl-Gate-E-OK** (riskanteste Naht: session.mode-Migration key/speak/smart, sinn_btn raus, play_current aus dem Review-Pfad).
 - [ ] **Task 7** Session/Legacy entkoppeln. [ ] **Task 8** UI-State. [ ] **Task 10** Schluss-Gate.

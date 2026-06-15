@@ -93,13 +93,18 @@ def main(argv=None):
         lambda: corrections.__setitem__("n", corrections["n"] + 1))
     done = {"f": False}
     ctrl.finished.connect(lambda: done.__setitem__("f", True))
-    ctrl.play(window, source)
-
-    end = time.monotonic() + args.duration_s
-    while time.monotonic() < end and not done["f"]:
+    try:
+        ctrl.play(window, source)
+        end = time.monotonic() + args.duration_s
+        while time.monotonic() < end and not done["f"]:
+            app.processEvents()
+            time.sleep(0.01)
+    finally:
+        # Sauberes Teardown: sonst zerstoert der Prozess-Exit die LUTWorker-
+        # QThread der PeakVideoPreview -> SIGABRT.
+        ctrl.cleanup()
+        pv.cleanup()
         app.processEvents()
-        time.sleep(0.01)
-    ctrl.stop()
 
     report = summarize_drift(samples, args.warmup_ms)
     print(format_sync_report(report, threshold, corrections["n"]))
