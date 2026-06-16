@@ -15,9 +15,9 @@
 ---
 
 ## 🐛 Bugs
-- **Shot-Auswahl-Dropdown auf macOS schlecht lesbar** `[S]` · braucht: Carl-Plan
-  Natives macOS-Popup färbt die markierte Zeile teils unlesbar (weiß auf hellgrau);
-  Stylesheet greift nicht → nicht-native Liste mit festen Farben nötig.
+- **Shot-Auswahl-Dropdown auf macOS schlecht lesbar** `[S]` · **BEHOBEN — visuelle Abnahme (Max) offen**
+  Fix: nicht-natives Popup (`setView(QListView())`) → Stylesheet greift, markierte
+  Zeile lesbar (Commit `8433bdb`). Bitte in der App kurz anschauen, dann zu.
 
 ## 🔧 Funktions-Ausbau (nächste Features)
 - **Import-Umbau: feste Slots statt Namensraten** (#37/#77) `[XL]` · braucht: Carl-Plan — **STRUKTURTEIL ERLEDIGT, ruht**
@@ -53,9 +53,6 @@
   beantwortet. *Kann im Import-Umbau (#77) aufgehen.*
 
 ## 🧹 Hygiene & Wartung
-- **Python 3.11 maschinell pinnen** (.python-version + CI + Start-Wache) `[S]` · braucht: nichts
-  Tickende Uhr: pydub hängt am stdlib-`audioop`, das in Python 3.13 wegfällt; Pin
-  steht nur in der Doku, nirgends erzwungen.
 - **Versions-Drift in build.sh / PeakCut.spec** (stehen auf 2.9.0, App ist 2.11) `[S]` · braucht: Max-Entscheidung
   Vor Wiederbelebung des macOS-Bundles beide aktualisieren.
 - **Sammel-Tech-Schulden** `[L]` · braucht: nichts — geparkt
@@ -85,6 +82,9 @@
 ---
 
 ## ✅ Erledigt (Historie, Kurzform)
+- **#77 Strukturteil** — Mix strukturell (mix_track, Schema v4), zentraler Klassifizierer, letzte Inseln vereint (Tasks 0/1/2/3/4/6, Carl-Review grün); Import-UI (7/8) + Strip (5) bewusst geparkt (2026-06-16)
+- **Python 3.11 gepinnt** — .python-version + weiche Start-Wache (audioop-Uhr) (2026-06-16)
+- **Shot-Dropdown macOS** — nicht-natives Popup, lesbar (visuelle Abnahme Max offen) (2026-06-16)
 - **Putzfirma — Repo-Hygiene-Pass** (2026-06-16): toter Code/Importe raus, Doku-Drift gefixt (u.a. `core/audio.py`-Diagramm), 11 Specs + 4 Pläne ins Archiv, CLAUDE.md-Backlog-Block → BACKLOG-Verweis (SSOT durchgezogen), Modell-ID → Opus 4.8, verwaiste Assets weg, develop↔main synchronisiert. **Enthält die frühere „Doku-Entrümpelung".**
 - **#76 Wiedergabe-UX** — synchrone Ton+Bild-Vorschau, Scrub-Resume (2026-06-16)
 - **Slice B Multi-Track-Folgenschnitt** + **Slice C Audio-Mix-only** (2026-06-15)
