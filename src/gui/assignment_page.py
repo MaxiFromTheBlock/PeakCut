@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QLabel, QComboBox, QScrollArea, QFrame,
-    QRadioButton, QButtonGroup,
+    QRadioButton, QButtonGroup, QListView,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
@@ -64,6 +64,22 @@ SHOT_CHOICES = [
     ("Totale", SHOT_TOTAL),
     ("— nicht nutzen", SHOT_UNUSED),
 ]
+
+
+def make_shot_combo() -> QComboBox:
+    """Shot-Auswahl-Dropdown mit nicht-nativem Popup.
+
+    Das native macOS-Popup ignoriert das QAbstractItemView-Stylesheet (markierte
+    Zeile weiß-auf-hellgrau, unlesbar). setView(QListView()) erzwingt Qts eigene
+    Liste, auf der SHOT_COMBO_STYLESHEET greift — die markierte Zeile bleibt lesbar.
+    """
+    combo = QComboBox()
+    combo.setStyleSheet(SHOT_COMBO_STYLESHEET)
+    combo.setView(QListView())
+    combo.setEditable(True)
+    for label, const in SHOT_CHOICES:
+        combo.addItem(label, const)
+    return combo
 
 
 def preview_start_s_for_mic(session, speaker_key: str) -> float:
@@ -473,11 +489,7 @@ class AssignmentPage(QWidget):
         name.setStyleSheet(f"color: {COLORS['text_primary']};")
         grid.addWidget(name, 0, 1, 1, 3)
 
-        shot_combo = QComboBox()
-        shot_combo.setStyleSheet(SHOT_COMBO_STYLESHEET)
-        shot_combo.setEditable(True)
-        for label, const in SHOT_CHOICES:
-            shot_combo.addItem(label, const)
+        shot_combo = make_shot_combo()
         self._select_shot(shot_combo, row.shot_type)
         grid.addWidget(shot_combo, 1, 1)
 

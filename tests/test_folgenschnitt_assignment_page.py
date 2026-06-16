@@ -162,6 +162,18 @@ def test_shot_combo_stylesheet_sets_readable_text_color():
     assert "#1D1D1F" in SHOT_COMBO_STYLESHEET
 
 
+def test_shot_combo_uses_non_native_view_for_readable_popup():
+    # Bug: das native macOS-Popup ignoriert das QAbstractItemView-Stylesheet
+    # (markierte Zeile weiß-auf-hellgrau, unlesbar). setView(QListView())
+    # erzwingt Qts eigene Liste -> SHOT_COMBO_STYLESHEET greift, Zeile lesbar.
+    from PyQt6.QtWidgets import QListView
+    from gui.assignment_page import make_shot_combo, SHOT_CHOICES
+
+    combo = make_shot_combo()
+    assert isinstance(combo.view(), QListView)
+    assert combo.count() == len(SHOT_CHOICES)
+
+
 # ---------------------------------------------------------------------
 # Slice B Task 7 — unused_clips_mode Toggle in AssignmentPage
 # ---------------------------------------------------------------------
