@@ -193,13 +193,14 @@ def validate_import_slots(slots: ImportSlots) -> list[str]:
 
     mix_count = (1 if slots.mix_track else 0)
     mix_count += sum(1 for path in slots.mic_tracks if is_mix_track(path))
+    mix_count += sum(1 for path in slots.ignored if is_mix_track(path))
     if mix_count > 1:
         messages.append("Mehrere Mix-Spuren erkannt.")
 
     marker_count = (1 if slots.marker_track else 0)
     marker_count += sum(1 for path in slots.mic_tracks if is_marker_track(path))
+    marker_count += sum(1 for path in slots.ignored if is_marker_track(path))
     if marker_count > 1:
         messages.append("Mehrere Marker-Spuren erkannt.")
 
     return messages
-

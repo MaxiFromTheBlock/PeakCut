@@ -236,3 +236,16 @@ def test_validate_import_slots_reports_conflicting_raw_slots():
     assert "Mehrere Mix-Spuren erkannt." in messages
     assert "Mehrere Marker-Spuren erkannt." in messages
 
+
+def test_validate_import_slots_counts_conflicts_in_ignored_bucket():
+    slots = suggest_import_slots([
+        "/m/Marker.wav",
+        "/m/Keyboard.wav",
+        "/m/A Mix.mp3",
+        "/m/B Mix.mp3",
+        "/m/MIC1.wav",
+    ])
+    assert slots.ignored == ("/m/Keyboard.wav", "/m/B Mix.mp3")
+    messages = validate_import_slots(slots)
+    assert "Mehrere Mix-Spuren erkannt." in messages
+    assert "Mehrere Marker-Spuren erkannt." in messages
