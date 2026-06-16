@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from gui.main_window import MainWindow
 from gui.apple_style import get_stylesheet
-from utils import TEMP_DIR
+from utils import TEMP_DIR, get_logger, python_version_warning
 
 LOCK_FILE = os.path.join(TEMP_DIR, "peakcut.lock")
 
@@ -45,6 +45,11 @@ def main():
 
     _setup_environment()
     args = _parse_args()
+
+    # Weiche Python-Versions-Wache (nur Warnung, kein Abbruch).
+    _py_warning = python_version_warning()
+    if _py_warning:
+        get_logger("peakcut").warning(_py_warning)
 
     # Ensure temp dir exists
     os.makedirs(os.path.dirname(LOCK_FILE), exist_ok=True)
