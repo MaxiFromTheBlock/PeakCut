@@ -19,8 +19,7 @@ class LUTProcessor:
         self.lut_path = None
         self.domain_min = np.array([0.0, 0.0, 0.0])
         self.domain_max = np.array([1.0, 1.0, 1.0])
-        self._lookup_table = None  # Pre-computed 256³ table for fast apply
-        self._flat_lookup = None   # Flattened view for 1D indexing
+        self._flat_lookup = None   # Pre-computed 256³ lookup, flattened for 1D indexing
 
     def load_cube(self, filepath: str) -> bool:
         """
@@ -186,7 +185,6 @@ class LUTProcessor:
         Takes ~200ms once, then apply_fast() is a simple array lookup.
         """
         if self.lut_data is None:
-            self._lookup_table = None
             return
 
         table = np.empty((256, 256, 256, 3), dtype=np.uint8)
@@ -199,7 +197,6 @@ class LUTProcessor:
             img[:, :, 2] = b_val  # B constant
             table[:, :, b_val] = self.apply_to_image(img)
 
-        self._lookup_table = table
         self._flat_lookup = table.reshape(-1, 3)  # View for fast 1D indexing
 
     def apply_fast(self, image: np.ndarray) -> np.ndarray:

@@ -25,7 +25,7 @@ _EXPECTED = {
     "smart_boundary_fallback_after_ms": 30_000,
     "smart_boundary_sentence_gap_ms": 900,
     "smart_boundary_snap_tolerance_ms": 1500,
-    "smart_boundary_claude_model": "claude-opus-4-7",
+    "smart_boundary_claude_model": "claude-opus-4-8",
     "smart_boundary_whisper_engine": "mlx-whisper",
     "smart_boundary_whisper_model": "mlx-community/whisper-large-v3-turbo",
     "smart_boundary_language": "de",

@@ -234,7 +234,6 @@ class PeakVideoPreview(QWidget):
 
         self._video_files = []
         self._current_video = None
-        self._current_video_index = 0
         self._duration_ms = 0
         self._is_seeking = False
 
@@ -392,12 +391,10 @@ class PeakVideoPreview(QWidget):
     def set_videos(self, video_files: list):
         self._video_files = video_files
         if video_files:
-            self._current_video_index = 0
             self._load_video(video_files[0])
 
     def load_video_at_index(self, index: int):
         if 0 <= index < len(self._video_files):
-            self._current_video_index = index
             path = self._video_files[index]
             name = self._camera_names.get(path, "")
             self._load_video(path)
