@@ -163,14 +163,19 @@ def test_shot_combo_stylesheet_sets_readable_text_color():
 
 
 def test_shot_combo_uses_non_native_view_for_readable_popup():
-    # Bug: das native macOS-Popup ignoriert das QAbstractItemView-Stylesheet
-    # (markierte Zeile weiß-auf-hellgrau, unlesbar). setView(QListView())
-    # erzwingt Qts eigene Liste -> SHOT_COMBO_STYLESHEET greift, Zeile lesbar.
+    # Bug: das native macOS-Popup ignoriert selection-background-color -> markierte
+    # Zeile blieb weiß-auf-hellgrau. QListView mit ::item:selected/:hover-Regeln
+    # (blau + weiß) erzwingt Qts Item-Rendering und macht die Zeile lesbar.
     from PyQt6.QtWidgets import QListView
     from gui.assignment_page import make_shot_combo, SHOT_CHOICES
 
     combo = make_shot_combo()
-    assert isinstance(combo.view(), QListView)
+    view = combo.view()
+    assert isinstance(view, QListView)
+    ss = view.styleSheet()
+    assert "::item:selected" in ss
+    assert "#007AFF" in ss   # accent_blue als Hintergrund der markierten Zeile
+    assert "white" in ss      # weißer Text darauf = lesbar
     assert combo.count() == len(SHOT_CHOICES)
 
 

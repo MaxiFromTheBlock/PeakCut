@@ -66,16 +66,41 @@ SHOT_CHOICES = [
 ]
 
 
-def make_shot_combo() -> QComboBox:
-    """Shot-Auswahl-Dropdown mit nicht-nativem Popup.
+# Popup-Stylesheet mit ::item-Regeln: erzwingt Qts eigenes Item-Rendering und
+# überschreibt damit den nativen macOS-Highlight. Nur selection-background-color
+# (auf der Combo) wird auf macOS ignoriert -> markierte Zeile blieb hellgrau mit
+# weißer Schrift = unlesbar. ::item:selected/:hover macht sie blau + weiß = lesbar.
+_POPUP_STYLESHEET = f"""
+QListView {{
+    background-color: {COLORS['bg_primary']};
+    color: {COLORS['text_primary']};
+    outline: 0;
+}}
+QListView::item {{
+    background-color: {COLORS['bg_primary']};
+    color: {COLORS['text_primary']};
+    padding: 6px 10px;
+}}
+QListView::item:selected, QListView::item:hover {{
+    background-color: {COLORS['accent_blue']};
+    color: white;
+}}
+"""
 
-    Das native macOS-Popup ignoriert das QAbstractItemView-Stylesheet (markierte
-    Zeile weiß-auf-hellgrau, unlesbar). setView(QListView()) erzwingt Qts eigene
-    Liste, auf der SHOT_COMBO_STYLESHEET greift — die markierte Zeile bleibt lesbar.
-    """
+
+def _apply_readable_popup(combo: QComboBox) -> None:
+    """macOS-Fix: nicht-natives Popup mit ::item-Regeln, damit die markierte
+    Zeile lesbar bleibt (blau + weiß statt weiß-auf-hellgrau)."""
+    view = QListView()
+    view.setStyleSheet(_POPUP_STYLESHEET)
+    combo.setView(view)
+
+
+def make_shot_combo() -> QComboBox:
+    """Shot-Auswahl-Dropdown mit lesbarem (nicht-nativem) Popup."""
     combo = QComboBox()
     combo.setStyleSheet(SHOT_COMBO_STYLESHEET)
-    combo.setView(QListView())
+    _apply_readable_popup(combo)
     combo.setEditable(True)
     for label, const in SHOT_CHOICES:
         combo.addItem(label, const)
@@ -495,6 +520,7 @@ class AssignmentPage(QWidget):
 
         person_combo = QComboBox()
         person_combo.setEditable(True)
+        _apply_readable_popup(person_combo)
         person_combo.setCurrentText(row.person or "")
         self._register_person_combo(person_combo)
         grid.addWidget(person_combo, 1, 2)
@@ -523,6 +549,7 @@ class AssignmentPage(QWidget):
 
         person_combo = QComboBox()
         person_combo.setEditable(True)
+        _apply_readable_popup(person_combo)
         person_combo.setCurrentText(row.person or "")
         self._register_person_combo(person_combo)
         h.addWidget(person_combo)
