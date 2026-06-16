@@ -94,6 +94,12 @@ Steps:
    Marker + MIC1 + MIC2 + Mix + Kamera. Der Test muss die XML-Bytes oder den bestehenden
    SHA-256-Pin verriegeln. Er darf nicht auf die interne Frage "Mix in mic_tracks?"
    angewiesen sein.
+   Der Test muss explizit den XML-Audio-Metadaten-Drift fangen:
+   `XMLExporter` probt `project.get_reference_track()` fuer `sample_rate`,
+   `bit_depth` und `channelcount`. Der Fixture braucht deshalb eine Mix-Datei mit
+   anderer Kanalzahl als mindestens ein Mic (z.B. stereo Mix, mono Mic) und asserted
+   den erwarteten `channelcount`/Probe-Quellen-Pfad im XML. Sonst kann die v4-Migration
+   "gruen" aussehen und trotzdem Premiere-Bytes veraendern.
 
 2. Schreibe einen Guest-Name-Pin fuer typische HM-Mix-Namen:
    `Sheila Mix.mp3`, `Hotel Matze - Sheila de Liz Mix.mp3`, `Episode - Mix.mp3`,
@@ -146,8 +152,10 @@ Vertrag:
 Heuristiken:
 
 - Mix: token-bewusst wie #71a: `mix`, `mixdown`.
-- Marker: token-bewusst und zentral: `keyboard`, `key`, `keys`, `klavier`, `marker`.
-  Wichtig: keine naive Substring-Falle fuer `monkey.wav` oder `keynote.mov`.
+- Marker: token-bewusst und zentral: `keyboard`, `keys`, `klavier`, `marker`.
+  Wichtig: keine naive Substring-Falle fuer `monkey.wav`, `keynote.mov` oder
+  `Key Largo.wav`. Das einzelne Token `key` ist absichtlich **kein** Marker-Token:
+  es bringt im echten Material keinen Nutzen und waere ein ueberraschender Default.
 - Transcript: `.docx` als v1. Optional spaeter `.txt/.srt`, aber nicht in diesem Slice.
 - Audio ohne Mix/Marker -> `mic`.
 - Video `.mp4/.mov` -> `camera`.
@@ -156,6 +164,7 @@ Heuristiken:
 Tests:
 
 - Token-False-Positive: `mixer_recording.wav` ist kein Mix, `monkey.wav` kein Marker.
+- `Key Largo.wav` ist kein Marker.
 - HM-Positive: echte Mix-Namen bleiben Mix.
 - Marker-Positive: `keyboard.wav`, `Keys.wav`, `Klavier.wav`, `Marker.wav`.
 - Slot-Vorschlag mit mehreren Mics/Kameras/Transcript.
@@ -194,6 +203,11 @@ Implementierung:
 4. `get_reference_track()`:
    - `mix_track` zuerst.
    - Legacy-Fallback: scan `mic_tracks` via `audio_routing.get_mix_track` fuer alte Tests/Objekte.
+   - Diese Reihenfolge ist Pin-1-relevant: Task 2 muss schon vor Task 4 garantieren,
+     dass `get_reference_track()` den strukturellen `mix_track` bevorzugt, bevor der
+     Loader in Task 4 die Mix-Datei aus legacy `mic_tracks` herauszieht. Sonst kann
+     der XMLExporter auf ein mono Mic zurueckfallen und `channelcount`/Audio-Metadaten
+     veraendern.
 
 Tests:
 
@@ -416,8 +430,12 @@ Files:
 Verhalten:
 
 - Wenn `transcript_path` gesetzt und `project.get_reference_track()` vorhanden:
-  - nach Session-Erzeugung, vor oder parallel zur Analyse, wird `import_descript_transcript`
-    aufgerufen.
+  - MainWindow startet nach Session-Erzeugung den bestehenden entkoppelten
+    Transcript-Pfad, nicht einen synchronen Main-Thread-Import. Mechanik:
+    `_transcript_worker`/Roadmap-#3-Finished-Vertrag wiederverwenden oder eine
+    kleine Worker-Variante mit demselben Lifecycle-Muster fuer Descript-Import
+    bauen. Wichtig ist: kein `import_descript_transcript()` direkt im UI-Thread
+    vor der Analyse.
   - Ergebnis setzt `session.transcript_ref`, `session.transcript_error=None`.
   - Fehler setzt `session.transcript_error` und sendet Status, blockiert Analyse nicht.
 - Wenn kein Mix vorhanden:
@@ -427,7 +445,8 @@ Verhalten:
 Wichtig:
 
 - Nicht in `AnalysisWorker` pressen. Descript-Import ist kein Analyse-Ergebnis und soll
-  nicht den HC-2-Worker-Pfad vergroessern.
+  nicht den HC-2-Analysepfad vergroessern. Gleichzeitig darf er die UI nicht blockieren:
+  er laeuft ueber den bestehenden entkoppelten TranscriptWorker-/finished-Hook-Stil.
 - Autosave schreibt spaeter `transcript_ref` wie Roadmap #3.
 
 Tests:
