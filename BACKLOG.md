@@ -6,8 +6,9 @@
 >
 > **„#76", „#77", „G1", „ARCH-1" usw. sind nur Namen/Label — KEINE Aufgabenzahl.**
 >
-> Stand: 2026-06-16 · ~22 offene Punkte · Quelle: ultracode-Sweep (Repo-Docs,
+> Stand: 2026-06-16 · ~21 offene Punkte · Quelle: ultracode-Sweep (Repo-Docs,
 > Code-Kommentare, GitHub-Issues=0, Memory, Notion=0), dedupliziert.
+> (Putzfirma-Hygiene-Pass 2026-06-16: Doku-Entrümpelung erledigt — siehe unten.)
 >
 > Je Punkt: **[Aufwand S/M/L/XL]** · **braucht:** Carl-Plan / Max-Entscheidung / Max-Material / nichts.
 
@@ -50,9 +51,6 @@
 - **Python 3.11 maschinell pinnen** (.python-version + CI + Start-Wache) `[S]` · braucht: nichts
   Tickende Uhr: pydub hängt am stdlib-`audioop`, das in Python 3.13 wegfällt; Pin
   steht nur in der Doku, nirgends erzwungen.
-- **Doku-Entrümpelung** `[S]` · braucht: nichts
-  Abgeschlossene Specs als solche markieren; totes Modul-Diagramm in CLAUDE.md fixen
-  (nennt gelöschtes `core/audio.py`).
 - **Versions-Drift in build.sh / PeakCut.spec** (stehen auf 2.9.0, App ist 2.11) `[S]` · braucht: Max-Entscheidung
   Vor Wiederbelebung des macOS-Bundles beide aktualisieren.
 - **Sammel-Tech-Schulden** `[L]` · braucht: nichts — geparkt
@@ -82,6 +80,7 @@
 ---
 
 ## ✅ Erledigt (Historie, Kurzform)
+- **Putzfirma — Repo-Hygiene-Pass** (2026-06-16): toter Code/Importe raus, Doku-Drift gefixt (u.a. `core/audio.py`-Diagramm), 11 Specs + 4 Pläne ins Archiv, CLAUDE.md-Backlog-Block → BACKLOG-Verweis (SSOT durchgezogen), Modell-ID → Opus 4.8, verwaiste Assets weg, develop↔main synchronisiert. **Enthält die frühere „Doku-Entrümpelung".**
 - **#76 Wiedergabe-UX** — synchrone Ton+Bild-Vorschau, Scrub-Resume (2026-06-16)
 - **Slice B Multi-Track-Folgenschnitt** + **Slice C Audio-Mix-only** (2026-06-15)
 - **Daten-Integritäts-Riegel** — DATA-1 atomare Akte · DATA-2 Schema-Policy · KI-2 R2-Riegel · AUD-1a Mix-Hub (2026-06-15)
