@@ -51,6 +51,10 @@ Produkt-Form fest und wird erst gebaut, wenn klar ist, *für wen*. Nächste Ener
 Produkt-Validierung (#70 an echtem Material, Cutter-Sign-off), die genau diese
 Kunden-/Qualitätsfrage beantwortet.
 
+**Stand 2026-06-16:** Strukturteil ERLEDIGT + Carl-Review grün — Tasks 0/1/2/3/4/6
+auf develop (756 Tests, Pin-1 stabil). Task 5 (Mix aus mic_tracks strippen) geparkt,
+Task 7/8 pausiert. #77 ruht am sauberen, Pin-1-sicheren Pausenpunkt.
+
 ## Architekturentscheidungen
 
 1. **Neues Core-Modul `core/import_classifier.py`.**

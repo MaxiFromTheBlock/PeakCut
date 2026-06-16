@@ -3,8 +3,10 @@
 Insel A (Health-Check): _is_speaker_mic_candidate erkannte Mix per naivem
 'mix in basename' — 'mixer_recording.wav' wurde fälschlich als Mix
 ausgeschlossen. Jetzt über audio_routing.is_mix_track (token-bewusst).
-keyboard/keys/klavier bleiben bewusst lokal bis zum Import-Refactor (#77),
-guest_name/_categorize_files bleiben unangetastet (#77 / Pin-1).
+#77 Task 6: keyboard/Marker laufen ebenfalls zentral über
+import_classifier.is_marker_track (keine lokale Substring-Insel mehr);
+guest_name nutzt import_classifier.is_mix_track. Nur _categorize_files
+(main_window) bleibt als Import-Vorläufer Task-7-Scope.
 """
 
 import os
@@ -38,7 +40,8 @@ def test_plain_mic_is_candidate():
     assert _is_speaker_mic_candidate("/m/MIC1.wav") is True
 
 
-def test_keyboard_still_excluded_locally():
+def test_keyboard_marker_excluded_via_classifier():
+    # #77 Task 6: jetzt zentral über import_classifier.is_marker_track (token).
     assert _is_speaker_mic_candidate("/m/MIC3_Keyboard.wav") is False
     assert _is_speaker_mic_candidate("/m/klavier.wav") is False
     assert _is_speaker_mic_candidate("/m/keys.wav") is False
