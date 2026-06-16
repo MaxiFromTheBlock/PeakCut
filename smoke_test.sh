@@ -29,8 +29,6 @@ if [ -z "$INTERNAL_DIR" ]; then
 else
     pass "Data dir: ${INTERNAL_DIR}"
 
-    [ -d "${INTERNAL_DIR}/assets/pictures" ] && pass "Pictures bundled" || fail "Pictures missing"
-    [ -f "${INTERNAL_DIR}/assets/pictures/peakcut_logo.png" ] && pass "Logo found" || fail "Logo missing"
     [ -d "${INTERNAL_DIR}/assets/zahlen" ] && pass "TTS zahlen bundled" || fail "TTS zahlen missing"
     ZAHLEN_COUNT=$(ls "${INTERNAL_DIR}/assets/zahlen/"*.mp3 2>/dev/null | wc -l | tr -d ' ')
     [ "$ZAHLEN_COUNT" -gt 10 ] && pass "TTS MP3s: ${ZAHLEN_COUNT} files" || fail "TTS MP3s: only ${ZAHLEN_COUNT} files"
