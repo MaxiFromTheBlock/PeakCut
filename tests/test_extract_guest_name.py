@@ -7,6 +7,12 @@ class TestExtractGuestName:
         files = ["/any/path/Podcast - Paul Ronzheimer mix.wav"]
         assert extract_guest_name(files) == "Paul Ronzheimer"
 
+    def test_mixer_recording_does_not_yield_guest(self):
+        # #77 Task 6: token-bewusste Mix-Erkennung (zentraler import_classifier)
+        # -> 'mixer_recording' ist KEIN Mix, also kein (falscher) Gastname daraus.
+        files = ["/m/Hotel Matze - Gast mixer_recording.wav", "/m/MIC1.wav"]
+        assert extract_guest_name(files) == "Unknown"
+
     def test_name_from_external_paths(self):
         """Files imported from external location (not in material_dir)."""
         files = [

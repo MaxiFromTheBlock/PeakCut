@@ -28,6 +28,12 @@ def test_real_mix_files_excluded():
     assert _is_speaker_mic_candidate("/m/MIXDOWN.wav") is False
 
 
+def test_marker_island_unified_via_import_classifier():
+    # #77 Task 6: keyboard/marker zentral & token-bewusst (kein Substring mehr).
+    assert _is_speaker_mic_candidate("/m/Marker.wav") is False    # 'marker'-Token zählt jetzt
+    assert _is_speaker_mic_candidate("/m/monkeys.wav") is True    # Substring 'keys' war ein Fehlausschluss
+
+
 def test_plain_mic_is_candidate():
     assert _is_speaker_mic_candidate("/m/MIC1.wav") is True
 
