@@ -28,6 +28,29 @@ Harte Pins:
 - **Schema:** v4 ist rueckwaertskompatibel. v1-v3-Akten laden; Zukunfts-Akten bleiben
   wie DATA-2 blockiert.
 
+## Scope-Entscheidung 2026-06-16 (Max + Claude) — Stopp vor Task 7
+
+Nach Rückfrage von Max ("passt #77 zur Produktionsrealität + zum Ziel 'Produkt für
+jedermann', nicht nur HM/Max-Studio?") bewusst eingegrenzt:
+
+- **#77 repariert nichts Kaputtes** — das Phasing ist seit #71a (Laufzeit) gelöst.
+  #77 ist Struktur-Schuldenabbau + Verallgemeinerung, kein Feuer.
+- **#77 blockiert die wertvollsten nächsten Schritte NICHT** — #70 Prompt-Tuning und
+  der Cutter-Test hängen an Max' Material, nicht an diesem Slice.
+- Das **Namensraten ist der HM-spezifische Teil**; das Slot-Bestätigen (Task 7) wäre
+  allgemeiner. Aber: #77 lässt die **Marker-Pflicht** bestehen — die studio-spezifische
+  Grund-Idee. Das *richtige* Import-Modell für Fremdnutzer (Marker optional?
+  Erkennung per Audio-Inhalt statt Dateiname?) hängt an Produkt-/Kunden-Fragen, die
+  noch offen sind.
+
+**Entschluss:** Das strukturelle Aufräumen zu Ende führen (Tasks 3, 5, 6 + ein auf
+diesen Umfang zugeschnittenes 9/10) — damit ist die #71a-Laufzeit-Hilfskonstruktion
+weg, der Klassifizierer vereinheitlicht, der Mix strukturell zu Hause. Dann **STOPP
+vor Task 7 (Import-UI) + Task 8 (Transcript-Wiring)**: die Import-Oberfläche legt eine
+Produkt-Form fest und wird erst gebaut, wenn klar ist, *für wen*. Nächste Energie →
+Produkt-Validierung (#70 an echtem Material, Cutter-Sign-off), die genau diese
+Kunden-/Qualitätsfrage beantwortet.
+
 ## Architekturentscheidungen
 
 1. **Neues Core-Modul `core/import_classifier.py`.**

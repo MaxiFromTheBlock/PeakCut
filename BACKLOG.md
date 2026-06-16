@@ -20,10 +20,13 @@
   Stylesheet greift nicht → nicht-native Liste mit festen Farben nötig.
 
 ## 🔧 Funktions-Ausbau (nächste Features)
-- **Import-Umbau: feste Slots statt Namensraten** (#37/#77) `[XL]` · braucht: Carl-Plan — **NÄCHSTER SLICE**
-  Marker/Mics/Mix/Transkript/Kameras bekommen echte Plätze beim Import; eigenes
-  Mix-Feld statt Mix-in-mic_tracks, Schema v3 rückwärtskompatibel. Zieht die letzte
-  Klassifizierer-Insel mit (siehe Fundament).
+- **Import-Umbau: feste Slots statt Namensraten** (#37/#77) `[XL]` · braucht: Carl-Plan — **IN ARBEIT (eingegrenzt)**
+  Eigenes Mix-Feld statt Mix-in-mic_tracks, Schema v4 rückwärtskompatibel, ein
+  zentraler Klassifizierer (zieht die letzte Insel mit). Strukturteil: Task 0/1/2/4 ✅,
+  3/5/6 laufen. **Import-UI (Task 7) + Transcript-Wiring (Task 8) bewusst PAUSIERT**
+  bis die Produkt-/Kunden-Richtung klar ist (Marker-Pflicht? Erkennung per Audio-Inhalt?
+  für wen?). Scope-Entscheidung 2026-06-16 im Plan. Danach Energie → Produkt-Validierung
+  (#70 + Cutter-Sign-off), die genau diese Frage beantwortet.
 - **Prompt-Tuning für die KI-Clip-Grenzen** (#70) `[L]` · braucht: Max-Material
   Few-Shot-Beispiele + Anti-Muster + HM-Stilprofil, messbar über A/B-Vergleich.
   Gate (jetzt erfüllt): erst nach #76 Wiedergabe.
