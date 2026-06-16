@@ -12,7 +12,6 @@ import shutil
 
 from . import atomic_io
 from .folgenschnitt_multitrack_layout import (
-    DEFAULT_UNUSED_CLIPS_MODE,
     normalize_unused_clips_mode as _normalize_clips_mode,
 )
 

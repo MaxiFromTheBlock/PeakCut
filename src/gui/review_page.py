@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QFrame, QComboBox, QSlider,
     QFileDialog, QMessageBox,
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal
 
 from .apple_style import COLORS
 from .video_preview_peak import PeakVideoPreview

@@ -153,7 +153,6 @@ def build_video_track_order(camera_assignments, decisions):
     """
     from .folgenschnitt_models import (
         CameraAssignment,
-        PERSONLESS_SHOT_TYPES,
         SHOT_TOTAL,
         SHOT_UNUSED,
     )

@@ -1,17 +1,16 @@
 # video_preview_peak.py - PeakCut Video Preview (video only, muted)
 
-import logging
 import os
 import subprocess
 import threading
 import numpy as np
-from utils import FFMPEG_BIN
+from utils import FFMPEG_BIN, get_logger
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
 from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QTimer, QSize, QThread, QMutex, QWaitCondition
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink
 
-_log = logging.getLogger(__name__)
+_log = get_logger("peakcut.videopreview")
 
 _SCREENSHOT_TIMEOUT_S = 30
 _WORKER_SHUTDOWN_WAIT_MS = 3000

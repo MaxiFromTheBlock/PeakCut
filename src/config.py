@@ -66,7 +66,7 @@ def load():
                         _config[key] = value
             except (json.JSONDecodeError, ValueError, KeyError):
                 import sys
-                print(f"Warning: config.json corrupt, using defaults", file=sys.stderr)
+                print("Warning: config.json corrupt, using defaults", file=sys.stderr)
                 _config = DEFAULTS.copy()
         else:
             _config = DEFAULTS.copy()
