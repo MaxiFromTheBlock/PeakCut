@@ -26,7 +26,6 @@ from __future__ import annotations
 import hashlib
 import os
 import sys
-import tempfile
 from unittest.mock import patch
 
 import pytest  # noqa: F401

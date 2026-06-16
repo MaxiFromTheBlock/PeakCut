@@ -13,7 +13,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from core.transcription import (  # noqa: E402
-    Transcript, TranscriptSegment, TranscriptWord)
+    Transcript, TranscriptSegment)
 from core.transcript_archive import (  # noqa: E402
     transcript_span_ms, alignment_drift, cache_reusable_ref,
     transcript_root, write_transcript_sidecar)

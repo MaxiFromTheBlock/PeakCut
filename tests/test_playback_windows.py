@@ -12,7 +12,7 @@ import types
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from core.playback_windows import PlaybackWindow, build_playback_window  # noqa: E402
+from core.playback_windows import build_playback_window  # noqa: E402
 from core.peak import Peak  # noqa: E402
 from core.clip_candidates import ClipCandidate, ClipBoundary, DISCARDED  # noqa: E402
 

@@ -209,7 +209,6 @@ def test_build_assignment_state_default_when_session_attr_missing():
 def test_assignment_state_completeness_independent_of_mode():
     """is_complete-Logik darf NICHT vom Toggle abhaengen — Folgenschnitt-
     Qualitaet bleibt unberuehrt vom Layout-Mode."""
-    from core.folgenschnitt_models import CameraAssignment
     from gui.assignment_page import (
         AssignmentState, CameraRow, MicRow,
     )

@@ -15,8 +15,6 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from gui.review_page import ReviewPage  # noqa: E402
-from core.clip_candidates import (  # noqa: E402
-    ClipCandidate, ClipBoundary, PROPOSED)
 
 
 class _Sig:

@@ -13,12 +13,9 @@ import sys
 import types
 from unittest.mock import patch
 
-import pytest
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from gui.review_page import ReviewPage  # noqa: E402
-from core.clip_boundary.decider import ClaudeBoundaryDecider  # noqa: E402
 
 
 class _Sig:

@@ -24,7 +24,7 @@ from core.project import PeakCutProject
 from core.detection import detect_peaks
 from core.sync import calculate_offset, load_audio_as_array, format_offset
 from core.exporters import MP3Exporter, TXTExporter, XMLExporter
-from utils import ms_to_timecode, parse_timecode_to_ms, validate_media_file
+from utils import parse_timecode_to_ms, validate_media_file
 
 
 # ---------------------------------------------------------------------------

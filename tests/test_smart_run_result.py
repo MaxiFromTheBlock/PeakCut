@@ -21,7 +21,6 @@ from core.clip_boundary.pipeline import prepare_smart_boundaries  # noqa: E402
 from core.clip_boundary.models import (  # noqa: E402
     BoundaryDecision, BoundaryInfraError, BoundaryOutcome,
     SmartBoundaryRunResult)
-from core.clip_candidates import PROPOSED  # noqa: E402
 from core.transcription import Transcript, TranscriptSegment  # noqa: E402
 from core.project import PeakCutProject  # noqa: E402
 from core.session import PeakCutSession  # noqa: E402

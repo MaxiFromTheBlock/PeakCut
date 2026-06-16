@@ -107,7 +107,7 @@ from core.session import PeakCutSession
 from core.folgenschnitt_models import ActivityFrame
 from core.project_archive import (
     save_project_archive, load_project_archive,
-    find_project_archive_for_files, material_root, peak_to_dict,
+    find_project_archive_for_files,
 )
 
 _CFG = {"fps": 25, "context_duration_ms": 15000}
@@ -333,7 +333,7 @@ def test_folgenschnitt_roundtrip_new_root_after_move(tmp_path):
 
 # --- Task 3: .peakcut Schema v2 additiv ---
 
-from core.clip_candidates import PROPOSED, DISCARDED, SELECTED
+from core.clip_candidates import SELECTED
 
 
 def test_schema_is_current_and_archive_has_both_sections(tmp_path):

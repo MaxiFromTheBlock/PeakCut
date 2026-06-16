@@ -209,7 +209,6 @@ def test_persisted_smart_results_open_barrier_without_new_worker():
 
 
 def test_set_session_resets_barrier_flags():
-    events = []
     fs = types.SimpleNamespace(
         camera_combo=types.SimpleNamespace(
             clear=lambda: None, addItem=lambda *a, **kw: None),
