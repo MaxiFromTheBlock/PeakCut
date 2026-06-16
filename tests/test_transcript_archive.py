@@ -118,7 +118,10 @@ def test_payload_transcript_is_additive_and_optional():
     # build ohne session.transcript_ref -> transcript None
     class _FakeProject:
         keyboard_track = "/m/KB.wav"
+        marker_track = "/m/KB.wav"  # #77: canonical Marker-Slot
         mic_tracks = ["/m/MIC.wav"]
+        mix_track = None
+        transcript_path = None
         videos = ["/m/CAM.mp4"]
         guest_name = "G"
 

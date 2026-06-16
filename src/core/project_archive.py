@@ -15,7 +15,7 @@ from .folgenschnitt_multitrack_layout import (
     normalize_unused_clips_mode as _normalize_clips_mode,
 )
 
-CURRENT_SCHEMA_VERSION = 3  # v3: + assignments.folgenschnitt_unused_clips_mode (Slice B)
+CURRENT_SCHEMA_VERSION = 4  # v4 (additiv): marker_track/mix_track/transcript_path-Slots; Mix bleibt in mic_tracks bis Task 5 (#77)
 ARCHIVE_DIR = ".peakcut"
 ARCHIVE_FILE = "project.json"
 _CSV_NAME = "speaker_activity.csv"
@@ -128,10 +128,19 @@ def build_archive_payload(session, material_root, speaker_activity_csv_ref=None)
         getter = getattr(cfg, "get", None)
         return getter(key, None) if getter else None
 
-    kb = _rel(project.keyboard_track, material_root)
+    marker = _rel(project.marker_track, material_root)
+    # v4 additiv: mic_tracks bleibt die VOLLE Liste (Mix bleibt drin). Der
+    # Keyboardstellen-XML-Audioblock = mic_tracks (exporters.py) — den Mix hier
+    # zu entfernen würde die Cutter-XML ändern (Pin-1!). Der Mix bekommt
+    # ZUSÄTZLICH einen eigenen Slot; das echte Strippen von mic_tracks zieht
+    # Task 5 (Exporter-Umhängung), nicht Task 4.
     mics = [_rel(p, material_root) for p in project.mic_tracks]
+    mix = _rel(project.mix_track, material_root) if project.mix_track else None
+    transcript = (_rel(project.transcript_path, material_root)
+                  if project.transcript_path else None)
     vids = [_rel(p, material_root) for p in project.videos]
-    external = any(_is_external(p) for p in [kb] + mics + vids if p)
+    external = any(_is_external(p)
+                   for p in [marker, mix, transcript] + mics + vids if p)
 
     def _rel_p(p):
         return _rel(p, material_root)
@@ -146,8 +155,10 @@ def build_archive_payload(session, material_root, speaker_activity_csv_ref=None)
         "config": {k: _cfg(k) for k in _CONFIG_SNAPSHOT_KEYS
                    if _cfg(k) is not None},
         "project": {
-            "keyboard_track": kb,
+            "marker_track": marker,
             "mic_tracks": mics,
+            "mix_track": mix,
+            "transcript_path": transcript,
             "videos": vids,
             "guest_name": project.guest_name,
             "path_root_strategy": "common_parent",
@@ -257,9 +268,12 @@ def parse_archive_payload(payload, fallback_config):
 # --- Task 3+4: save / load / find -----------------------------------------
 
 def _media_paths(project):
+    # mic_tracks enthält den Mix noch (v4 additiv) → kein separater mix-Eintrag.
     paths = list(project.mic_tracks) + list(project.videos)
-    if project.keyboard_track:
-        paths.append(project.keyboard_track)
+    if project.marker_track:
+        paths.append(project.marker_track)
+    if project.transcript_path:
+        paths.append(project.transcript_path)
     return paths
 
 
@@ -329,12 +343,29 @@ def load_project_archive(archive_path_or_root, fallback_config):
 
     parsed = parse_archive_payload(data, fallback_config)
     proj = parsed["project"]
+    schema_v = _payload_schema_version(data)
 
-    kb = _abs(proj.get("keyboard_track"), root)
+    if schema_v >= 4:
+        marker_rel = proj.get("marker_track")
+        mix_rel = proj.get("mix_track")
+        transcript_rel = proj.get("transcript_path")
+    else:
+        # v1-v3: Marker hieß keyboard_track; Mix steckt in mic_tracks und wird
+        # von set_files() automatisch in mix_track gehoben (legacy_mix).
+        marker_rel = proj.get("keyboard_track")
+        mix_rel = None
+        transcript_rel = None
+
+    marker = _abs(marker_rel, root)
+    # mic_tracks bleibt die volle Liste (Mix bleibt drin — Pin-1, s. save).
     mics = [_abs(p, root) for p in proj.get("mic_tracks", [])]
+    mix = _abs(mix_rel, root) if mix_rel else None
+    transcript = _abs(transcript_rel, root) if transcript_rel else None
     vids = [_abs(p, root) for p in proj.get("videos", [])]
 
-    missing = [p for p in ([kb] if kb else []) + mics + vids
+    # transcript_path ist nur ein Quell-Zeiger (Inhalt lebt in transcript.json)
+    # → NICHT in die Fehlt-Prüfung. Marker/Mics (inkl. Mix)/Videos müssen da sein.
+    missing = [p for p in ([marker] if marker else []) + mics + vids
                if p and not os.path.exists(p)]
     if missing:
         raise ProjectArchiveError(
@@ -346,7 +377,7 @@ def load_project_archive(archive_path_or_root, fallback_config):
     from .folgenschnitt_models import MicAssignment, CameraAssignment
 
     project = PeakCutProject()
-    project.set_files(kb, mics, vids)
+    project.set_files(marker, mics, vids, mix=mix, transcript=transcript)
     project.guest_name = proj.get("guest_name")  # NACH set_files (reset!)
 
     session = PeakCutSession(project, parsed["config"])

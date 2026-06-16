@@ -22,7 +22,10 @@ from core.project_archive import (  # noqa: E402
 class _FakeProject:
     def __init__(self):
         self.keyboard_track = "/m/P8/KB.wav"
+        self.marker_track = "/m/P8/KB.wav"  # #77: canonical Marker-Slot
         self.mic_tracks = ["/m/P8/MIC1.wav", "/m/P8/MIC2.wav"]
+        self.mix_track = None
+        self.transcript_path = None
         self.videos = ["/m/CAM_A.mp4"]
         self.guest_name = "Hartmut Rosa"
 
@@ -43,7 +46,7 @@ class _FakeSession:
 
 def test_constants_are_frozen():
     # Slice B 2026-06-03: bump auf v3 (+ folgenschnitt_unused_clips_mode).
-    assert CURRENT_SCHEMA_VERSION == 3
+    assert CURRENT_SCHEMA_VERSION == 4
     assert ARCHIVE_DIR == ".peakcut"
     assert ARCHIVE_FILE == "project.json"
 
@@ -155,7 +158,7 @@ def test_paths_relative_no_dotdot_when_common_folder(tmp_path):
     path = save_project_archive(s)
     assert path.endswith(".peakcut/project.json")
     data = _json.loads(open(path).read())
-    for p in ([data["project"]["keyboard_track"]]
+    for p in ([data["project"]["marker_track"]]
               + data["project"]["mic_tracks"] + data["project"]["videos"]):
         assert not p.startswith(".."), p
     assert data["project"]["has_external_paths"] is False
