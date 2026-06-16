@@ -1,14 +1,15 @@
-"""Folgenschnitt Stufe 2 / Track 1 — deterministic loosening layer.
+"""Folgenschnitt Stufe 2 / Track 1 — deterministische Auflockerungs-Schicht.
 
-Sits ON TOP of Stage 1 (`build_edit_decisions`, untouched). Long
-single-speaker blocks get subdivided by rotating among that speaker's
-cameras in large balanced blocks; a personless Totale serves as periodic
-establishing shot + fallback. Cut points snap to the nearest real speech
-pause (deterministic, no AI). The camera-decision strategy is pluggable so
-a future AI director (Track 2) can be slotted in without rebuilding.
+Sitzt ÜBER Stufe 1 (`build_edit_decisions`, unangetastet). Lange Ein-
+Sprecher-Blöcke werden unterteilt, indem durch die Kameras dieses Sprechers
+in großen, ausgewogenen Blöcken rotiert wird; eine personenlose Totale dient
+als periodische Establishing-Einstellung + Fallback. Schnittpunkte snappen
+auf die nächste echte Sprechpause (deterministisch, keine KI). Die Kamera-
+Entscheidungs-Strategie ist steckbar, sodass ein künftiger KI-Regisseur
+(Track 2) ohne Neubau eingesetzt werden kann.
 
-This module is session-agnostic: it only takes decisions, camera
-assignments and pause ranges — all explicit, fully unit-testable.
+Dieses Modul ist session-unabhängig: es nimmt nur Entscheidungen, Kamera-
+Zuordnungen und Pausen-Bereiche — alles explizit, voll unit-testbar.
 """
 
 from dataclasses import dataclass
@@ -27,11 +28,11 @@ _BASE_CAMERA_PRIORITY = (SHOT_WIDE, SHOT_CLOSE, SHOT_MEDIUM)
 
 
 def build_stage1_base_camera_assignments(mic_assignments, camera_assignments):
-    """Generality adapter: pick one base camera per speaking person
-    (weit > nah_close > halbnah > totale-fallback) and expose it to the
-    UNCHANGED Stage-1 decision function as a synthetic SHOT_WIDE
-    assignment. Persons with no resolvable camera are omitted — the
-    pipeline guardrail then skips Folgenschnitt cleanly.
+    """Generality-Adapter: wählt pro sprechender Person eine Basis-Kamera
+    (weit > nah_close > halbnah > Totale-Fallback) und reicht sie der
+    UNVERÄNDERTEN Stufe-1-Entscheidungsfunktion als synthetische SHOT_WIDE-
+    Zuordnung. Personen ohne auflösbare Kamera werden ausgelassen — die
+    Pipeline-Leitplanke überspringt dann Folgenschnitt sauber.
     """
     totale = next(
         (c for c in camera_assignments if c.shot_type == SHOT_TOTAL), None
@@ -88,12 +89,12 @@ class PauseRange:
 
 
 def split_block_segments(start_ms, end_ms, params):
-    """Split one long single-speaker block into balanced segments:
-    a long calm first segment (first_block_ms), then target_block_ms
-    progressively densified (target * densify_factor**k), hard floor at
-    min_block_ms, and a small final remainder is absorbed into the last
-    segment (no sub-min tail). Gapless, covers [start, end] exactly.
-    Blocks below min_block_to_loosen_ms are returned unsplit.
+    """Teilt einen langen Ein-Sprecher-Block in ausgewogene Segmente: ein
+    langes ruhiges erstes Segment (first_block_ms), dann target_block_ms
+    fortschreitend verdichtet (target * densify_factor**k), harter Boden bei
+    min_block_ms, ein kleiner Rest am Ende wird ins letzte Segment absorbiert
+    (kein Unter-min-Schwanz). Lückenlos, deckt [start, end] exakt ab.
+    Blöcke unter min_block_to_loosen_ms werden ungeteilt zurückgegeben.
     """
     duration = end_ms - start_ms
     if duration < params.min_block_to_loosen_ms:
@@ -123,8 +124,9 @@ def split_block_segments(start_ms, end_ms, params):
 
 
 def build_pause_ranges(activity_frames):
-    """Contiguous frames with no dominant speaker (smoothed_speaker is
-    None) = a speech pause. Overlapping/adjacent None-frames are merged."""
+    """Zusammenhängende Frames ohne dominanten Sprecher (smoothed_speaker
+    ist None) = eine Sprechpause. Überlappende/benachbarte None-Frames
+    werden zusammengefasst."""
     ranges = []
     cur_start = None
     cur_end = None
@@ -143,10 +145,10 @@ def build_pause_ranges(activity_frames):
 
 
 def _snap_into_window(desired_ms, valid_lo, valid_hi, pause_ranges, snap_window_ms):
-    """Return the best pause midpoint near desired_ms that keeps the hard
-    min_block floors (valid window), else the desired point clamped into
-    the valid window. None means: no floor-safe position -> omit the cut.
-    The floor always wins over a 'nice' pause.
+    """Liefert den besten Pausen-Mittelpunkt nahe desired_ms, der die harten
+    min_block-Böden (gültiges Fenster) einhält, sonst den gewünschten Punkt
+    ins gültige Fenster geklemmt. None bedeutet: keine boden-sichere Position
+    -> Schnitt auslassen. Der Boden gewinnt immer über eine 'schöne' Pause.
     """
     if valid_lo > valid_hi:
         return None
@@ -164,7 +166,7 @@ def _snap_into_window(desired_ms, valid_lo, valid_hi, pause_ranges, snap_window_
 
 
 def _person_single_person_cameras(person, camera_assignments, rotation_order):
-    """That person's single-person cameras, ordered by rotation_order."""
+    """Die Einzel-Personen-Kameras dieser Person, sortiert nach rotation_order."""
     ordered = []
     for shot in rotation_order:
         cam = next(
@@ -181,11 +183,11 @@ def _person_single_person_cameras(person, camera_assignments, rotation_order):
 
 
 def _loosen_decision(decision, camera_assignments, pause_ranges, params):
-    """Subdivide one long single-speaker block by rotating through that
-    speaker's single-person cameras. Cut points snap to the nearest
-    speech pause within the snap window, but the hard min_block floor
-    always wins (sequentially validated). Returns [decision] unchanged
-    when there is nothing to rotate or the block is too short."""
+    """Unterteilt einen langen Ein-Sprecher-Block, indem durch die Einzel-
+    Personen-Kameras dieses Sprechers rotiert wird. Schnittpunkte snappen
+    auf die nächste Sprechpause im Snap-Fenster, aber der harte min_block-
+    Boden gewinnt immer (sequenziell validiert). Gibt [decision] unverändert
+    zurück, wenn nichts zu rotieren ist oder der Block zu kurz ist."""
     ordered = _person_single_person_cameras(
         decision.speaker, camera_assignments, params.rotation_order
     )
@@ -240,12 +242,12 @@ def _totale_path(camera_assignments):
 
 def _insert_totale(segments, block_start, block_end, totale_path,
                    pause_ranges, params):
-    """Overlay periodic Establishing-Totale at block_start + n*interval.
-    The totale start snaps to the nearest pause; the block stays exactly
-    totale_block_ms. Splits the containing segment into pre / totale /
-    post, keeping min_block_ms on both sides (floor wins). Skips the point
-    if no floor-safe start exists or the segment is already the totale.
-    Gapless / coverage preserved."""
+    """Overlay-Einblendung periodischer Establishing-Totalen bei block_start
+    + n*interval. Der Totale-Start snappt auf die nächste Pause; der Block
+    bleibt exakt totale_block_ms. Teilt das umgebende Segment in pre / Totale
+    / post, mit min_block_ms auf beiden Seiten (Boden gewinnt). Lässt den
+    Punkt aus, wenn kein boden-sicherer Start existiert oder das Segment schon
+    die Totale ist. Lückenlos / Abdeckung erhalten."""
     t = block_start + params.totale_interval_ms
     while t < block_end:
         idx = next(
