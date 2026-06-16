@@ -47,7 +47,7 @@ PeakCut/                       ← Container-Ordner (KEIN Git-Repo)
     │   ├── core/              ← Core Logic (Klassen-basiert)
     │   ├── gui/               ← PyQt6 GUI Components
     │   └── lib/               ← External Libraries
-    ├── tests/                 ← pytest Tests (94 Tests)
+    ├── tests/                 ← pytest Tests
     ├── assets/
     │   ├── pictures/          ← Icons, Logos
     │   └── zahlen/            ← TTS Fallback MP3s
@@ -235,7 +235,8 @@ main_pyqt.py
         ├── core/project.py
         ├── core/session.py
         │     ├── core/peak.py
-        │     └── core/audio.py
+        │     ├── core/project.py
+        │     └── core/playback_modes.py
         ├── config.py
         └── utils.py                    (logging, validation, time helpers)
 ```
@@ -1561,4 +1562,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-25 (#71a Audio-Routing-Mini-Slice auf main gelandet, Phasing-Wurzel behoben sowohl im Cutter-MP3 als auch in der Review-Speak-Mode-Wiedergabe. Real-Smoke an echter Folge bestätigt. Parallel-Workflow Carl/Claude etabliert. Nächster Slice: #76 Wiedergabe-UX, baufertig auf dem neuen Helper-Fundament.)*
+*Zuletzt aktualisiert: 2026-06-16 (#76 Wiedergabe-UX auf main gelandet — synchrone Ton+Bild-Vorschau über den Audio-Master-Controller. Davor auf main: Daten-Integritäts-Riegel + Slice B Multi-Track-Folgenschnitt (2026-06-15). Todos leben jetzt in App/BACKLOG.md (Single Source of Truth). Nächster Slice: #77 Import-Refactor.)*

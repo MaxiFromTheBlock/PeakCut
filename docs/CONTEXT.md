@@ -10,7 +10,7 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 ## Tech-Stack
 
 - Python 3.11 + PyQt6
-- 621 Tests, CI via GitHub Action (libegl1/libgl1-Fix — CI war seit Tagen rot)
+- CI via GitHub Action (libegl1/libgl1-Fix — CI war seit Tagen rot)
 - Distribution: Launcher-App in /Applications, ruft Repo-Code direkt auf
   (PyInstaller-Bundle-Strategie geparkt — siehe Distribution-Sektion in CLAUDE.md)
 
@@ -111,9 +111,10 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 
 ## Aktuelle Prioritaeten
 
-1. V3 Vision: Smart Scan, Create Mix, Screenshots Page, Hub-Architektur
-2. UI Revamp (Figma → PyQt6, oder Electron?)
-3. Versionsnummer + Code Signing (geparkt — erst noetig wenn PeakCut wieder extern verteilt wird)
+Maßgeblich = „Offene Slices" unten (immer aktuell) + App/BACKLOG.md (Todo-SSOT).
+Reihenfolge: #77 Import-Refactor (strukturelle Mix-Trennung) → #70 Prompt-Tuning →
+Slice A (Dialog-Totale Cross-Talk) → Export-Orchestrierung aus dem GUI (ARCH-1, vor NAS).
+(Die frühere „V3 Vision: Smart Scan / Create Mix / Hub"-Liste war überholt 2026-05-18.)
 
 ## Offene Slices (Stand 2026-06-16)
 
