@@ -7,7 +7,7 @@ es in FCP7-XML.
 
 Diese Datei ist absichtlich frei von FCP7-/XML-Spezifika.
 
-Spec: docs/specs/2026-06-03-multitrack-folgenschnitt-xml-design.md
+Spec: docs/specs/archiv/2026-06-03-multitrack-folgenschnitt-xml-design.md
 Plan: Slice B Task 1 (Carl 2026-06-03)
 """
 

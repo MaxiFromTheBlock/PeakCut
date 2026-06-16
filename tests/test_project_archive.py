@@ -72,7 +72,7 @@ def test_future_schema_refused_on_load():
     # DATA-2 (2026-06-15): bewusste Vertragsänderung — eine Akte aus der
     # Zukunft wird NICHT mehr "best effort" geladen (sonst still wegge-
     # schnittene Felder beim nächsten Autosave). Details:
-    # docs/plans/2026-06-15-data-integritaets-riegel.md
+    # docs/plans/archiv/2026-06-15-data-integritaets-riegel.md
     payload = build_archive_payload(_FakeSession(), material_root="/m")
     payload["schema_version"] = 999  # zukünftige Version
     try:

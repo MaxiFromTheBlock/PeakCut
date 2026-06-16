@@ -1006,7 +1006,7 @@ Produkt):**
 ### #76 Wiedergabe-UX (auf main gelandet 2026-06-16)
 
 Synchrone Ton+Bild-Vorschau zum Beurteilen der Schnittgrenzen. Carl-Plan +
-Claude-Cross-Review (`docs/plans/2026-06-15-wiedergabe-76-plan.md`), TDD,
+Claude-Cross-Review (`docs/plans/archiv/2026-06-15-wiedergabe-76-plan.md`), TDD,
 Gate E/F (Carl) + App-Smoke (Max) bestanden. 593 → 689 Tests, Pin-1 stabil.
 
 - **Architektur:** statt zweier unsynchronisierter Engines (simpleaudio-Ton +
@@ -1040,7 +1040,7 @@ Gate E/F (Carl) + App-Smoke (Max) bestanden. 593 → 689 Tests, Pin-1 stabil.
 
 Erstes Paket nach dem Fundament-Health-Check
 (`docs/specs/2026-06-15-state-of-peakcut-health-check.md`, Urteil mostly-solid).
-Carl-Plan + Claude-Cross-Review (`docs/plans/2026-06-15-data-integritaets-riegel.md`),
+Carl-Plan + Claude-Cross-Review (`docs/plans/archiv/2026-06-15-data-integritaets-riegel.md`),
 TDD, getrennte Commits + Gates. 593 → 621 Tests grün, Pin-1 byte-identisch stabil.
 
 - **DATA-1 (`7f032ad`):** neues neutrales Modul `core/atomic_io.py`
@@ -1215,7 +1215,7 @@ einen kleinen Tunables-Nachdreh auslösen (kein Regressionsrisiko: Stufe
 
 Deterministische Zeitlogik-Auflockerung als Schicht ÜBER Stufe 1
 (unverändert). 4-Augen mit Carl (Plan + Snap-Delta), Claude TDD-Bau,
-Max Entscheider. Spec: `docs/specs/2026-05-16-folgenschnitt-stufe2-track1-design.md`.
+Max Entscheider. Spec: `docs/specs/archiv/2026-05-16-folgenschnitt-stufe2-track1-design.md`.
 
 - **Neues Modul** `src/core/folgenschnitt_loosening.py`: Base-Camera-Adapter
   (weit>close>halbnah>totale → synthetisches `SHOT_WIDE` nur für den
@@ -1260,7 +1260,7 @@ Max Entscheider. Spec: `docs/specs/2026-05-16-folgenschnitt-stufe2-track1-design
 Folgenschnitt Stufe 1 in der App bedienbar gemacht und das Datenmodell von
 Hotel-Matze-fest auf produktionsunabhängig generalisiert. 4-Augen mit Carl
 (Plan), Claude (TDD-Bau), Max (Entscheider). Gate A bestanden. Spec:
-`docs/specs/2026-05-16-zuordnung-generisch-design.md`.
+`docs/specs/archiv/2026-05-16-zuordnung-generisch-design.md`.
 
 - **Generisches Datenmodell**: `SpeakerId`/`CameraRole`-Enums entfernt.
   Person = freier String, `CameraAssignment = (shot_type, person|None)`,

@@ -123,7 +123,7 @@ Urteil mostly-solid. **Slice B + Daten-Integritäts-Riegel GELANDET auf main
 (2026-06-15, Premiere- + App-Smoke bestanden)** (atomare
 Writes DATA-1, Schema-Policy DATA-2, R2-Ausricht-Riegel KI-2, speaker_activity-
 Mix-Hub AUD-1a — 621 Tests grün, Pin-1 stabil; Plan:
-`docs/plans/2026-06-15-data-integritaets-riegel.md`). Reconciled Reihenfolge
+`docs/plans/archiv/2026-06-15-data-integritaets-riegel.md`). Reconciled Reihenfolge
 (Carl+Claude): Slice-B-Merge → #76 Wiedergabe (Gate vor jedem KI-Tuning) →
 #77 Import-Refactor (zieht den restlichen Klassifizierer-Merge mit) → #70
 Prompt-Tuning → Slice A (halb-automatisch) → Export-Orchestrierung aus dem GUI
@@ -133,7 +133,7 @@ vor NAS. Tickende Uhr: pydub/audioop bei Python 3.13 + Python-Pin nicht erzwunge
 über `ReviewPlaybackController` (Audio = Master, Drift-Korrektur, Schwelle 100ms
 provisorisch), Modus key/speak/smart, Play ab Scrub-Stelle (speak/smart auf der
 Mix-Spur, key = Marker-Clip). App-Smoke (Max) + Gate E/F (Carl) bestanden,
-689 Tests grün. Plan: `docs/plans/2026-06-15-wiedergabe-76-plan.md`.
+689 Tests grün. Plan: `docs/plans/archiv/2026-06-15-wiedergabe-76-plan.md`.
 **Nächster Slice: #77 Import-Refactor.**
 
 Reihenfolge nach #71a-Merge (2026-05-25) und Fremdmaterial-Test (2026-06-01):
