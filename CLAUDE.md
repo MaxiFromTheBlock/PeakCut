@@ -773,6 +773,27 @@ Produkt):**
 
 ## Changelog
 
+### Putzfirma — Hygiene-Pass über das ganze Repo (auf develop, 2026-06-16)
+
+Ultracode-Audit (20 Agenten, 5 Dimensionen, adversarial gegengeprüfte Lösch-
+Kandidaten) + Umsetzung in 6 getrennten Häppchen, je mit voller Suite (689) +
+Pin-1 als Tor. Kein Verhalten geändert, nichts an Pin-1/Export angefasst.
+- **Toter Code:** 6 ungenutzte src-Importe + 13 Test-Importe + 2 tote Test-
+  Variablen + 4 tote Reste (LUT-`_lookup_table` ~50 MB RAM, write-only
+  `_cli_guest`/`_current_video_index`, `field`-Import). 2 verwaiste .pyc weg.
+- **Logger-Fix:** `video_preview_peak` schrieb Fehler an den unkonfigurierten
+  Root-Logger → jetzt `get_logger("peakcut.videopreview")` (landet in der Log-Datei).
+- **Konsistenz:** nackte ffmpeg-Timeouts → benannte Konstanten; englische
+  Docstrings der folgenschnitt-Module eingedeutscht; Smart-Boundary-Modell
+  `claude-opus-4-7` → `claude-opus-4-8`.
+- **Doku/SSOT:** Modul-Diagramm-Fehler (gelöschtes `core/audio.py`) korrigiert;
+  feste Testzahlen aus der Doku entfernt (driften sonst); der duplizierte
+  ~240-Zeilen-Backlog-Block in CLAUDE.md durch einen Verweis auf `BACKLOG.md`
+  ersetzt; 11 erledigte Specs + 4 Pläne nach `docs/{specs,plans}/archiv/`.
+- **Bewusst NICHT angefasst (→ Carl bzw. eigene Slices):** 5 nie aufgerufene
+  Player-Methoden + `decide_with_brake`-Wrapper (mögliche Schnittstellen),
+  Test→`logs/peakcut.log`-Redirect (Logging-Architektur), Heuristik-Inseln (#77).
+
 ### #76 Wiedergabe-UX (auf main gelandet 2026-06-16)
 
 Synchrone Ton+Bild-Vorschau zum Beurteilen der Schnittgrenzen. Carl-Plan +
