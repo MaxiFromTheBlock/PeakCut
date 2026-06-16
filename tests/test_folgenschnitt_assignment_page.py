@@ -157,6 +157,28 @@ def test_committed_person_name_becomes_option_without_prefilling_other_empty_fie
     assert untouched.currentText() == ""
 
 
+def test_to_camera_assignments_skips_person_shot_without_person():
+    # Crash-Fix (Absturz auf "Weiter"): ein Personen-Shot (z.B. Halbnah) OHNE
+    # Person ist unvollständig -> überspringen, NICHT CameraAssignment bauen
+    # (das wirft ValueError "person must not be empty" und crasht den Slot).
+    from gui.assignment_page import AssignmentState, CameraRow
+    from core.folgenschnitt_models import SHOT_MEDIUM, SHOT_WIDE, SHOT_TOTAL
+
+    state = AssignmentState(
+        camera_rows=[
+            CameraRow("/Tim.mp4", "Tim.mp4", SHOT_MEDIUM, None),   # unvollständig
+            CameraRow("/Jan.mp4", "Jan.mp4", SHOT_WIDE, "Jan"),    # vollständig
+            CameraRow("/Tot.mp4", "Tot.mp4", SHOT_TOTAL, None),    # personenlos = ok
+        ],
+        mic_rows=[],
+    )
+    cams = state.to_camera_assignments()  # darf NICHT werfen
+    paths = [c.path for c in cams]
+    assert "/Tim.mp4" not in paths   # Personen-Shot ohne Person -> übersprungen
+    assert "/Jan.mp4" in paths
+    assert "/Tot.mp4" in paths       # Totale ist personenlos -> bleibt
+
+
 def test_shot_combo_stylesheet_sets_readable_text_color():
     assert "color:" in SHOT_COMBO_STYLESHEET
     assert "#1D1D1F" in SHOT_COMBO_STYLESHEET

@@ -181,14 +181,23 @@ class AssignmentState:
         ]
 
     def to_camera_assignments(self) -> list[CameraAssignment]:
-        # Neutral (unassigned) rows have shot_type None and are skipped —
-        # they produce no CameraAssignment. CameraAssignment normalizes
-        # person to None for personless shots.
-        return [
-            CameraAssignment(path=r.path, shot_type=r.shot_type, person=r.person)
-            for r in self.camera_rows
-            if r.shot_type
-        ]
+        # Neutral (unassigned) rows have shot_type None and are skipped.
+        # Crash-Schutz: ein Personen-Shot (Weit/Nah/Halbnah) OHNE Person ist
+        # unvollständig -> ebenfalls überspringen. Sonst würde
+        # CameraAssignment einen ValueError werfen ("person must not be empty")
+        # und beim "Weiter" den Button-Slot hart crashen. Personenlose Shots
+        # (Totale/unused) bleiben — die brauchen keine Person.
+        result = []
+        for r in self.camera_rows:
+            if not r.shot_type:
+                continue
+            if (r.shot_type not in PERSONLESS_SHOT_TYPES
+                    and not (r.person or "").strip()):
+                continue
+            result.append(
+                CameraAssignment(path=r.path, shot_type=r.shot_type,
+                                 person=r.person))
+        return result
 
     def is_complete(self) -> bool:
         ok, _ = has_minimum_folgenschnitt_assignment(
