@@ -82,6 +82,7 @@
 ---
 
 ## ✅ Erledigt (Historie, Kurzform)
+- **Crash-Fix Zuordnung** — „Weiter" stürzte ab, wenn eine Kamera einen Personen-Shot (Weit/Nah/Halbnah) OHNE Person hatte (Altbestand v2.10, ValueError im Slot → SIGABRT). Unvollständige Kamera wird jetzt toleriert statt zu crashen (2026-06-17)
 - **#77 Strukturteil** — Mix strukturell (mix_track, Schema v4), zentraler Klassifizierer, letzte Inseln vereint (Tasks 0/1/2/3/4/6, Carl-Review grün); Import-UI (7/8) + Strip (5) bewusst geparkt (2026-06-16)
 - **Python 3.11 gepinnt** — .python-version + weiche Start-Wache (audioop-Uhr) (2026-06-16)
 - **Shot-Dropdown macOS** — nicht-natives Popup, lesbar (visuelle Abnahme Max offen) (2026-06-16)
