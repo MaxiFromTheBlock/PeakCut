@@ -47,6 +47,7 @@ class PeakCutSession:
 
         # Audio data
         self.keyboard_audio: AudioSegment | None = None
+        self.mix_audio: AudioSegment | None = None
         self.mic_audios: list[AudioSegment] = []
 
         # Sync data
@@ -216,15 +217,35 @@ class PeakCutSession:
     def load_audio_lazy(self):
         """Load audio segments on demand (after analysis results are loaded).
 
-        Loads keyboard + all mic tracks in parallel via ThreadPool.
+        Loads marker/keyboard + structural mix + legacy mic tracks in
+        parallel via ThreadPool. During #77 Gate B, mic_tracks still may
+        contain the Mix; mic_audios therefore intentionally stays 1:1
+        aligned to project.mic_tracks while mix_audio is exposed
+        separately.
         """
         if self.keyboard_audio is None and self.project.keyboard_track:
             self.status_update.emit("Lade Audio...")
-            all_paths = [self.project.keyboard_track] + list(self.project.mic_tracks)
+            all_paths = []
+
+            def add_path(path):
+                if path and path not in all_paths:
+                    all_paths.append(path)
+
+            add_path(self.project.keyboard_track)
+            add_path(getattr(self.project, "mix_track", None))
+            for path in self.project.mic_tracks:
+                add_path(path)
+
             with ThreadPoolExecutor(max_workers=len(all_paths)) as executor:
                 results = list(executor.map(AudioSegment.from_file, all_paths))
-            self.keyboard_audio = results[0]
-            self.mic_audios = results[1:]
+            loaded = dict(zip(all_paths, results))
+
+            self.keyboard_audio = loaded[self.project.keyboard_track]
+            mix_track = getattr(self.project, "mix_track", None)
+            self.mix_audio = loaded.get(mix_track) if mix_track else None
+            self.mic_audios = [
+                loaded[path] for path in self.project.mic_tracks
+            ]
             # Set duration bounds on peaks so out_point_ms can't exceed audio length
             duration_ms = len(self.keyboard_audio)
             for peak in self.peaks:

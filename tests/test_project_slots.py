@@ -7,7 +7,10 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from pydub import AudioSegment  # noqa: E402
+
 from core.project import PeakCutProject  # noqa: E402
+from core.session import PeakCutSession  # noqa: E402
 
 
 def test_keyboard_track_aliases_marker_track_both_directions():
@@ -39,7 +42,8 @@ def test_set_files_accepts_structural_mix_and_transcript_slots():
 
 def test_set_files_legacy_mics_exposes_mix_track_before_schema_migration():
     """Task 2 prepares the structural slot but does not yet rewrite legacy
-    v3 payloads. Task 4 migrates loaded archives to real mic-only lists."""
+    payloads. Task 5 completes the split after exporters read the new
+    audio-source model."""
     project = PeakCutProject()
     project.set_files(
         keyboard="/m/Marker.wav",
@@ -109,3 +113,42 @@ def test_guest_name_cache_resets_when_files_change():
 
     assert project.guest_name == "Sheila de Liz"
 
+
+def test_session_load_audio_lazy_loads_structural_mix_without_shifting_mics(monkeypatch):
+    """#77 Task 3: load_audio_lazy bekommt ein eigenes mix_audio-Feld,
+    hält mic_audios im Gate-B-Zwischenzustand aber 1:1 aligned zu
+    project.mic_tracks."""
+    project = PeakCutProject()
+    project.set_files(
+        keyboard="/m/Marker.wav",
+        mics=["/m/MIC1.wav", "/m/Sheila Mix.mp3", "/m/MIC2.wav"],
+        videos=[],
+        mix="/m/Sheila Mix.mp3",
+    )
+    session = PeakCutSession(project, {})
+
+    audio_by_path = {
+        "/m/Marker.wav": AudioSegment.silent(3000),
+        "/m/MIC1.wav": AudioSegment.silent(3000) + 1,
+        "/m/Sheila Mix.mp3": AudioSegment.silent(3000) + 2,
+        "/m/MIC2.wav": AudioSegment.silent(3000) + 3,
+    }
+
+    calls = []
+
+    def fake_from_file(path):
+        calls.append(path)
+        return audio_by_path[path]
+
+    monkeypatch.setattr(AudioSegment, "from_file", fake_from_file)
+
+    session.load_audio_lazy()
+
+    assert session.keyboard_audio is audio_by_path["/m/Marker.wav"]
+    assert session.mix_audio is audio_by_path["/m/Sheila Mix.mp3"]
+    assert session.mic_audios == [
+        audio_by_path["/m/MIC1.wav"],
+        audio_by_path["/m/Sheila Mix.mp3"],
+        audio_by_path["/m/MIC2.wav"],
+    ]
+    assert calls.count("/m/Sheila Mix.mp3") == 1
