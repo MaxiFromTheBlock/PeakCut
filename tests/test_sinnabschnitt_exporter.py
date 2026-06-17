@@ -112,6 +112,33 @@ def test_xml_uses_smart_boundary_valid_xmeml(tmp_path):
     assert "<pathurl>file://" in xml
 
 
+def test_xml_audio_clips_are_premiere_importable(tmp_path):
+    # Bug (Philip-Siefer-Produktion): Sinnabschnitt-XML liess sich nicht in
+    # Premiere importieren — den Audio-Clips fehlten die FCP7-Pflichtangaben.
+    # Jetzt wie die (funktionierende) Keyboardstellen-XML: <duration>, <rate>,
+    # die Datei EINMAL voll mit <media><audio> + danach referenziert, und
+    # <sourcetrack><mediatype>audio</mediatype> pro Clip.
+    import xml.dom.minidom as minidom
+
+    cands = [
+        ClipCandidate(peak_id=0, boundary=ClipBoundary(100000, 160000),
+                      status=PROPOSED, reason="a", score=0.8),
+        ClipCandidate(peak_id=1, boundary=ClipBoundary(200000, 240000),
+                      status=PROPOSED, reason="b", score=0.7),
+    ]
+    s = _session(tmp_path, cands)
+    xml = open(SinnabschnittXMLExporter().export(s), encoding="utf-8").read()
+
+    minidom.parseString(xml)  # wohlgeformt
+    assert xml.count("<sourcetrack>") == 2
+    assert xml.count("<mediatype>audio</mediatype>") == 2
+    assert xml.count("<duration>") >= 2          # je Clip eine Dauer
+    assert "<channelcount>" in xml               # Datei-Audio-Beschreibung
+    assert '<file id="sinn-audio">' in xml       # volle Definition (1x)
+    assert '<file id="sinn-audio"/>' in xml      # spätere Referenz
+    assert "<samplecharacteristics>" in xml      # Sequenz-Audioformat
+
+
 def test_only_writes_own_files_never_keyboardstellen(tmp_path):
     s = _session(tmp_path, _cands())
     SinnabschnittTXTExporter().export(s)

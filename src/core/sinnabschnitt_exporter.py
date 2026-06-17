@@ -18,7 +18,7 @@ from utils import ms_to_timecode, ms_to_frames
 # Geteilter URL-Helfer (Carl Gate-E P2): import ist ok — "eigener
 # Codepfad" = nicht in _build_exporters / Keyboardstellen-Exporter
 # unangetastet, NICHT "keine gemeinsame Util".
-from .exporters import _file_url
+from .exporters import _file_url, _probe_audio_info
 from .clip_candidates import DISCARDED
 from .audio_routing import get_mix_track, get_source_mic_tracks
 
@@ -98,8 +98,12 @@ class SinnabschnittXMLExporter:
         ref = _select_audio_reference(session)
         ref_name = escape(os.path.basename(ref))
         ref_url = _file_url(ref)
+        # Audio-Format wie der (importierbare) Keyboardstellen-Exporter proben.
+        sample_rate, bit_depth, channels = _probe_audio_info(ref)
         rate = (f"<rate><timebase>{fps}</timebase>"
                 f"<ntsc>FALSE</ntsc></rate>")
+        tc = (f"<timecode>{rate}<string>00:00:00:00</string>"
+              f"<frame>0</frame><displayformat>NDF</displayformat></timecode>")
 
         clips = []
         cursor = 0
@@ -109,18 +113,43 @@ class SinnabschnittXMLExporter:
             length = max(1, out_f - in_f)
             start, end = cursor, cursor + length
             cursor = end
+            # FCP7-Konvention: die Datei EINMAL voll definieren (mit
+            # <media><audio>), danach nur per id referenzieren — genau wie die
+            # importierbare Keyboardstellen-XML. Vorher fehlten <duration>,
+            # die Datei-Audio-Beschreibung und <sourcetrack> -> Premiere lehnte
+            # den Import ab.
+            if i == 0:
+                file_block = (
+                    f'          <file id="sinn-audio">\n'
+                    f'            <name>{ref_name}</name>\n'
+                    f'            <pathurl>{ref_url}</pathurl>\n'
+                    f'            {rate}\n'
+                    f'            {tc}\n'
+                    f'            <media>\n'
+                    f'              <audio>\n'
+                    f'                <samplecharacteristics>\n'
+                    f'                  <samplerate>{sample_rate}</samplerate>\n'
+                    f'                  <depth>{bit_depth}</depth>\n'
+                    f'                </samplecharacteristics>\n'
+                    f'                <channelcount>{channels}</channelcount>\n'
+                    f'              </audio>\n'
+                    f'            </media>\n'
+                    f'          </file>\n')
+            else:
+                file_block = '          <file id="sinn-audio"/>\n'
             clips.append(
                 f'        <clipitem id="sinn-{c.peak_id}">\n'
                 f'          <name>Sinnabschnitt {c.peak_id}</name>\n'
+                f'          <duration>{length}</duration>\n'
+                f'          {rate}\n'
                 f'          <start>{start}</start>\n'
                 f'          <end>{end}</end>\n'
                 f'          <in>{in_f}</in>\n'
                 f'          <out>{out_f}</out>\n'
-                f'          <file id="sinn-audio">\n'
-                f'            <name>{ref_name}</name>\n'
-                f'            <pathurl>{ref_url}</pathurl>\n'
-                f'            {rate}\n'
-                f'          </file>\n'
+                f'{file_block}'
+                f'          <sourcetrack>\n'
+                f'            <mediatype>audio</mediatype>\n'
+                f'          </sourcetrack>\n'
                 f'        </clipitem>\n')
 
         with open(path, "w", encoding="utf-8") as f:
@@ -131,7 +160,14 @@ class SinnabschnittXMLExporter:
             f.write('    <name>PeakCut Sinnabschnitte</name>\n')
             f.write(f'    <duration>{cursor}</duration>\n')
             f.write(f'    {rate}\n')
-            f.write('    <media>\n      <audio>\n        <track>\n')
+            f.write('    <media>\n      <audio>\n')
+            f.write('        <format>\n')
+            f.write('          <samplecharacteristics>\n')
+            f.write(f'            <samplerate>{sample_rate}</samplerate>\n')
+            f.write(f'            <depth>{bit_depth}</depth>\n')
+            f.write('          </samplecharacteristics>\n')
+            f.write('        </format>\n')
+            f.write('        <track>\n')
             for cl in clips:
                 f.write(cl)
             f.write('        </track>\n      </audio>\n    </media>\n')
