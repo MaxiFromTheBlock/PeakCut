@@ -179,6 +179,28 @@ def test_to_camera_assignments_skips_person_shot_without_person():
     assert "/Tot.mp4" in paths       # Totale ist personenlos -> bleibt
 
 
+def test_person_combos_use_readable_popup():
+    # Carl-P3: Person-Combos (Kamera + Mic) laufen über denselben
+    # _apply_readable_popup-Helfer wie das Shot-Combo. Hier an den ECHTEN,
+    # gebauten Combos verriegelt (Stylesheet-Regel statt nur View-Typ — der
+    # Default-View ist ohnehin eine QListView-Unterklasse), damit ein
+    # versehentliches Entfernen des Helfers auffliegt.
+    _app()
+    page = AssignmentPage()
+    session = _session(mic_assignments=_hm_mics())
+    page.set_session(session, ["/material/Cam.mp4"])
+
+    person_combos = (
+        [pc for _r, _s, pc in page._camera_widgets]
+        + [pc for _r, pc in page._mic_widgets]
+    )
+    assert page._camera_widgets and page._mic_widgets, "Zeilen nicht gebaut"
+    for pc in person_combos:
+        ss = pc.view().styleSheet()
+        assert "::item:selected" in ss and "#007AFF" in ss, (
+            "Person-Combo hat kein lesbares Popup (_apply_readable_popup fehlt)")
+
+
 def test_shot_combo_stylesheet_sets_readable_text_color():
     assert "color:" in SHOT_COMBO_STYLESHEET
     assert "#1D1D1F" in SHOT_COMBO_STYLESHEET
