@@ -50,8 +50,14 @@ _TMP_PLACEHOLDER = "__TMPDIR__"
 # erzeugt und hier eingetragen — dokumentierter bewusster Snapshot
 # des aktuellen XMLExporter-Outputs *vor* #71a-Bau. Jede Änderung
 # am Hash MUSS als bewusster Eingriff diskutiert werden.
+# Bewusst neu eingefroren 2026-06-17 (Marker-Slice Task 2): die
+# Keyboardstellen-XML hat jetzt nummerierte Sequenz-Marker ("Stelle N")
+# und die Sequenz heißt "Keyboardstellen raw" statt "PeakCut". Das ist die
+# von Max gewünschte, beabsichtigte Änderung — kein versehentlicher Drift.
+# Abnahme-Riegel bleibt Max' Premiere-Import; dieser Hash schützt ab jetzt
+# genau diesen neuen Stand.
 _XML_PIN_HASH_MIX_IN_MICS = (
-    "52be195e91ce5c4ab04f54abd53dcc2d8697f925f034c0222078726371302bce"
+    "7151e40ea6f4bd15d1f0027b0e5315814337970f6d3671c488ade69afbb247c7"
 )
 
 
