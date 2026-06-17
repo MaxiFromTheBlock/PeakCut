@@ -56,30 +56,36 @@ def build_keyboard_spans(session) -> list:
     return spans
 
 
-def build_smart_spans(session) -> list:
-    """Sinnabschnitt-Spannen (smart): aktive Smart-Kandidaten, Quelle =
-    candidate.boundary, Record kumulativ.
+def active_smart_candidates(session) -> list:
+    """(Stellennummer, candidate) für die exportierbaren Smart-Kandidaten,
+    sortiert nach Stellennummer.
 
-    Die Nummer kommt aus der Keyboard-Nummernkarte (NICHT direkt aus
-    candidate.peak_id), damit die Marker mit den Keyboardstellen
-    übereinstimmen. Kandidaten ohne aktiven Peak (ignoriert / kein
-    Mapping), verworfene und Bootstrap (score=None) fallen raus; sortiert
-    nach Stellennummer statt nach zufälliger Listenreihenfolge.
+    EINE Quelle für Filter + Sortierung + Nummer (Keyboardstellen-XML und
+    Sinnabschnitt-XML hängen sich beide hier an). Raus fallen: verworfene,
+    Bootstrap (score=None) und Kandidaten ohne aktiven Peak (ignoriert /
+    kein Mapping — sonst keine Vergleichbarkeit). Die Nummer kommt aus der
+    Keyboard-Nummernkarte, NICHT direkt aus candidate.peak_id.
     """
-    fps = _fps(session)
     number_map = build_peak_number_map(session)
     active = [c for c in (getattr(session, "clip_candidates", []) or [])
               if c.status != DISCARDED and c.score is not None
               and c.peak_id in number_map]
     active.sort(key=lambda c: number_map[c.peak_id])
+    return [(number_map[c.peak_id], c) for c in active]
+
+
+def build_smart_spans(session) -> list:
+    """Sinnabschnitt-Spannen (smart): aktive Smart-Kandidaten, Quelle =
+    candidate.boundary, Record kumulativ. Nummer + Filter via
+    active_smart_candidates."""
+    fps = _fps(session)
     spans = []
     rec = 0
-    for c in active:
+    for number, c in active_smart_candidates(session):
         in_f = ms_to_frames(c.boundary.start_ms, fps)
         out_f = ms_to_frames(c.boundary.end_ms, fps)
         length = max(1, out_f - in_f)
-        spans.append(SequenceSpan(number_map[c.peak_id], in_f, out_f,
-                                  rec, rec + length))
+        spans.append(SequenceSpan(number, in_f, out_f, rec, rec + length))
         rec += length
     return spans
 

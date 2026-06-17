@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from core.xml_sequence_helpers import (  # noqa: E402
     build_peak_number_map, build_keyboard_spans, build_smart_spans,
-    marker_xml, sequence_markers_xml)
+    active_smart_candidates, marker_xml, sequence_markers_xml)
 from core.peak import Peak  # noqa: E402
 from core.project import PeakCutProject  # noqa: E402
 from core.session import PeakCutSession  # noqa: E402
@@ -107,6 +107,22 @@ def test_smart_spans_exclude_discarded_and_scoreless():
             ClipCandidate(peak_id=2, boundary=ClipBoundary(170000, 190000),
                           status=PROPOSED, score=0.6)])       # bleibt
     assert [sp.number for sp in build_smart_spans(s)] == [3]
+
+
+def test_active_smart_candidates_returns_number_and_candidate_sorted():
+    # Peak 0 ignoriert -> Kandidat peak_id=0 fällt raus; Rest nach Stelle.
+    s = _session(
+        [_peak(0, 60000, ignored=True), _peak(1, 120000), _peak(2, 180000)],
+        cands=[
+            ClipCandidate(peak_id=2, boundary=ClipBoundary(170000, 190000),
+                          status=PROPOSED, score=0.7),
+            ClipCandidate(peak_id=1, boundary=ClipBoundary(110000, 130000),
+                          status=PROPOSED, score=0.8),
+            ClipCandidate(peak_id=0, boundary=ClipBoundary(50000, 70000),
+                          status=PROPOSED, score=0.9)])
+    result = active_smart_candidates(s)
+    assert [num for num, _ in result] == [1, 2]        # nach Stelle sortiert
+    assert [c.peak_id for _, c in result] == [1, 2]     # peak_id=0 ist raus
 
 
 # --- Marker-XML ----------------------------------------------------------

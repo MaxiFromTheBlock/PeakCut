@@ -15,13 +15,14 @@ from core.sinnabschnitt_exporter import (  # noqa: E402
     _select_audio_reference)
 from core.clip_candidates import (  # noqa: E402
     ClipCandidate, ClipBoundary, PROPOSED, DISCARDED)
+from core.peak import Peak  # noqa: E402
 from core.project import PeakCutProject  # noqa: E402
 from core.session import PeakCutSession  # noqa: E402
 
 _CFG = {"fps": 25, "context_duration_ms": 15000}
 
 
-def _session(tmp_path, cands):
+def _session(tmp_path, cands, peaks=None):
     p = PeakCutProject()
     p.set_files(str(tmp_path / "KB.wav"), [str(tmp_path / "MIC1 mix.wav")],
                 [str(tmp_path / "CAM.mp4")])
@@ -31,6 +32,13 @@ def _session(tmp_path, cands):
     s = PeakCutSession(p, dict(_CFG))
     s.project.export_dir = str(tmp_path / "export")
     s.clip_candidates = cands
+    # Aktive Peaks für die Nummernkarte (peak_id == peak.index). Default:
+    # je ein aktiver Peak pro vorkommender peak_id.
+    if peaks is None:
+        pids = sorted({c.peak_id for c in cands})
+        peaks = [Peak(index=pid, position_ms=(pid + 1) * 100000)
+                 for pid in pids]
+    s.peaks = peaks
     return s
 
 
@@ -83,12 +91,26 @@ def test_audio_reference_falls_back_to_default_without_audio(tmp_path):
     assert _select_audio_reference(s) == "audio.wav"
 
 
+def test_txt_uses_keyboard_number_not_peak_id(tmp_path):
+    # Peak 0 ignoriert -> Kandidat peak_id=1 erscheint als [PEAK 1].
+    p0 = Peak(index=0, position_ms=60000)
+    p0.ignored = True
+    peaks = [p0, Peak(index=1, position_ms=120000)]
+    cands = [ClipCandidate(peak_id=1, boundary=ClipBoundary(110000, 130000),
+                           status=PROPOSED, score=0.8, reason="x",
+                           transcript_excerpt="y")]
+    s = _session(tmp_path, cands, peaks=peaks)
+    txt = open(SinnabschnittTXTExporter().export(s), encoding="utf-8").read()
+    assert "[PEAK 1]" in txt
+    assert "[PEAK 2]" not in txt             # peak_id=1 ist NICHT die Nummer
+
+
 def test_txt_has_all_required_fields_and_skips_discarded(tmp_path):
     s = _session(tmp_path, _cands())
     path = SinnabschnittTXTExporter().export(s)
     assert os.path.basename(path) == "Sinnabschnitte - Hartmut Rosa.txt"
     txt = open(path, encoding="utf-8").read()
-    assert "0" in txt                       # peak-id
+    assert "[PEAK 1]" in txt                 # Stellennummer (peak_id 0 -> Stelle 1)
     assert "00:01:40:00" in txt             # start 100000ms @25fps
     assert "00:02:40:00" in txt             # end 160000ms
     assert "60" in txt                      # Dauer (s)
@@ -137,6 +159,54 @@ def test_xml_audio_clips_are_premiere_importable(tmp_path):
     assert '<file id="sinn-audio">' in xml       # volle Definition (1x)
     assert '<file id="sinn-audio"/>' in xml      # spätere Referenz
     assert "<samplecharacteristics>" in xml      # Sequenz-Audioformat
+
+
+def test_sequence_named_keyboardstellen_smart(tmp_path):
+    s = _session(tmp_path, _cands())
+    xml = open(SinnabschnittXMLExporter().export(s), encoding="utf-8").read()
+    assert "<name>Keyboardstellen smart</name>" in xml
+    assert "PeakCut Sinnabschnitte" not in xml
+
+
+def test_xml_has_video_and_audio_tracks(tmp_path):
+    import xml.dom.minidom as minidom
+    s = _session(tmp_path, _cands())
+    xml = open(SinnabschnittXMLExporter().export(s), encoding="utf-8").read()
+    minidom.parseString(xml)                      # wohlgeformt
+    assert "<video>" in xml and "<audio>" in xml
+
+
+def test_video_clipname_is_camera_basename_not_sinnabschnitt(tmp_path):
+    s = _session(tmp_path, _cands())              # Kamera = CAM.mp4
+    xml = open(SinnabschnittXMLExporter().export(s), encoding="utf-8").read()
+    assert "<name>CAM</name>" in xml              # Clip = Kamera-Basename
+    assert "Sinnabschnitt 0" not in xml           # keine künstlichen Labels
+    assert "Sinnabschnitt 1" not in xml
+
+
+def test_audio_clipname_is_mix_basename(tmp_path):
+    s = _session(tmp_path, _cands())              # Mix = "MIC1 mix.wav"
+    xml = open(SinnabschnittXMLExporter().export(s), encoding="utf-8").read()
+    assert "<name>MIC1 mix</name>" in xml         # Audio-Clip = Mix-Basename
+
+
+def test_marker_numbers_match_keyboardstellen_despite_peak_id_offset(tmp_path):
+    # Peak index 0 ignoriert -> Kandidat peak_id=1 ist "Stelle 1", nicht 2.
+    p0 = Peak(index=0, position_ms=60000)
+    p0.ignored = True
+    peaks = [p0, Peak(index=1, position_ms=120000),
+             Peak(index=2, position_ms=180000)]
+    cands = [
+        ClipCandidate(peak_id=1, boundary=ClipBoundary(110000, 130000),
+                      status=PROPOSED, score=0.8),
+        ClipCandidate(peak_id=2, boundary=ClipBoundary(170000, 190000),
+                      status=PROPOSED, score=0.7)]
+    s = _session(tmp_path, cands, peaks=peaks)
+    xml = open(SinnabschnittXMLExporter().export(s), encoding="utf-8").read()
+    assert "<name>Stelle 1</name>" in xml
+    assert "<name>Stelle 2</name>" in xml
+    assert "<name>Stelle 0</name>" not in xml     # peak_id ist NICHT die Nummer
+    assert "<name>Stelle 3</name>" not in xml
 
 
 def test_only_writes_own_files_never_keyboardstellen(tmp_path):
