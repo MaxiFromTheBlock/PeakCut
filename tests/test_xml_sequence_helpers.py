@@ -127,19 +127,23 @@ def test_active_smart_candidates_returns_number_and_candidate_sorted():
 
 # --- Marker-XML ----------------------------------------------------------
 
-def test_marker_xml_is_point_marker_named_stelle():
-    xml = marker_xml(4, 1234)
+def test_marker_xml_spans_clip_in_to_out():
+    # Bereich-Marker (Max-Wunsch): so lang wie die Stelle -> Label lesbar.
+    xml = marker_xml(4, 1000, 1750)
     assert "<marker>" in xml and "</marker>" in xml
     assert "<name>Stelle 4</name>" in xml
-    assert "<in>1234</in>" in xml
-    assert "<out>1234</out>" in xml      # Punkt-Marker (in == out)
+    assert "<in>1000</in>" in xml
+    assert "<out>1750</out>" in xml       # out != in: spannt die ganze Stelle
 
 
-def test_sequence_markers_at_record_starts():
+def test_sequence_markers_span_whole_stelle():
     s = _session([_peak(0, 60000), _peak(1, 120000)])
     spans = build_keyboard_spans(s)
     xml = sequence_markers_xml(spans)
     assert xml.count("<marker>") == 2
     assert "<name>Stelle 1</name>" in xml and "<name>Stelle 2</name>" in xml
+    # Marker spannen rec_start..rec_end (so lang wie die Stelle)
     assert f"<in>{spans[0].rec_start_f}</in>" in xml
+    assert f"<out>{spans[0].rec_end_f}</out>" in xml
     assert f"<in>{spans[1].rec_start_f}</in>" in xml
+    assert f"<out>{spans[1].rec_end_f}</out>" in xml

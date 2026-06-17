@@ -90,17 +90,22 @@ def build_smart_spans(session) -> list:
     return spans
 
 
-def marker_xml(number: int, frame: int, indent: str = "    ") -> str:
-    """Ein Sequenz-Marker 'Stelle N' an Frame (in == out, Punkt-Marker)."""
+def marker_xml(number: int, in_frame: int, out_frame: int,
+               indent: str = "    ") -> str:
+    """Ein Sequenz-Marker 'Stelle N' als BEREICH (in..out) — so lang wie die
+    Stelle, damit Premiere das Label lesbar anzeigt (Max-Wunsch)."""
     name = escape(f"Stelle {number}")
     return (f"{indent}<marker>\n"
             f"{indent}  <name>{name}</name>\n"
             f"{indent}  <comment></comment>\n"
-            f"{indent}  <in>{frame}</in>\n"
-            f"{indent}  <out>{frame}</out>\n"
+            f"{indent}  <in>{in_frame}</in>\n"
+            f"{indent}  <out>{out_frame}</out>\n"
             f"{indent}</marker>\n")
 
 
 def sequence_markers_xml(spans, indent: str = "    ") -> str:
-    """Alle Sequenz-Marker einer Spannenliste, an ihren Record-Starts."""
-    return "".join(marker_xml(s.number, s.rec_start_f, indent) for s in spans)
+    """Alle Sequenz-Marker einer Spannenliste, jeweils über die ganze Stelle
+    (rec_start..rec_end)."""
+    return "".join(
+        marker_xml(s.number, s.rec_start_f, s.rec_end_f, indent)
+        for s in spans)
