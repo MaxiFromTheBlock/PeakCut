@@ -773,6 +773,68 @@ Produkt):**
 
 ## Changelog
 
+### Erste Eigen-Produktion (Philip Siefer) + Sinnabschnitt-Import-Fix (develop, 2026-06-17)
+
+Max hat erstmals seit Langem selbst eine Postproduktion gemacht und PeakCut am
+echten Material der Philip-Siefer-Folge benutzt (nicht nur Smoke).
+
+- **Folgenschnitt-XML real bestätigt:** „funktioniert super" — erste echte
+  Eigen-Nutzung außerhalb der Smoke-Tests.
+- **Sinnabschnitt-XML in Premiere importierbar gemacht** (`core/sinnabschnitt_exporter.py`,
+  Commit `64870c0`): Den Audio-Clips fehlten die FCP7-Pflichtangaben (`<duration>`,
+  die Datei-Audio-Beschreibung `<media><audio>`, `<sourcetrack><mediatype>audio`),
+  darum lehnte Premiere den Import ab. Jetzt aufgebaut wie die funktionierende
+  Keyboardstellen-XML: Datei EINMAL voll definiert, danach per id referenziert,
+  plus Sequenz-Audioformat. Neuer Test `test_xml_audio_clips_are_premiere_importable`.
+  **Eigener Codepfad — nicht in `_build_exporters`, Keyboardstellen-Pfad/Pin-1
+  unberührt.**
+- **OFFENER FOLGE-BEFUND (in BACKLOG → Bugs):** Die Sinnabschnitt-XML importiert
+  jetzt, zeigt in der Timeline aber NUR Ton, kein Bild. Aktuell by-design
+  (v1 = leichtgewichtige Ton-Spannenliste), aber Max hat etwas anderes erwartet.
+  Erst mit Max klären, was in der Timeline liegen soll, dann entscheiden.
+- **Neue Wünsche aus der Produktion (in BACKLOG):** nummerierte Marker in der
+  Keyboardstellen-XML (klein); SRT-Untertitel für Premiere (groß, Descript-API
+  prüfen).
+
+### Fix-Runde — Python-Pin, Dropdown-Lesbarkeit, Crash auf „Weiter" (develop, 2026-06-16/17)
+
+Carl-Review: keine P1/P2, mergefähig. Drei Korrekturen abseits von #77:
+
+- **Python 3.11 gepinnt:** `.python-version` + weiche Start-Wache
+  (`python_version_warning` in `utils.py`) — tickende Uhr pydub/audioop bei 3.13.
+- **Shot-Dropdown macOS lesbar (visuell bestätigt):** Das native Popup ignorierte
+  das Stylesheet → markierte Zeile war weiß-auf-hellgrau. Fix: nicht-natives Popup
+  (`QListView`) + explizite `QListView::item:selected/:hover`-Regeln (blau + weiß)
+  in `assignment_page.py`, angewandt auf Shot- UND beide Person-Combos
+  (Kamera + Mic). Verifiziert per gerendertem PNG + Pixel-Probe (highlight = #007AFF).
+  Max-O-Ton „sah besser aus". Commits `74a18fc`/`6f0fd55`.
+- **Crash-Fix auf „Weiter" (SIGABRT):** Hatte eine Kamera einen Personen-Shot
+  (Weit/Nah/Halbnah) OHNE zugewiesene Person, warf `CameraAssignment` einen
+  ValueError im Qt-Slot → `abort()`. `to_camera_assignments` überspringt jetzt
+  unvollständige Personen-Shots statt zu crashen (Altbestands-Bug v2.10, NICHT von
+  #77). Commit `f7310d0`.
+
+### #77 Import-Refactor — Strukturteil gebaut, Rest bewusst geparkt (develop, 2026-06-16)
+
+Vier-Augen mit Carl (Carl: Plan + Gate-Reviews, Claude: TDD-Bau, Max: Entscheider).
+Plan: `docs/plans/2026-06-16-77-import-refactor-plan.md` (inkl. Scope-Entscheidung).
+
+- **Was gebaut wurde (Tasks 0/1/2/3/4/6, Carl-Review grün):**
+  - Eigenes `project.mix_track`-Feld (Mix strukturell getrennt statt nur zur
+    Laufzeit aus `mic_tracks` gefiltert).
+  - Zentraler Klassifizierer `core/import_classifier.py` als EINE Wahrheit für
+    „Mix/Marker/Mic/Transkript/Kamera?" — letzte Heuristik-Insel eingesammelt.
+  - `.peakcut` Schema **v4, additiv + rückwärtskompatibel** (`project_archive.py`):
+    schreibt `marker_track`/`mix_track`/`transcript_path`, migriert v1–v3.
+- **Bewusst ADDITIV, nicht „sauber":** Der Mix bleibt VORERST zusätzlich in
+  `mic_tracks`, weil der XMLExporter die Audiospuren noch direkt von dort baut.
+  Würde man ihn jetzt strippen, fiele die Mix-Spur aus der Keyboardstellen-XML →
+  Pin-1-Bruch. Mein eigener Pin-1-Test hat genau das gefangen.
+- **Geparkt:** Task 5 „Mix aus `mic_tracks` strippen" (Pin-1-riskant + kosmetisch),
+  Task 7 Import-UI + Task 8 Transcript — bis die Produkt-/Kundenrichtung klar ist
+  (Marker-Pflicht? Erkennung per Audio-Inhalt? für wen?). Nächste Energie →
+  Produkt-Validierung (#70 + Cutter-Sign-off), nicht weiter am Import.
+
 ### Putzfirma — Hygiene-Pass über das ganze Repo (auf develop, 2026-06-16)
 
 Ultracode-Audit (20 Agenten, 5 Dimensionen, adversarial gegengeprüfte Lösch-
@@ -1369,4 +1431,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-06-16 (#76 Wiedergabe-UX auf main gelandet — synchrone Ton+Bild-Vorschau über den Audio-Master-Controller. Davor auf main: Daten-Integritäts-Riegel + Slice B Multi-Track-Folgenschnitt (2026-06-15). Todos leben jetzt in App/BACKLOG.md (Single Source of Truth). Nächster Slice: #77 Import-Refactor.)*
+*Zuletzt aktualisiert: 2026-06-17 (auf develop: #77 Strukturteil gebaut + bewusst geparkt vor der Import-UI; Fix-Runde Python-Pin/Dropdown/Crash; erste echte Eigen-Produktion (Philip Siefer) — Folgenschnitt-XML bestätigt, Sinnabschnitt-XML importierbar gemacht. OFFEN: Sinnabschnitt zeigt in Premiere nur Ton — mit Max klären. Auf main zuletzt: #76 Wiedergabe-UX (2026-06-16). Todos leben in App/BACKLOG.md (Single Source of Truth).)*

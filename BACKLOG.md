@@ -6,7 +6,7 @@
 >
 > **„#76", „#77", „G1", „ARCH-1" usw. sind nur Namen/Label — KEINE Aufgabenzahl.**
 >
-> Stand: 2026-06-16 · ~21 offene Punkte · Quelle: ultracode-Sweep (Repo-Docs,
+> Stand: 2026-06-17 · ~22 offene Punkte · Quelle: ultracode-Sweep (Repo-Docs,
 > Code-Kommentare, GitHub-Issues=0, Memory, Notion=0), dedupliziert.
 > (Putzfirma-Hygiene-Pass 2026-06-16: Doku-Entrümpelung erledigt — siehe unten.)
 >
@@ -15,11 +15,20 @@
 ---
 
 ## 🐛 Bugs
-- **Shot-Auswahl-Dropdown auf macOS schlecht lesbar** `[S]` · **BEHOBEN — visuelle Abnahme (Max) offen**
-  Fix: nicht-natives Popup (`setView(QListView())`) → Stylesheet greift, markierte
-  Zeile lesbar (Commit `8433bdb`). Bitte in der App kurz anschauen, dann zu.
+- **Sinnabschnitt-XML zeigt in Premiere nur Ton (kein Bild)** `[?]` · braucht: Max-Klärung — **NEU, offen**
+  Seit dem Import-Fix lässt sich die Sinnabschnitte-XML öffnen, aber in der
+  Timeline liegt nur eine Tonspur, kein Video. Aktuell ist diese Zusatz-Datei
+  bewusst eine reine Ton-Spannenliste (v1-Scope, „leichtgewichtig"). Max hat
+  beim echten Arbeiten an der Philip-Siefer-Folge aber etwas anderes erwartet.
+  Erst klären: Was soll in der Timeline liegen (Multicam wie beim Folgenschnitt?
+  nur Marker?), dann entscheiden, ob wir Bild ergänzen. NICHT anfassen, bevor das
+  geklärt ist.
 
 ## 🔧 Funktions-Ausbau (nächste Features)
+- **Nummerierte Marker in der Keyboardstellen-XML** `[M]` · braucht: nichts — **NEU**
+  Max-Wunsch aus der Philip-Siefer-Produktion: die Keyboard-Stellen in der Timeline
+  durchnummerieren (1, 2, 3, 4 …), damit man sie in Premiere schnell wiederfindet.
+  Kleines Feature, eigener Slice (Carl-Briefing genügt).
 - **Import-Umbau: feste Slots statt Namensraten** (#37/#77) `[XL]` · braucht: Carl-Plan — **STRUKTURTEIL ERLEDIGT, ruht**
   Eigenes Mix-Feld statt Mix-in-mic_tracks, Schema v4 rückwärtskompatibel, ein
   zentraler Klassifizierer (letzte Insel eingesammelt). Strukturteil fertig +
@@ -77,15 +86,20 @@
 - **Plattform-Gabel härten für NAS-Container** (G3) `[M]` · Carl-Plan — macOS-Kopplungen (say-TTS, Keychain, Whisper) + ffmpeg-Pfad kapseln.
 - **Lerndaten-Zulauf für Clip-Statusmaschine** (G5) `[M]` · Max-Entscheidung — produktiver Schreibpfad selected/produced/published (der Burggraben).
 - **Sprecher-Gegencheck über die Mics** `[M]` · Carl-Plan — Descript-Label gegen Mic-Aktivität abgleichen.
+- **SRT-Untertitel für Premiere** `[L]` · Carl-Plan — **NEU (Max-Wunsch Philip Siefer)**: SRT aus dem
+  Transkript erzeugen, direkt in Premiere ziehbar. Descript-API als mögliche Transkript-/Untertitel-Quelle
+  prüfen (steht ohnehin auf der Geparkt-Liste).
 - **Competitor-Recherche** `[S]` · nichts — autocut.com, Resolve Scene-Cut, GitHub. Geparkt.
 
 ---
 
 ## ✅ Erledigt (Historie, Kurzform)
+- **Folgenschnitt-XML real bestätigt** — Max hat erstmals seit Langem selbst eine Postproduktion gemacht (Philip Siefer) und die Folgenschnitt-XML „funktioniert super". Erste echte Eigen-Nutzung außerhalb der Smoke-Tests (2026-06-17)
+- **Sinnabschnitt-XML in Premiere importierbar** — den Audio-Clips fehlten FCP7-Pflichtangaben (Dauer, Datei-Audio-Beschreibung, Quell-Spur) → Premiere lehnte den Import ab. Jetzt aufgebaut wie die funktionierende Keyboardstellen-XML. Eigener Codepfad, Pin-1 unberührt. **Folge-Befund offen → siehe Bugs (nur Ton in der Timeline)** (2026-06-17)
+- **Shot-Dropdown macOS — visuell bestätigt** — nicht-natives Popup + `::item`-Regeln (markierte/überfahrene Zeile blau+weiß), auch die Person-Combos (Kamera + Mic). Max-O-Ton „sah besser aus". Verifiziert per gerendertem PNG + Pixel-Probe (Commits `74a18fc`/`6f0fd55`) (2026-06-17)
 - **Crash-Fix Zuordnung** — „Weiter" stürzte ab, wenn eine Kamera einen Personen-Shot (Weit/Nah/Halbnah) OHNE Person hatte (Altbestand v2.10, ValueError im Slot → SIGABRT). Unvollständige Kamera wird jetzt toleriert statt zu crashen (2026-06-17)
 - **#77 Strukturteil** — Mix strukturell (mix_track, Schema v4), zentraler Klassifizierer, letzte Inseln vereint (Tasks 0/1/2/3/4/6, Carl-Review grün); Import-UI (7/8) + Strip (5) bewusst geparkt (2026-06-16)
 - **Python 3.11 gepinnt** — .python-version + weiche Start-Wache (audioop-Uhr) (2026-06-16)
-- **Shot-Dropdown macOS** — nicht-natives Popup, lesbar (visuelle Abnahme Max offen) (2026-06-16)
 - **Putzfirma — Repo-Hygiene-Pass** (2026-06-16): toter Code/Importe raus, Doku-Drift gefixt (u.a. `core/audio.py`-Diagramm), 11 Specs + 4 Pläne ins Archiv, CLAUDE.md-Backlog-Block → BACKLOG-Verweis (SSOT durchgezogen), Modell-ID → Opus 4.8, verwaiste Assets weg, develop↔main synchronisiert. **Enthält die frühere „Doku-Entrümpelung".**
 - **#76 Wiedergabe-UX** — synchrone Ton+Bild-Vorschau, Scrub-Resume (2026-06-16)
 - **Slice B Multi-Track-Folgenschnitt** + **Slice C Audio-Mix-only** (2026-06-15)
