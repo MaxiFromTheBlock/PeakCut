@@ -53,6 +53,12 @@
 - **Internes Timeline-Modell statt handgeschriebener XML-Strings** (G1) `[XL]` · braucht: Carl-Plan
   Löst Frame-Drift bei negativem Offset, dreifach kopiertes XML-Gerüst und den
   Resolve-/FCPXML-Schmerz an der Wurzel. Logik-Schicht ist ~80% schon da.
+  Konkretes Symptom (Carl-Schluss-Review 2026-06-18): in den **kompakten XMLs** kommt
+  die Video-Clip-Länge aus offset-**geclampter** Source, Marker/Audio aber aus
+  **ungeclampter** Peak-/Boundary-Dauer (`exporters.py` ~323, `sinnabschnitt_exporter.py`
+  ~164). Bei großen negativen Offsets am Sequenzanfang können Video-Clips kürzer sein
+  als die Marker-/Audio-Spanne. Aus raw geerbt (nicht neu durch Marker-Slice), kein
+  Blocker (Philip-Siefer abgenommen) — fällt mit G1 weg.
 - **Projekt-Speichern/Laden + Undo** (G2) `[L]` · braucht: Carl-Plan
   Persistenz (.peakcut) ist gelandet; **Undo fehlt** — V3-Voraussetzung, kein nice-to-have.
 - **Threading-/Lebenszyklus-Härtung + echte Thread-Tests** `[L]` · braucht: Carl-Plan
