@@ -1,17 +1,16 @@
 # video_preview_peak.py - PeakCut Video Preview (video only, muted)
 
-import logging
 import os
 import subprocess
 import threading
 import numpy as np
-from utils import FFMPEG_BIN
+from utils import FFMPEG_BIN, get_logger
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
 from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QTimer, QSize, QThread, QMutex, QWaitCondition
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink
 
-_log = logging.getLogger(__name__)
+_log = get_logger("peakcut.videopreview")
 
 _SCREENSHOT_TIMEOUT_S = 30
 _WORKER_SHUTDOWN_WAIT_MS = 3000
@@ -235,7 +234,6 @@ class PeakVideoPreview(QWidget):
 
         self._video_files = []
         self._current_video = None
-        self._current_video_index = 0
         self._duration_ms = 0
         self._is_seeking = False
 
@@ -393,12 +391,10 @@ class PeakVideoPreview(QWidget):
     def set_videos(self, video_files: list):
         self._video_files = video_files
         if video_files:
-            self._current_video_index = 0
             self._load_video(video_files[0])
 
     def load_video_at_index(self, index: int):
         if 0 <= index < len(self._video_files):
-            self._current_video_index = index
             path = self._video_files[index]
             name = self._camera_names.get(path, "")
             self._load_video(path)

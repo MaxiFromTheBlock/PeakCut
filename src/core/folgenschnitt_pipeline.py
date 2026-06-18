@@ -1,9 +1,10 @@
-"""Guarded Folgenschnitt export pipeline.
+"""Abgesicherte Folgenschnitt-Export-Pipeline.
 
-Builds speaker turns + edit decisions from the assignment step at export
-time. The hard guardrail: an incomplete or invalid assignment must never
-break the Keyboardstellen export. Any problem here results in a skip
-reason, never an exception that propagates to the export worker.
+Baut zur Export-Zeit Sprecher-Turns + Schnittentscheidungen aus dem
+Zuordnungs-Schritt. Harte Leitplanke: eine unvollständige oder ungültige
+Zuordnung darf NIE den Keyboardstellen-Export brechen. Jedes Problem hier
+endet in einem Skip-Grund, nie in einer Exception, die zum Export-Worker
+durchschlägt.
 """
 
 from .folgenschnitt_decisions import build_edit_decisions, build_speaker_turns

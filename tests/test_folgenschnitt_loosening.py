@@ -51,7 +51,7 @@ def test_noop_returns_decisions_unchanged_and_gapless():
 
 def test_base_camera_prefers_wide_then_close_then_medium():
     from core.folgenschnitt_models import (
-        SHOT_CLOSE, SHOT_MEDIUM, MicAssignment, CameraAssignment,
+        SHOT_CLOSE, MicAssignment, CameraAssignment,
     )
     from core.folgenschnitt_loosening import build_stage1_base_camera_assignments
 

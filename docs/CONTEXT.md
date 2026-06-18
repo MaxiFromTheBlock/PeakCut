@@ -10,7 +10,7 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 ## Tech-Stack
 
 - Python 3.11 + PyQt6
-- 621 Tests, CI via GitHub Action (libegl1/libgl1-Fix — CI war seit Tagen rot)
+- CI via GitHub Action (libegl1/libgl1-Fix — CI war seit Tagen rot)
 - Distribution: Launcher-App in /Applications, ruft Repo-Code direkt auf
   (PyInstaller-Bundle-Strategie geparkt — siehe Distribution-Sektion in CLAUDE.md)
 
@@ -111,18 +111,47 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 
 ## Aktuelle Prioritaeten
 
-1. V3 Vision: Smart Scan, Create Mix, Screenshots Page, Hub-Architektur
-2. UI Revamp (Figma → PyQt6, oder Electron?)
-3. Versionsnummer + Code Signing (geparkt — erst noetig wenn PeakCut wieder extern verteilt wird)
+Maßgeblich = „Offene Slices" unten (immer aktuell) + App/BACKLOG.md (Todo-SSOT).
+Reihenfolge: #77 Strukturteil ist gebaut (Rest geparkt) → Produkt-Validierung (#70
+Prompt-Tuning + Cutter-Sign-off) → Slice A (Dialog-Totale Cross-Talk) →
+Export-Orchestrierung aus dem GUI (ARCH-1, vor NAS). Akut offen aus der Eigen-Produktion:
+Sinnabschnitt-„nur-Ton"-Bug mit Max klären; nummerierte Marker (klein); SRT (groß).
+(Die frühere „V3 Vision: Smart Scan / Create Mix / Hub"-Liste war überholt 2026-05-18.)
 
-## Offene Slices (Stand 2026-06-16)
+## Offene Slices (Stand 2026-06-18)
+
+**Marker + Vergleichbarkeit GEBAUT auf develop (2026-06-18), Max-Premiere-Abnahme ✓:**
+Keyboardstellen-XML und Sinnabschnitt-XML sind jetzt direkt vergleichbar — beide mit
+Video + denselben Tonspuren + nummerierten Bereich-Markern „Stelle N" (synchron trotz
+candidate.peak_id-Versatz). Sequenzen „Keyboardstellen raw"/„smart", Clip-Namen =
+Quelldateien. Neuer Helfer `core/xml_sequence_helpers.py`. Carl-Plan, TDD (785 Tests),
+Pin-1 bewusst neu eingefroren. **Offen:** Carl-Schluss-Review; nächster Slice „smarte
+Grenzen auf Satzanfang/-ende einrasten" (mechanisch, ≠ #70-Aufhänger-Wahl).
+
+**#77 Import-Refactor — Strukturteil GEBAUT auf develop (2026-06-16), Rest geparkt:**
+Eigenes `project.mix_track`-Feld, zentraler Klassifizierer (`core/import_classifier.py`),
+`.peakcut`-Schema v4 (additiv + rückwärtskompatibel). Vier-Augen mit Carl, Review grün
+(Tasks 0/1/2/3/4/6). Bewusst ADDITIV: Mix bleibt vorerst zusätzlich in `mic_tracks`
+(XMLExporter baut Audio noch von dort — sonst Pin-1-Bruch). **Geparkt:** Task 5 (Mix
+strippen), Task 7 Import-UI, Task 8 Transcript — bis Produkt-/Kundenrichtung klar ist.
+Plan: `docs/plans/2026-06-16-77-import-refactor-plan.md`.
+
+**Erste Eigen-Produktion Philip Siefer (2026-06-17):** Max hat selbst geschnitten.
+Folgenschnitt-XML „funktioniert super" (erste echte Eigen-Nutzung). Sinnabschnitt-XML
+importierbar gemacht (fehlende FCP7-Audio-Pflichtangaben, Commit `64870c0`, eigener
+Codepfad, Pin-1 unberührt). **OFFEN (Bug):** Sinnabschnitt-XML zeigt in Premiere nur
+Ton, kein Bild — by-design (v1-Ton-Spannenliste), aber Max erwartete anderes → erst mit
+Max klären. **Neue Wünsche:** nummerierte Marker (klein), SRT-Untertitel (groß).
+
+**Fix-Runde (2026-06-16/17):** Python 3.11 gepinnt, Shot-/Person-Dropdown lesbar
+(visuell bestätigt), Crash auf „Weiter" bei Personen-Shot ohne Person behoben.
 
 **Fundament-Health-Check 2026-06-15** (`docs/specs/2026-06-15-state-of-peakcut-health-check.md`):
 Urteil mostly-solid. **Slice B + Daten-Integritäts-Riegel GELANDET auf main
 (2026-06-15, Premiere- + App-Smoke bestanden)** (atomare
 Writes DATA-1, Schema-Policy DATA-2, R2-Ausricht-Riegel KI-2, speaker_activity-
 Mix-Hub AUD-1a — 621 Tests grün, Pin-1 stabil; Plan:
-`docs/plans/2026-06-15-data-integritaets-riegel.md`). Reconciled Reihenfolge
+`docs/plans/archiv/2026-06-15-data-integritaets-riegel.md`). Reconciled Reihenfolge
 (Carl+Claude): Slice-B-Merge → #76 Wiedergabe (Gate vor jedem KI-Tuning) →
 #77 Import-Refactor (zieht den restlichen Klassifizierer-Merge mit) → #70
 Prompt-Tuning → Slice A (halb-automatisch) → Export-Orchestrierung aus dem GUI
@@ -132,8 +161,8 @@ vor NAS. Tickende Uhr: pydub/audioop bei Python 3.13 + Python-Pin nicht erzwunge
 über `ReviewPlaybackController` (Audio = Master, Drift-Korrektur, Schwelle 100ms
 provisorisch), Modus key/speak/smart, Play ab Scrub-Stelle (speak/smart auf der
 Mix-Spur, key = Marker-Clip). App-Smoke (Max) + Gate E/F (Carl) bestanden,
-689 Tests grün. Plan: `docs/plans/2026-06-15-wiedergabe-76-plan.md`.
-**Nächster Slice: #77 Import-Refactor.**
+689 Tests grün. Plan: `docs/plans/archiv/2026-06-15-wiedergabe-76-plan.md`.
+**#77 Strukturteil danach gebaut (2026-06-16, develop) — siehe oben.**
 
 Reihenfolge nach #71a-Merge (2026-05-25) und Fremdmaterial-Test (2026-06-01):
 1. **Slice B — Multi-Track-Folgenschnitt-XML** (CODE-FERTIG 2026-06-06,

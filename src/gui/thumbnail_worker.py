@@ -10,6 +10,8 @@ from utils import FFMPEG_BIN, get_logger
 
 _log = get_logger("peakcut.thumbnails")
 
+_THUMBNAIL_FFMPEG_TIMEOUT_S = 30
+
 
 def thumbnail_path_for_video(video_path: str, temp_dir: str) -> str:
     """Stable cache path keyed by absolute path + mtime.
@@ -73,7 +75,7 @@ class ThumbnailWorker(QThread):
                     build_thumbnail_command(video_path, out),
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    timeout=30,
+                    timeout=_THUMBNAIL_FFMPEG_TIMEOUT_S,
                 )
                 if result.returncode == 0 and os.path.exists(out):
                     self.thumbnail_ready.emit(video_path, out)

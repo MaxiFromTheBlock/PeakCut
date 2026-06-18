@@ -9,6 +9,8 @@ from utils import FFMPEG_BIN, get_logger
 
 _log = get_logger("peakcut.micpreview")
 
+_MIC_PREVIEW_FFMPEG_TIMEOUT_S = 30
+
 
 def build_mic_preview_command(path: str, duration_s: float = 5.0, start_s: float = 0.0) -> list[str]:
     # Fast seek (-ss before -i), short duration, raw wav to stdout.
@@ -44,7 +46,7 @@ class MicPreviewWorker(QThread):
                 build_mic_preview_command(self._path, self._duration_s, self._start_s),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
-                timeout=30,
+                timeout=_MIC_PREVIEW_FFMPEG_TIMEOUT_S,
             )
             if result.returncode != 0 or not result.stdout:
                 self.failed.emit()

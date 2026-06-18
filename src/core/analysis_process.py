@@ -57,7 +57,6 @@ def run_analysis(config_data):
     if src_dir not in sys.path:
         sys.path.insert(0, src_dir)
 
-    from pydub import AudioSegment
     from core.detection import detect_peaks
     from core.sync import sync_videos
 

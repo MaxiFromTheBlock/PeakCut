@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QLabel, QComboBox, QScrollArea, QFrame,
-    QRadioButton, QButtonGroup,
+    QRadioButton, QButtonGroup, QListView,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
@@ -64,6 +64,47 @@ SHOT_CHOICES = [
     ("Totale", SHOT_TOTAL),
     ("— nicht nutzen", SHOT_UNUSED),
 ]
+
+
+# Popup-Stylesheet mit ::item-Regeln: erzwingt Qts eigenes Item-Rendering und
+# überschreibt damit den nativen macOS-Highlight. Nur selection-background-color
+# (auf der Combo) wird auf macOS ignoriert -> markierte Zeile blieb hellgrau mit
+# weißer Schrift = unlesbar. ::item:selected/:hover macht sie blau + weiß = lesbar.
+_POPUP_STYLESHEET = f"""
+QListView {{
+    background-color: {COLORS['bg_primary']};
+    color: {COLORS['text_primary']};
+    outline: 0;
+}}
+QListView::item {{
+    background-color: {COLORS['bg_primary']};
+    color: {COLORS['text_primary']};
+    padding: 6px 10px;
+}}
+QListView::item:selected, QListView::item:hover {{
+    background-color: {COLORS['accent_blue']};
+    color: white;
+}}
+"""
+
+
+def _apply_readable_popup(combo: QComboBox) -> None:
+    """macOS-Fix: nicht-natives Popup mit ::item-Regeln, damit die markierte
+    Zeile lesbar bleibt (blau + weiß statt weiß-auf-hellgrau)."""
+    view = QListView()
+    view.setStyleSheet(_POPUP_STYLESHEET)
+    combo.setView(view)
+
+
+def make_shot_combo() -> QComboBox:
+    """Shot-Auswahl-Dropdown mit lesbarem (nicht-nativem) Popup."""
+    combo = QComboBox()
+    combo.setStyleSheet(SHOT_COMBO_STYLESHEET)
+    _apply_readable_popup(combo)
+    combo.setEditable(True)
+    for label, const in SHOT_CHOICES:
+        combo.addItem(label, const)
+    return combo
 
 
 def preview_start_s_for_mic(session, speaker_key: str) -> float:
@@ -140,14 +181,23 @@ class AssignmentState:
         ]
 
     def to_camera_assignments(self) -> list[CameraAssignment]:
-        # Neutral (unassigned) rows have shot_type None and are skipped —
-        # they produce no CameraAssignment. CameraAssignment normalizes
-        # person to None for personless shots.
-        return [
-            CameraAssignment(path=r.path, shot_type=r.shot_type, person=r.person)
-            for r in self.camera_rows
-            if r.shot_type
-        ]
+        # Neutral (unassigned) rows have shot_type None and are skipped.
+        # Crash-Schutz: ein Personen-Shot (Weit/Nah/Halbnah) OHNE Person ist
+        # unvollständig -> ebenfalls überspringen. Sonst würde
+        # CameraAssignment einen ValueError werfen ("person must not be empty")
+        # und beim "Weiter" den Button-Slot hart crashen. Personenlose Shots
+        # (Totale/unused) bleiben — die brauchen keine Person.
+        result = []
+        for r in self.camera_rows:
+            if not r.shot_type:
+                continue
+            if (r.shot_type not in PERSONLESS_SHOT_TYPES
+                    and not (r.person or "").strip()):
+                continue
+            result.append(
+                CameraAssignment(path=r.path, shot_type=r.shot_type,
+                                 person=r.person))
+        return result
 
     def is_complete(self) -> bool:
         ok, _ = has_minimum_folgenschnitt_assignment(
@@ -473,16 +523,13 @@ class AssignmentPage(QWidget):
         name.setStyleSheet(f"color: {COLORS['text_primary']};")
         grid.addWidget(name, 0, 1, 1, 3)
 
-        shot_combo = QComboBox()
-        shot_combo.setStyleSheet(SHOT_COMBO_STYLESHEET)
-        shot_combo.setEditable(True)
-        for label, const in SHOT_CHOICES:
-            shot_combo.addItem(label, const)
+        shot_combo = make_shot_combo()
         self._select_shot(shot_combo, row.shot_type)
         grid.addWidget(shot_combo, 1, 1)
 
         person_combo = QComboBox()
         person_combo.setEditable(True)
+        _apply_readable_popup(person_combo)
         person_combo.setCurrentText(row.person or "")
         self._register_person_combo(person_combo)
         grid.addWidget(person_combo, 1, 2)
@@ -511,6 +558,7 @@ class AssignmentPage(QWidget):
 
         person_combo = QComboBox()
         person_combo.setEditable(True)
+        _apply_readable_popup(person_combo)
         person_combo.setCurrentText(row.person or "")
         self._register_person_combo(person_combo)
         h.addWidget(person_combo)

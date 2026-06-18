@@ -307,7 +307,6 @@ class TestSyncOffsetRoundtrip:
         ms_back = parse_timecode_to_ms(tc, fps)
 
         # The original value quantized to frames
-        frame_duration_ms = 1000 / fps
         expected_frames = int(offset_seconds * fps)
         expected_ms = int(expected_frames * 1000 / fps)
 

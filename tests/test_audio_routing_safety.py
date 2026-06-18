@@ -26,7 +26,6 @@ from __future__ import annotations
 import hashlib
 import os
 import sys
-import tempfile
 from unittest.mock import patch
 
 import pytest  # noqa: F401
@@ -51,8 +50,14 @@ _TMP_PLACEHOLDER = "__TMPDIR__"
 # erzeugt und hier eingetragen — dokumentierter bewusster Snapshot
 # des aktuellen XMLExporter-Outputs *vor* #71a-Bau. Jede Änderung
 # am Hash MUSS als bewusster Eingriff diskutiert werden.
+# Bewusst neu eingefroren 2026-06-17 (Marker-Slice): die Keyboardstellen-XML
+# hat jetzt nummerierte Sequenz-Marker ("Stelle N", als BEREICH über die ganze
+# Stelle, damit Premiere das Label lesbar zeigt) und die Sequenz heißt
+# "Keyboardstellen raw" statt "PeakCut". Von Max gewünschte, beabsichtigte
+# Änderung — kein versehentlicher Drift. Abnahme-Riegel bleibt Max' Premiere-
+# Import; dieser Hash schützt ab jetzt genau diesen Stand.
 _XML_PIN_HASH_MIX_IN_MICS = (
-    "52be195e91ce5c4ab04f54abd53dcc2d8697f925f034c0222078726371302bce"
+    "e45cc9878781f1e9871c6ea8d18ab8dbea8878e2c703f3c6876cd7af071993ba"
 )
 
 

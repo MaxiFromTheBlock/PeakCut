@@ -47,7 +47,7 @@ PeakCut/                       ← Container-Ordner (KEIN Git-Repo)
     │   ├── core/              ← Core Logic (Klassen-basiert)
     │   ├── gui/               ← PyQt6 GUI Components
     │   └── lib/               ← External Libraries
-    ├── tests/                 ← pytest Tests (94 Tests)
+    ├── tests/                 ← pytest Tests
     ├── assets/
     │   ├── pictures/          ← Icons, Logos
     │   └── zahlen/            ← TTS Fallback MP3s
@@ -235,7 +235,8 @@ main_pyqt.py
         ├── core/project.py
         ├── core/session.py
         │     ├── core/peak.py
-        │     └── core/audio.py
+        │     ├── core/project.py
+        │     └── core/playback_modes.py
         ├── config.py
         └── utils.py                    (logging, validation, time helpers)
 ```
@@ -672,249 +673,19 @@ Screenshots können parallel zur Analyse gemacht werden, weil der Mix als Datei 
 
 ---
 
-## Offen (aktuelles Release)
+## Offen / Backlog
 
-### PeakCut-Backlog — abgegrenzt 2026-05-16 (NICHT mehr Folgenschnitt-Feature)
-
-Folgenschnitt (generisches Modell + Zuordnungs-Schritt) wurde 2026-05-16 von
-Max für **fertig erklärt** (validiert: 304-Schnitt-Export = cutter-gelobte
-Zahl, Leitplanke greift, 153 Tests grün). Folgendes ist bewusst *getrennter*
-Backlog, kein offenes Feature mehr:
-- [ ] **10.2 Shot-Combo-Kontrast (echter Bug, wiederöffnen bei Carl):** auf
-  macOS rendert das *native* QComboBox-Popup die markierte Zeile weiß-auf-
-  hellgrau (teils unlesbar). `QAbstractItemView`-Stylesheet greift nicht.
-  Braucht Non-Native-View + explizite Item-Farben. Screenshot-Belege bei Max.
-- [ ] **„LUT hinzufügen" (Max-Wunsch, eigenes Mini-Feature):** Datei-Dialog →
-  LUT in `luts/` kopieren → bleibt künftig auswählbar. Eigene Mini-Spec.
-- [ ] **Cutter-Qualitäts-Sign-off:** braucht 1 aufbewahrten sauberen Export
-  (vollständige Zuordnung). XML ist regression-locked frame-identisch zur
-  bereits gelobten reaktiven Version — Bestätigung, kein Blocker.
-- [x] ~~**Fremdmaterial-Test (Max):** echte Fremdproduktion durchspielen.~~
-  **DURCHGEFÜHRT 2026-06-01** an "1plus1" (Tim Mälzer / Jan Ullrich,
-  zwei Folgen-Teile à ~57min + ~46min). Ablauf: kein Marker im
-  Material → Fake-Keyboard (30s WAV mit Klick bei 5s) als Trigger-
-  Spur, sonst regulärer Flow. Folgenschnitt-XML beide Male sauber
-  generiert; Max-Sichtung in Premiere: Sprecher-Wechsel Jan/Tim
-  überzeugend. Produktionsunabhängigkeit damit real bestätigt.
-  Drei Befunde aus der Sichtung → eigene Slice-Kandidaten (siehe
-  „Fremdmaterial-Test-Befunde" unten).
-- [ ] Competitor-Recherche (autocut.com, Resolve Scene-Cut, GitHub-Repos) —
-  Inspiration, geparkt.
-
-### Fremdmaterial-Test-Befunde + Slice-Kandidaten — 2026-06-01
-
-Aus dem Fremdmaterial-Test (1plus1, Mälzer/Ullrich) entstanden drei
-saubere Slice-Kandidaten. Reihenfolge per Carl-Take (2026-06-01):
-A → B, Profile später. Stand-In für (A) + (B) während des Tests war
-ein **Postprocess-Skript** `~/Desktop/Fremdproduktion/multitrack_postprocess.py`
-(argparse-generisch: `--input/--output/--totale-video/--person-a/--person-b`)
-— produziert die gewünschte XML, ist aber kein PeakCut-Code. Wird
-durch die richtigen Slices abgelöst.
-
-- [ ] **Slice A — Dialog-Totale Cross-Talk-Pass.** Heutige
-  `_insert_totale`-Logik streut Totale nur in Monolog-Blöcken ≥ 90s ein
-  (mit Intervall 240s). Bei dialogischem Material (Median 4.8s Blöcke,
-  243 Cuts in 57min) greift sie nie. **Max' Wunsch (Korrektur zu Carls
-  ursprünglichem „globaler Pass alle X Min"):** Totale soll bei
-  *Cross-Talk* zwischen den Sprechern reinkommen — wenn beide im
-  schnellen Wechsel reden — aber *nicht* bei humorvollem
-  Schlagabtausch (da bleibt's beim Einzelkamera-Wechsel). Inhaltliche
-  Unterscheidung, automatisch nicht trivial zu erkennen. Eigene Spec
-  + Carl-Plan + TDD-Bau. Beispiele aus echtem Material in die Spec.
-- [ ] **Slice B — Multi-Track-Folgenschnitt-XML.** Aktueller Exporter
-  schreibt eine Video-Spur mit nahtlosen Cuts. Max will pro Kamera
-  eigene Spur mit Lücken: V1 (unten) = Totale, V2 = Person A, V3 = Person B.
-  Premiere-Logik „oberste sichtbare gewinnt" greift; bei A/B-Lücken
-  fällt V1-Totale als Sicherheit durch. Carls Unterscheidung
-  *Partitioned* vs. *Overlay* in der Spec entscheiden — Max' Variante
-  (V1-Totale an JEDER Decision-Position, V2/V3 mit Lücken nur an
-  ihren Decisions) ist **Overlay**, weil Premiere-Fallback genau
-  funktioniert. Pin: Keyboardstellen-XML byte-identisch. Spec → Carl-Plan
-  → TDD-Bau (siehe Audio-Hinweis unten).
-- [ ] **Slice C (in B integriert oder als Mini-Slice davor) —
-  Folgenschnitt-XML Audio = Mix-only.** Heute exportiert PeakCut alle
-  drei Audio-Spuren (Jan-Mic, Tim-Mic, Mix) in die Folgenschnitt-XML.
-  Carl-Hinweis (2026-06-01): wenn alle drei in der NLE gleichzeitig
-  laufen, holen wir uns dieselbe Phasing-Klasse wie #71a in die
-  Premiere-Timeline. Richtige Default-Semantik: **Mix vorhanden → nur
-  Mix-Spur. Fallback auf echte Mics nur wenn kein Mix.** Postprocess-
-  Skript macht das schon. Keyboardstellen-XML bleibt byte-identisch
-  (Pin-1, anderer Exporter).
-- [ ] **Profile als Datenmodell — *deutlich* später**, nicht in dieses
-  Slice-Paket ziehen (Roadmap-Pkt 4). Aktuelle Tuning-Achsen
-  (Totale-Schwellen, Loosening-Defaults, Schnittfrequenz) gehören
-  langfristig in Per-Produktion-Profile (HM ≠ 1plus1). Erst bewährte
-  Slice-A/B-Realität schaffen, dann Datenmodell-Migration.
-
-**Inhaltliche Lektion aus dem Test:** Das Tool **funktioniert
-produktionsunabhängig** — Schnitt-Logik, Zuordnung, Sync-Pfad
-greifen unverändert. Aber die *Layout-Annahmen* der Folgenschnitt-XML
-(eine Video-Spur, alle drei Audio-Spuren) sind HM-Standard und für
-fremde Cutter-Workflows nicht ideal. Beide Slices oben adressieren
-genau das.
-
-### Slice B Bau-Status — Stand 2026-06-03 21:55
-
-**In aktiver Bauarbeit nach Carl-Plan vom 2026-06-03.** Default-Mode
-= disable (Max final). Pin-1 (Keyboardstellen-XML byte-identisch)
-hält durchgehend. Aufteilung: Claude macht Datenstruktur/UI, Carl
-macht XML-Writer.
-
-- [x] **Task 0 — Safety-Harness / Pin-1** (Claude, Commit `ce52833`).
-  5 Tests: Keyboardstellen-XML byte-identisch unabhängig vom Mode,
-  `core/exporters.py` API stabil.
-- [x] **Task 1 — Contracts + Defaults** (Claude, Commit `722a823`).
-  `core/folgenschnitt_multitrack_layout.py` mit Konstanten,
-  `normalize_unused_clips_mode`, frozen Dataclasses (VideoClipPlan,
-  VideoTrackPlan, AudioClipPlan, AudioTrackPlan, MultitrackLayoutPlan).
-  Session-Default-Attribut. Gate-A grün von Carl.
-- [x] **Task 2+3 — Layout-Planung + Audio-Quellenwahl** (Claude,
-  Commit `fef9c28`, P2-Fix `579a14b`).
-  `build_video_track_order` (Carl-Algorithmus), `build_video_track_layout`
-  (Remove + Disable), `build_audio_track_plan` (Mix-only via #71a-
-  Helper, Fallback echte Mics), `build_multitrack_layout`.
-  Carl-P2-Fix: nur erste Totale ist Fallback-Schicht (Mehrfach-Totale-
-  Edge-Case). Plan-Vertrag: `in_ms = start_ms`, Offset-Logik bleibt
-  im Exporter.
-- [x] **Task 4 — XMLExporter Video auf Multi-Track** (Carl, Commit
-  `140ecd0`). `FolgenschnittXMLExporter` schreibt Video über
-  MultitrackLayoutPlan. `<enabled>FALSE</enabled>` als Kind-Element
-  für Disable-Mode-Clips. Negative-Offset-Policy unverändert
-  (`duration == end-start == out-in`). Audio bewusst noch unangetastet
-  bis Task 5.
-- [x] **Task 5 — Audio im Exporter Mix-only** (Carl, Commit `dac95f4`).
-  `audio_routing.get_mix_track` → eine Mix-Spur. Fallback echte Mics
-  mit Status-Hinweis.
-- [x] **Task 6 — Schema-v3 Persistenz** (Claude, Commit `976a60e`).
-  `CURRENT_SCHEMA_VERSION = 3`, `assignments.folgenschnitt_unused_clips_mode`
-  serialisiert + ueber `normalize_unused_clips_mode` hydratisiert.
-  v1/v2-Bootstrap mit Default, ungueltiger Wert → Default (silent).
-  Carl Gate C grün. P3 (Loader-Warnung statt silent fallback) bewusst
-  geparkt — gehoert spaeter zentral in Hub/Import-Refactor.
-- [x] **Task 7 — AssignmentPage Toggle-UI** (Claude, Commit `e19ab72`).
-  Eigener QFrame-Block "Export-Einstellungen" mit QRadioButtons
-  Disable/Remove + Tooltips, zwischen Status-Label und Weiter-Button
-  (NICHT im Kamera-Scroll-Bereich). `apply_to_session` schreibt
-  `session.folgenschnitt_unused_clips_mode` zusammen mit Assignments.
-- [x] **Task 8 — Integration/Regression** (Claude, Commit `061ccb7`).
-  End-to-End Disable + Remove (Save→Load→Export), Pin-Tests fuer
-  pipeline/decisions/loosening/audio_routing-API, Assignments+Mode
-  Roundtrip-Pin.
-- [x] **Task 9 — Premiere-Smoke / Merge-Gate** (2026-06-15, BESTANDEN).
-  Max hat beide XMLs (disable + remove) in Premiere importiert + gesichtet:
-  Kamerawechsel folgt dem Gespräch, Ton (Mix) sauber, disable-Modus
-  respektiert deaktivierte Clips. Totale erscheint nicht — verifiziert an
-  der XML: V1-Totale 135 Clips alle aktiv, aber an jeder Decision liegt eine
-  Person drüber → Totale stets verdeckt; die Schnittlogik wählt auf Dialog-
-  Material nie die Totale (Slice-A-Thema, kein Slice-B-Bug). Nach main gelandet.
-
-**Test-Stand 2026-06-10:** 593 Full Suite grün auf develop, Pin-1
-stabil. Carl Pre-Smoke-Review grün (keine P1/P2; ein P3 geparkt).
-Slice B ist Code-fertig.
-
-**Premiere-Smoke-Vorbereitung 2026-06-10** (Commit `b54c23e`):
-`scripts/smoke_multitrack_export.py` exportiert die Folgenschnitt-XML
-aus der Teil 2-`.peakcut`-Akte vom 2026-06-01 in beiden Modi. Vermeidet
-dass Max die App nur fuer den Toggle-Wechsel mit Re-Zuordnung neu
-durchklicken muss. Beide XMLs liegen in:
-- `~/Downloads/Teil 2 - Smoke disable/Folgenschnitt - Teil 2.xml`
-  (135 Decisions, 135 disabled-Clips, V1 Totale + V2 Jan weit +
-   V3 Tim weit + Mix)
-- `~/Downloads/Teil 2 - Smoke remove/Folgenschnitt - Teil 2.xml`
-  (135 Decisions, 0 disabled-Clips, V2 Jan 67 mit Luecken,
-   V3 Tim 68 mit Luecken, V1 Totale durchgehend, Mix)
-Max importiert beide in frische Premiere-Projekte, schaut Layout +
-Playback (insbesondere: rendert Premiere disabled-Clips wirklich nicht?).
-
-Bei Premiere-Zicken im Disable-Modus: Default kippt auf Remove
-(Carl-Fallback-Strategie aus Spec), Architektur unveraendert.
-
-**App-UI-Smoke bleibt getrennt** — kann nach dem Merge laufen.
-
-**Reproduktions-Material:** `~/Desktop/Fremdproduktion/Material für Peakcut/`
-(Teil 1 + Teil 2) liegt lokal mit `.peakcut`-Akten vom 2026-06-01.
-
-### Gesundheits-Check-Backlog — abgegrenzt 2026-05-17 (KEIN Feature)
-
-Ergebnis eines **2-Pass-Reviews** (Carl + Claude, unabhängig
-durchgelaufen, dann verglichen). Strategische Konvergenz beider Pässe:
-*Stufe 2 über Alex landen, dann der V3-/Suite-Sprung* — das ist die
-Richtung, kein Grübelthema mehr. Folgende Punkte sind Carls tieferer
-Sicht entsprungen (wo ein einzelner Pass nicht gereicht hätte) und
-bewusst getrennter Backlog, kein offenes Feature:
-- [ ] **Threading-/Lebenszyklus-Härtung (höchste Bauchschmerz-Stelle):**
-  Qt/QMediaPlayer/LUTWorker/ScreenshotWorker/ExportWorker/AnalysisWorker
-  + Subprocess/ffmpeg-Lebenszyklen sind der historisch fragilste Teil
-  (`video_preview_peak.py`, Crash-Historie im Changelog). Vor V3 gezielt
-  durchgehen, nicht erst wenn's wieder kracht. Mit Carl.
-- [ ] **Internes Timeline-Modell statt XML-Strings:** Timeline lebt als
-  handgeschriebenes FCP7-XML. Langfristig: internes Timeline-Modell mit
-  mehreren Exportern (löst auch den Resolve-Relink-/FCPXML-Schmerz an
-  der Wurzel). Architektur-Vorarbeit, eigene Spec mit Carl.
-- [ ] **Projekt-/Session-Persistenz + Undo = V3-VORAUSSETZUNG**, nicht
-  „nice to have". Ohne das wird die Suite (mehrere Module, längerer
-  Flow) brüchig. Vor/with V3-Hub planen.
-- [ ] **Doku-Entrümpelung:** Specs teils noch in „Design/offen"-Sprache;
-  als Projektgedächtnis wird das zäh. Abgeschlossene Specs als solche
-  markieren/archivieren.
-- [ ] **Python-Version bewusst pinnen:** 3.11 ist Produktteil
-  (audioop/pydub-Deprecation = Frühsignal Richtung 3.13). Nicht
-  nebenbei hochstolpern; Version explizit festschreiben.
-- [ ] **Distributions-Gabel bewusst entscheiden** (Carl neutral, Claude:
-  aktuell bewusst „Max' Repo-App" = Wettbewerbsvorteil, nicht extern):
-  entweder bewusst so bleiben oder saubere Releases/Versionierung —
-  „dazwischen" tut irgendwann weh. Max-Strategieentscheidung, kein Tech-
-  Gate.
-
-Provenance: getrennte Health-Checks, hohe Übereinstimmung im Großbild;
-Carl tiefer bei (1)(2)(3). Genau wofür 4-Augen da ist.
-
-### Quick Fixes (vor V3)
-- [x] ~~`extract_guest_name` aus exporters.py in eigenes Modul~~ — erledigt (v2.9.0, → `core/guest_name.py`)
-- [ ] Code Signing (Apple Developer Account) für Gatekeeper-freie Installation (geparkt — siehe Distribution)
-
-### V3 / Roadmap
-
-**Maßgeblich = oben „Produkt-Strategie & Roadmap" (Carl/Claude-Konsens
-2026-05-18).** Die frühere Liste (UI-Revamp / Smart Scan / Create Mix
-als V3-Start) ist überholt. Erster echter Schritt = **HC-4
-(.peakcut-Persistenz)**, dann ClipCandidate → Clip-Grenzen → Profile →
-NAS-Pilot → dann Hub/UI → dann Opus-artiges Modul. UI-Revamp, Smart
-Scan, Create Mix, Marker-Export, Einzel-Clip-MP4, Projekt-Metadaten
-bleiben spätere/optionale Punkte (siehe Roadmap-/Geparkt-Liste oben),
-NICHT der Einstieg.
-
-### Erledigt
-- [x] ~~Multiprocessing für Video-Sync~~ — erledigt (v2.6.0)
-- [x] ~~Kamera-Namen editierbar~~ — erledigt (v2.4.0)
-- [x] ~~Test Coverage~~ — 94 Tests (v2.7.0)
-- [x] ~~Magic Numbers extrahieren~~ — erledigt (v2.6.1)
-- [x] ~~apple_style.py aufteilen~~ — erledigt (v2.6.1)
-- [x] ~~main_window.py aufteilen~~ — erledigt (v2.7.0, 780→270 Zeilen)
-- [x] ~~File Logging~~ — erledigt (v2.7.0)
-- [x] ~~Media-Validierung~~ — erledigt (v2.7.0)
-- [x] ~~venv aufräumen~~ — erledigt (v2.7.0, 30→17 Packages)
-- [x] ~~print(stderr) → Logger~~ — erledigt (v2.7.0)
-- [x] ~~_FIRST_FRAME_DELAY_MS auf Modulebene~~ — erledigt (v2.7.0)
-- [x] ~~MP3 Bitrate explizit 192k~~ — erledigt (v2.7.0)
-- [x] ~~INTERN_DIR Dopplung~~ — erledigt (v2.7.0, config.py importiert aus utils.py)
-- [x] ~~XML depth/channels per ffprobe~~ — erledigt (v2.7.0)
-- [x] ~~CI: GitHub Action~~ — erledigt (v2.7.0)
-- [x] ~~Qt raus aus Session~~ — erledigt (v2.7.0, StatusUpdate Callback-Klasse)
-- [x] ~~np.abs(samples)~~ — erledigt (v2.7.0)
-- [x] ~~Sync auf 10min begrenzen~~ — erledigt (v2.7.0, mit Fallback bei schwacher Korrelation)
-- [x] ~~audio.py splitten~~ — erledigt (v2.7.0, detection.py + playback.py)
-- [x] ~~Gastname-Dialog~~ — erledigt (v2.7.0, nach Import, auto-detected + editierbar)
-- [x] ~~Export nach Downloads~~ — erledigt (v2.8.0, ~/Downloads/{Gastname} - PeakCut Export/)
-- [x] ~~macOS .app Bundle~~ — erledigt (v2.8.0, PyInstaller + DMG, 67 MB)
-- [x] ~~START HERE Ordner entfernt~~ — erledigt (v2.8.0, ersetzt durch .app)
-
-### Technische Schulden (irgendwann)
-- Type Hints systematisch
-- FCPXML (FinalCut X Format)
-- Drop-Frame Timecodes für 29.97fps
-- simpleaudio ersetzen (für Clip Editor)
-- ffmpeg Version-Pinning
+> **Todos leben jetzt ausschließlich in [`App/BACKLOG.md`](BACKLOG.md)** — der
+> Single Source of Truth (Bugs · Funktions-Ausbau · Fundament & Architektur ·
+> Hygiene · Abnahme · offene Entscheidungen · Zukunftsmusik + Erledigt-Historie).
+> Hier NICHT mehr doppelt pflegen — sonst laufen die Listen auseinander.
+>
+> Verwandtes lebt weiter an seinem Platz: **Strategie/Produktrichtung** oben unter
+> „Produkt-Strategie & Roadmap", **langfristige Visionen** unten unter „Langfristig
+> (V4+)", **abgeschlossene Arbeit + Bau-Provenienz** (Folgenschnitt Stufe 1/2,
+> Slice B, #71a, HC-2…5, ClipCandidate, Daten-Riegel, #76) im **Changelog** weiter
+> unten. Specs/Pläne erledigter Slices liegen in `docs/specs/archiv/` bzw.
+> `docs/plans/archiv/`.
 
 ## Langfristig (V4+) — Die großen Visionen
 
@@ -1002,10 +773,116 @@ Produkt):**
 
 ## Changelog
 
+### Marker + Vergleichbarkeit Keyboardstellen ↔ Sinnabschnitte (develop, 2026-06-18)
+
+Vier-Augen mit Carl (Carl-Plan, Claude-TDD, Max-Abnahme), aus der Philip-Siefer-
+Produktion. Ziel: beide XMLs direkt in Premiere vergleichbar machen.
+
+- **Neuer Helfer `core/xml_sequence_helpers.py`:** EINE Wahrheit für Stellennummer
+  (`peak.index` → Stelle 1..N über aktive Peaks) + kompakte Record-Positionen +
+  Marker. `active_smart_candidates` filtert/sortiert/nummeriert die Smart-Kandidaten
+  zentral (raw + smart + Marker hängen sich daran).
+- **Keyboardstellen-XML (`exporters.py`):** Sequenz „PeakCut" → **„Keyboardstellen
+  raw"**, nummerierte **Bereich-Marker** „Stelle N" (so lang wie die Stelle, lesbar).
+- **Sinnabschnitt-XML (`sinnabschnitt_exporter.py`):** von Audio-only auf **kompakte
+  Multicam** (Video je Kamera + dieselben Tonspuren wie raw) gehoben, Sequenz
+  **„Keyboardstellen smart"**, Clip-Namen = Quelldateien, Marker mit der **gleichen
+  Keyboardstellen-Nummer** (löst den `candidate.peak_id`-Versatz durch ignorierte
+  Peaks). TXT zählt jetzt auch in Stellennummern. Bleibt eigener Codepfad (nicht in
+  `_build_exporters`).
+- **Pin-1 bewusst zweimal neu eingefroren** (Marker + Name; dann Bereich-Marker) —
+  beabsichtigte Änderung, im Test begründet. Abnahme-Riegel = Max' Premiere-Import
+  (bestätigt: Marker lesbar, Bild+Ton, 3 Tonspuren in beiden, Nummern synchron).
+- TDD, 785 Tests grün. **Offen:** Carl-Schluss-Review; nächster Slice „Grenzen auf
+  Satzanfang/-ende einrasten" (mechanisch, ≠ #70-Aufhänger-Wahl).
+
+### Erste Eigen-Produktion (Philip Siefer) + Sinnabschnitt-Import-Fix (develop, 2026-06-17)
+
+Max hat erstmals seit Langem selbst eine Postproduktion gemacht und PeakCut am
+echten Material der Philip-Siefer-Folge benutzt (nicht nur Smoke).
+
+- **Folgenschnitt-XML real bestätigt:** „funktioniert super" — erste echte
+  Eigen-Nutzung außerhalb der Smoke-Tests.
+- **Sinnabschnitt-XML in Premiere importierbar gemacht** (`core/sinnabschnitt_exporter.py`,
+  Commit `64870c0`): Den Audio-Clips fehlten die FCP7-Pflichtangaben (`<duration>`,
+  die Datei-Audio-Beschreibung `<media><audio>`, `<sourcetrack><mediatype>audio`),
+  darum lehnte Premiere den Import ab. Jetzt aufgebaut wie die funktionierende
+  Keyboardstellen-XML: Datei EINMAL voll definiert, danach per id referenziert,
+  plus Sequenz-Audioformat. Neuer Test `test_xml_audio_clips_are_premiere_importable`.
+  **Eigener Codepfad — nicht in `_build_exporters`, Keyboardstellen-Pfad/Pin-1
+  unberührt.**
+- **OFFENER FOLGE-BEFUND (in BACKLOG → Bugs):** Die Sinnabschnitt-XML importiert
+  jetzt, zeigt in der Timeline aber NUR Ton, kein Bild. Aktuell by-design
+  (v1 = leichtgewichtige Ton-Spannenliste), aber Max hat etwas anderes erwartet.
+  Erst mit Max klären, was in der Timeline liegen soll, dann entscheiden.
+- **Neue Wünsche aus der Produktion (in BACKLOG):** nummerierte Marker in der
+  Keyboardstellen-XML (klein); SRT-Untertitel für Premiere (groß, Descript-API
+  prüfen).
+
+### Fix-Runde — Python-Pin, Dropdown-Lesbarkeit, Crash auf „Weiter" (develop, 2026-06-16/17)
+
+Carl-Review: keine P1/P2, mergefähig. Drei Korrekturen abseits von #77:
+
+- **Python 3.11 gepinnt:** `.python-version` + weiche Start-Wache
+  (`python_version_warning` in `utils.py`) — tickende Uhr pydub/audioop bei 3.13.
+- **Shot-Dropdown macOS lesbar (visuell bestätigt):** Das native Popup ignorierte
+  das Stylesheet → markierte Zeile war weiß-auf-hellgrau. Fix: nicht-natives Popup
+  (`QListView`) + explizite `QListView::item:selected/:hover`-Regeln (blau + weiß)
+  in `assignment_page.py`, angewandt auf Shot- UND beide Person-Combos
+  (Kamera + Mic). Verifiziert per gerendertem PNG + Pixel-Probe (highlight = #007AFF).
+  Max-O-Ton „sah besser aus". Commits `74a18fc`/`6f0fd55`.
+- **Crash-Fix auf „Weiter" (SIGABRT):** Hatte eine Kamera einen Personen-Shot
+  (Weit/Nah/Halbnah) OHNE zugewiesene Person, warf `CameraAssignment` einen
+  ValueError im Qt-Slot → `abort()`. `to_camera_assignments` überspringt jetzt
+  unvollständige Personen-Shots statt zu crashen (Altbestands-Bug v2.10, NICHT von
+  #77). Commit `f7310d0`.
+
+### #77 Import-Refactor — Strukturteil gebaut, Rest bewusst geparkt (develop, 2026-06-16)
+
+Vier-Augen mit Carl (Carl: Plan + Gate-Reviews, Claude: TDD-Bau, Max: Entscheider).
+Plan: `docs/plans/2026-06-16-77-import-refactor-plan.md` (inkl. Scope-Entscheidung).
+
+- **Was gebaut wurde (Tasks 0/1/2/3/4/6, Carl-Review grün):**
+  - Eigenes `project.mix_track`-Feld (Mix strukturell getrennt statt nur zur
+    Laufzeit aus `mic_tracks` gefiltert).
+  - Zentraler Klassifizierer `core/import_classifier.py` als EINE Wahrheit für
+    „Mix/Marker/Mic/Transkript/Kamera?" — letzte Heuristik-Insel eingesammelt.
+  - `.peakcut` Schema **v4, additiv + rückwärtskompatibel** (`project_archive.py`):
+    schreibt `marker_track`/`mix_track`/`transcript_path`, migriert v1–v3.
+- **Bewusst ADDITIV, nicht „sauber":** Der Mix bleibt VORERST zusätzlich in
+  `mic_tracks`, weil der XMLExporter die Audiospuren noch direkt von dort baut.
+  Würde man ihn jetzt strippen, fiele die Mix-Spur aus der Keyboardstellen-XML →
+  Pin-1-Bruch. Mein eigener Pin-1-Test hat genau das gefangen.
+- **Geparkt:** Task 5 „Mix aus `mic_tracks` strippen" (Pin-1-riskant + kosmetisch),
+  Task 7 Import-UI + Task 8 Transcript — bis die Produkt-/Kundenrichtung klar ist
+  (Marker-Pflicht? Erkennung per Audio-Inhalt? für wen?). Nächste Energie →
+  Produkt-Validierung (#70 + Cutter-Sign-off), nicht weiter am Import.
+
+### Putzfirma — Hygiene-Pass über das ganze Repo (auf develop, 2026-06-16)
+
+Ultracode-Audit (20 Agenten, 5 Dimensionen, adversarial gegengeprüfte Lösch-
+Kandidaten) + Umsetzung in 6 getrennten Häppchen, je mit voller Suite (689) +
+Pin-1 als Tor. Kein Verhalten geändert, nichts an Pin-1/Export angefasst.
+- **Toter Code:** 6 ungenutzte src-Importe + 13 Test-Importe + 2 tote Test-
+  Variablen + 4 tote Reste (LUT-`_lookup_table` ~50 MB RAM, write-only
+  `_cli_guest`/`_current_video_index`, `field`-Import). 2 verwaiste .pyc weg.
+- **Logger-Fix:** `video_preview_peak` schrieb Fehler an den unkonfigurierten
+  Root-Logger → jetzt `get_logger("peakcut.videopreview")` (landet in der Log-Datei).
+- **Konsistenz:** nackte ffmpeg-Timeouts → benannte Konstanten; englische
+  Docstrings der folgenschnitt-Module eingedeutscht; Smart-Boundary-Modell
+  `claude-opus-4-7` → `claude-opus-4-8`.
+- **Doku/SSOT:** Modul-Diagramm-Fehler (gelöschtes `core/audio.py`) korrigiert;
+  feste Testzahlen aus der Doku entfernt (driften sonst); der duplizierte
+  ~240-Zeilen-Backlog-Block in CLAUDE.md durch einen Verweis auf `BACKLOG.md`
+  ersetzt; 11 erledigte Specs + 4 Pläne nach `docs/{specs,plans}/archiv/`.
+- **Bewusst NICHT angefasst (→ Carl bzw. eigene Slices):** 5 nie aufgerufene
+  Player-Methoden + `decide_with_brake`-Wrapper (mögliche Schnittstellen),
+  Test→`logs/peakcut.log`-Redirect (Logging-Architektur), Heuristik-Inseln (#77).
+
 ### #76 Wiedergabe-UX (auf main gelandet 2026-06-16)
 
 Synchrone Ton+Bild-Vorschau zum Beurteilen der Schnittgrenzen. Carl-Plan +
-Claude-Cross-Review (`docs/plans/2026-06-15-wiedergabe-76-plan.md`), TDD,
+Claude-Cross-Review (`docs/plans/archiv/2026-06-15-wiedergabe-76-plan.md`), TDD,
 Gate E/F (Carl) + App-Smoke (Max) bestanden. 593 → 689 Tests, Pin-1 stabil.
 
 - **Architektur:** statt zweier unsynchronisierter Engines (simpleaudio-Ton +
@@ -1039,7 +916,7 @@ Gate E/F (Carl) + App-Smoke (Max) bestanden. 593 → 689 Tests, Pin-1 stabil.
 
 Erstes Paket nach dem Fundament-Health-Check
 (`docs/specs/2026-06-15-state-of-peakcut-health-check.md`, Urteil mostly-solid).
-Carl-Plan + Claude-Cross-Review (`docs/plans/2026-06-15-data-integritaets-riegel.md`),
+Carl-Plan + Claude-Cross-Review (`docs/plans/archiv/2026-06-15-data-integritaets-riegel.md`),
 TDD, getrennte Commits + Gates. 593 → 621 Tests grün, Pin-1 byte-identisch stabil.
 
 - **DATA-1 (`7f032ad`):** neues neutrales Modul `core/atomic_io.py`
@@ -1070,6 +947,22 @@ großer Klassifizierer-Merge + `_categorize_files`/`guest_name` (→ #77).
 **Gelandet 2026-06-15:** Carl-Schluss-Review grün (P3 eingearbeitet); Premiere-Smoke
 (Slice B, beide Varianten) + App-Smoke (echte Akte: v2 laden → v3 atomar speichern →
 neu laden) bestanden. Gemeinsam mit Slice B nach main gemergt.
+
+### Slice B — Multi-Track-Folgenschnitt-XML (auf main gelandet 2026-06-15)
+
+Aus dem Fremdmaterial-Test (1plus1, Mälzer/Ullrich) entstandener Slice: die
+Folgenschnitt-XML schreibt jetzt pro Kamera eine eigene Video-Spur — V1 Totale
+durchgehend als Sicherheits-Unterlage, V2/V3 Personen mit Lücken (Premiere
+„oberste sichtbare gewinnt", Overlay-Variante) — und Audio = Mix-only (kein
+Phasing in der Timeline; Fallback auf echte Mics nur ohne Mix). Default-Mode =
+disable (deaktivierte statt entfernte Clips), über die Zuordnungs-Seite auf
+remove umschaltbar. `.peakcut` Schema-v3 (`folgenschnitt_unused_clips_mode`)
+rückwärtskompatibel. Carl-Plan + Claude-Cross-Review
+(`docs/specs/archiv/2026-06-03-multitrack-folgenschnitt-xml-design.md`), TDD über
+9 Tasks (Aufteilung: Claude Datenstruktur/UI ↔ Carl XML-Writer), Pin-1
+durchgehend byte-identisch. Premiere-Smoke beider Modi + Carl-Schluss-Review
+bestanden; gemeinsam mit dem Daten-Integritäts-Riegel nach main gemergt.
+593 Tests grün vor Merge.
 
 ### #71a Audio-Routing-Mini-Slice (auf main gelandet 2026-05-25)
 
@@ -1214,7 +1107,7 @@ einen kleinen Tunables-Nachdreh auslösen (kein Regressionsrisiko: Stufe
 
 Deterministische Zeitlogik-Auflockerung als Schicht ÜBER Stufe 1
 (unverändert). 4-Augen mit Carl (Plan + Snap-Delta), Claude TDD-Bau,
-Max Entscheider. Spec: `docs/specs/2026-05-16-folgenschnitt-stufe2-track1-design.md`.
+Max Entscheider. Spec: `docs/specs/archiv/2026-05-16-folgenschnitt-stufe2-track1-design.md`.
 
 - **Neues Modul** `src/core/folgenschnitt_loosening.py`: Base-Camera-Adapter
   (weit>close>halbnah>totale → synthetisches `SHOT_WIDE` nur für den
@@ -1259,7 +1152,7 @@ Max Entscheider. Spec: `docs/specs/2026-05-16-folgenschnitt-stufe2-track1-design
 Folgenschnitt Stufe 1 in der App bedienbar gemacht und das Datenmodell von
 Hotel-Matze-fest auf produktionsunabhängig generalisiert. 4-Augen mit Carl
 (Plan), Claude (TDD-Bau), Max (Entscheider). Gate A bestanden. Spec:
-`docs/specs/2026-05-16-zuordnung-generisch-design.md`.
+`docs/specs/archiv/2026-05-16-zuordnung-generisch-design.md`.
 
 - **Generisches Datenmodell**: `SpeakerId`/`CameraRole`-Enums entfernt.
   Person = freier String, `CameraAssignment = (shot_type, person|None)`,
@@ -1561,4 +1454,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-25 (#71a Audio-Routing-Mini-Slice auf main gelandet, Phasing-Wurzel behoben sowohl im Cutter-MP3 als auch in der Review-Speak-Mode-Wiedergabe. Real-Smoke an echter Folge bestätigt. Parallel-Workflow Carl/Claude etabliert. Nächster Slice: #76 Wiedergabe-UX, baufertig auf dem neuen Helper-Fundament.)*
+*Zuletzt aktualisiert: 2026-06-18 (auf develop: Marker-Slice — beide XMLs jetzt Video+Ton+nummerierte Bereich-Marker, „Keyboardstellen raw"/„smart", Nummern synchron, von Max in Premiere abgenommen. Davor: #77 Strukturteil (geparkt vor Import-UI), Fix-Runde Python-Pin/Dropdown/Crash, Philip-Siefer-Eigen-Produktion. OFFEN: Carl-Schluss-Review Marker-Slice; nächster Slice „Grenzen auf Satzanfang/-ende einrasten". Auf main zuletzt: #76 Wiedergabe-UX (2026-06-16). Todos in App/BACKLOG.md.)*

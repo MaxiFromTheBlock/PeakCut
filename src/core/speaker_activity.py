@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 import soundfile as sf
 
-from . import audio_routing
+from . import audio_routing, import_classifier
 from .folgenschnitt_models import ActivityFrame, MicAssignment
 
 DEFAULT_PEOPLE = ["Matze", "Gast"]
@@ -48,14 +48,15 @@ def build_default_mic_assignments(
 
 
 def _is_speaker_mic_candidate(path: str) -> bool:
-    # AUD-1a: Mix-Erkennung über die zentrale, token-bewusste Wahrheit —
-    # 'mixer_recording.wav' ist KEIN Mix und bleibt Sprecher-Mic.
+    # #77 Task 6: Mix UND Marker über den zentralen, token-bewussten
+    # import_classifier — keine lokalen Substring-Inseln mehr.
+    # 'mixer_recording.wav'/'monkeys.wav' bleiben Sprecher-Mic;
+    # 'Marker.wav'/keyboard/keys/klavier werden korrekt ausgeschlossen.
     if audio_routing.is_mix_track(path):
         return False
-    # keyboard/keys/klavier bleiben bewusst lokal bis zum Import-Refactor (#77).
-    basename = os.path.basename(path).lower()
-    keyboard_markers = ("keyboard", "keys", "klavier")
-    return not any(marker in basename for marker in keyboard_markers)
+    if import_classifier.is_marker_track(path):
+        return False
+    return True
 
 
 def analyze_speaker_activity(

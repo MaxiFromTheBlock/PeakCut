@@ -23,7 +23,7 @@ _ANALYSIS_TIMEOUT_S = 600  # 10 minutes max
 
 def _analysis_worker_target(config_data, result_queue, progress_queue):
     """Target function for multiprocessing.Process (must be top-level for pickling)."""
-    from core.analysis_process import run_analysis, progress as _orig_progress
+    from core.analysis_process import run_analysis
 
     # Monkey-patch progress function to use queue instead of stderr
     import core.analysis_process as ap

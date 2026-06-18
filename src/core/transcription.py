@@ -5,7 +5,7 @@ keine Persistenz (= spätere Tasks/Gates). Gate A STOPP: nach Freigabe
 nicht mehr an diesen Contracts drehen.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 

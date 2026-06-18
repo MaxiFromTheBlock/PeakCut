@@ -9,6 +9,7 @@ from pydub import AudioSegment
 from utils import TEMP_DIR, ASSETS_DIR, parse_timecode_to_ms, ms_to_timecode, ms_to_frames, get_logger
 from core.audio_routing import get_speech_audio_segment
 from core.media_probe import run_ffprobe
+from core.xml_sequence_helpers import build_keyboard_spans, sequence_markers_xml
 
 _log = get_logger("peakcut.export")
 
@@ -278,7 +279,7 @@ class XMLExporter(BaseExporter):
             f.write('<!DOCTYPE xmeml>\n')
             f.write('<xmeml version="5">\n')
             f.write(f'  <sequence id="peakcut-sequence">\n')
-            f.write(f'    <name>PeakCut</name>\n')
+            f.write(f'    <name>Keyboardstellen raw</name>\n')
             f.write(f'    <duration>{total_frames}</duration>\n')
             f.write(f'    {rate_block}\n')
             f.write(f'    {tc_block}\n')
@@ -290,6 +291,12 @@ class XMLExporter(BaseExporter):
             f.write(f'        {rate_block}\n')
             f.write(f'      </samplecharacteristics>\n')
             f.write(f'    </format>\n')
+
+            # Nummerierte Sequenz-Marker ("Stelle N") an den kompakten
+            # Clip-Starts — gleiche Nummernquelle wie die Sinnabschnitt-XML,
+            # damit beide Dateien vergleichbar sind.
+            f.write(sequence_markers_xml(build_keyboard_spans(session)))
+
             f.write(f'    <media>\n')
 
             # === VIDEO TRACKS ===

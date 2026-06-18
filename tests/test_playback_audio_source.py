@@ -9,13 +9,12 @@ Mix-Heuristik (nur audio_routing).
 import os
 import sys
 
-import pytest
 from pydub import AudioSegment
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from core.playback_audio_source import (  # noqa: E402
-    PlaybackAudioSource, resolve_playback_audio_source,
+    resolve_playback_audio_source,
 )
 from core.playback_windows import PlaybackWindow  # noqa: E402
 from core.project import PeakCutProject  # noqa: E402

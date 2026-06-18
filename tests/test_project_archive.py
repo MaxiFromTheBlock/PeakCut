@@ -22,7 +22,10 @@ from core.project_archive import (  # noqa: E402
 class _FakeProject:
     def __init__(self):
         self.keyboard_track = "/m/P8/KB.wav"
+        self.marker_track = "/m/P8/KB.wav"  # #77: canonical Marker-Slot
         self.mic_tracks = ["/m/P8/MIC1.wav", "/m/P8/MIC2.wav"]
+        self.mix_track = None
+        self.transcript_path = None
         self.videos = ["/m/CAM_A.mp4"]
         self.guest_name = "Hartmut Rosa"
 
@@ -43,7 +46,7 @@ class _FakeSession:
 
 def test_constants_are_frozen():
     # Slice B 2026-06-03: bump auf v3 (+ folgenschnitt_unused_clips_mode).
-    assert CURRENT_SCHEMA_VERSION == 3
+    assert CURRENT_SCHEMA_VERSION == 4
     assert ARCHIVE_DIR == ".peakcut"
     assert ARCHIVE_FILE == "project.json"
 
@@ -72,7 +75,7 @@ def test_future_schema_refused_on_load():
     # DATA-2 (2026-06-15): bewusste Vertragsänderung — eine Akte aus der
     # Zukunft wird NICHT mehr "best effort" geladen (sonst still wegge-
     # schnittene Felder beim nächsten Autosave). Details:
-    # docs/plans/2026-06-15-data-integritaets-riegel.md
+    # docs/plans/archiv/2026-06-15-data-integritaets-riegel.md
     payload = build_archive_payload(_FakeSession(), material_root="/m")
     payload["schema_version"] = 999  # zukünftige Version
     try:
@@ -107,7 +110,7 @@ from core.session import PeakCutSession
 from core.folgenschnitt_models import ActivityFrame
 from core.project_archive import (
     save_project_archive, load_project_archive,
-    find_project_archive_for_files, material_root, peak_to_dict,
+    find_project_archive_for_files,
 )
 
 _CFG = {"fps": 25, "context_duration_ms": 15000}
@@ -155,7 +158,7 @@ def test_paths_relative_no_dotdot_when_common_folder(tmp_path):
     path = save_project_archive(s)
     assert path.endswith(".peakcut/project.json")
     data = _json.loads(open(path).read())
-    for p in ([data["project"]["keyboard_track"]]
+    for p in ([data["project"]["marker_track"]]
               + data["project"]["mic_tracks"] + data["project"]["videos"]):
         assert not p.startswith(".."), p
     assert data["project"]["has_external_paths"] is False
@@ -333,7 +336,7 @@ def test_folgenschnitt_roundtrip_new_root_after_move(tmp_path):
 
 # --- Task 3: .peakcut Schema v2 additiv ---
 
-from core.clip_candidates import PROPOSED, DISCARDED, SELECTED
+from core.clip_candidates import SELECTED
 
 
 def test_schema_is_current_and_archive_has_both_sections(tmp_path):

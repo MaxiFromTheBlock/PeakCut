@@ -16,7 +16,8 @@ Zuordnungs-Seite, Sinnabschnitt-Fallback) **derselben Wahrheit**
 folgen — solange das Datenmodell die Mix-Datei noch nicht
 strukturell vom Rest trennt. Die strukturelle Trennung (eigenes
 ``project.mix_track``-Feld, ``mic_tracks`` ohne Mix) kommt mit
-``#77 Import-Refactor`` plus ``.peakcut``-Schema-v3.
+``#77 Import-Refactor``. Während Gate B bleibt der Mix aus Pin-1-
+Gründen noch zusätzlich in ``mic_tracks``.
 
 Heuristik (Carl-Spec, Max-bestätigt 2026-05-21):
 
@@ -38,18 +39,7 @@ durch dieses Modul *nicht* berührt — der Pin-Hash in
 
 from __future__ import annotations
 
-import os
-import re
-
-# Token-Whitelist: aktuell bewusst eng. Erweiterung über
-# Konfigurations-Slot kommt frühestens mit #77 Import-Refactor.
-_MIX_TOKENS = frozenset({"mix", "mixdown"})
-
-# Splits an allem, was nicht alphanumerisch ist — Spaces, Underscores,
-# Dashes, Dots, Klammern, etc. Damit wird "Sheila Mix.mp3" zu
-# ["sheila", "mix"], aber "mixer_recording.wav" zu ["mixer", "recording"]
-# (kein Match auf das Mix-Token).
-_TOKEN_SPLIT = re.compile(r"[^a-z0-9]+")
+from . import import_classifier
 
 
 def is_mix_track(path: str) -> bool:
@@ -59,21 +49,20 @@ def is_mix_track(path: str) -> bool:
     nicht-alphanumerischen Grenzen gesplittet) enthält 'mix' oder
     'mixdown' als eigenständiges Token.
     """
-    if not path:
-        return False
-    base = os.path.basename(path)
-    stem = os.path.splitext(base)[0].lower()
-    tokens = (t for t in _TOKEN_SPLIT.split(stem) if t)
-    return any(token in _MIX_TOKENS for token in tokens)
+    return import_classifier.is_mix_track(path)
 
 
 def get_mix_track(project) -> str | None:
-    """Erste Mix-Datei in ``project.mic_tracks`` zurückgeben.
+    """Mix-Datei zurückgeben.
 
-    None, wenn keine vorhanden ist. Reine Lese-Operation — mutiert
-    weder das Project noch ``mic_tracks``.
+    #77 Task 3: ``project.mix_track`` ist die strukturelle Quelle der
+    Wahrheit. Der Scan über ``project.mic_tracks`` bleibt als Legacy-
+    Fallback für alte Objekte und den Gate-B-Zwischenzustand.
     """
-    for path in project.mic_tracks:
+    mix_track = getattr(project, "mix_track", None)
+    if isinstance(mix_track, str) and mix_track:
+        return mix_track
+    for path in getattr(project, "mic_tracks", ()):
         if is_mix_track(path):
             return path
     return None
@@ -86,7 +75,10 @@ def get_source_mic_tracks(project) -> list[str]:
     Liefert immer eine neue Liste, keine Referenz auf ``mic_tracks``
     selbst.
     """
-    return [path for path in project.mic_tracks if not is_mix_track(path)]
+    return [
+        path for path in getattr(project, "mic_tracks", ())
+        if not is_mix_track(path)
+    ]
 
 
 def get_speech_audio_segment(session, start_ms: int, end_ms: int):
@@ -94,13 +86,11 @@ def get_speech_audio_segment(session, start_ms: int, end_ms: int):
 
     Regel (#71a Task 2):
 
-    - Pre-Condition: ``len(mic_tracks) == len(mic_audios)``. Bei
-      Mismatch → ``None`` (korrupter Zustand, KEIN Silent-Fallback;
-      Carl-P2-Linie: lieber klare Lücke als versteckt falsches
-      Audio).
-    - Mix in ``mic_tracks`` → nur Mix-Segment, kein Overlay
+    - Struktureller Mix + ``session.mix_audio`` → nur Mix-Segment,
+      kein Overlay.
+    - Legacy-Mix in ``mic_tracks`` → nur Mix-Segment
       (verhindert Phasing, der ganze Grund für #71a).
-    - Sonst Overlay aller echten Mic-Spuren (Backward-Compat).
+    - Kein Mix → Overlay aller echten Mic-Spuren (Backward-Compat).
     - Keine echten Mics → ``None``.
 
     Args:
@@ -110,20 +100,23 @@ def get_speech_audio_segment(session, start_ms: int, end_ms: int):
     Returns:
         ``AudioSegment`` | ``None``.
     """
-    mic_tracks = session.project.mic_tracks
-    mic_audios = session.mic_audios
-
-    if len(mic_tracks) != len(mic_audios):
-        return None
-
+    mic_tracks = getattr(session.project, "mic_tracks", [])
+    mic_audios = getattr(session, "mic_audios", [])
     mix_path = get_mix_track(session.project)
     if mix_path:
+        mix_audio = getattr(session, "mix_audio", None)
+        if mix_audio is not None:
+            return mix_audio[start_ms:end_ms]
+        if len(mic_tracks) != len(mic_audios):
+            return None
         try:
             idx = mic_tracks.index(mix_path)
         except ValueError:
-            idx = None
-        if idx is not None:
-            return mic_audios[idx][start_ms:end_ms]
+            return None
+        return mic_audios[idx][start_ms:end_ms]
+
+    if len(mic_tracks) != len(mic_audios):
+        return None
 
     real_mic_indices = [
         i for i, p in enumerate(mic_tracks) if not is_mix_track(p)

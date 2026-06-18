@@ -68,7 +68,6 @@ class MainWindow(QMainWindow):
         self._transcript_worker = None  # Roadmap #3 Stufe A (entkoppelt)
 
         # CLI arguments from CheckIn
-        self._cli_guest = cli_guest
         self._cli_export_dir = cli_export_dir
 
         # File state

@@ -110,13 +110,27 @@ class _StubProject:
     """Minimaler PeakCutProject-Stub: das einzige Attribut, auf das
     die Helper zugreifen, ist mic_tracks."""
 
-    def __init__(self, mic_tracks):
+    def __init__(self, mic_tracks, mix_track=None):
         self.mic_tracks = list(mic_tracks)
+        self.mix_track = mix_track
 
 
 def test_get_mix_track_finds_mix_in_mic_list():
     p = _StubProject(["MIC1.wav", "MIC2.wav", "Sheila Mix.mp3"])
     assert get_mix_track(p) == "Sheila Mix.mp3"
+
+
+def test_get_mix_track_prefers_structural_mix_slot():
+    """#77 Task 3: sobald project.mix_track strukturell befüllt ist,
+    ist dieser Slot die Quelle der Wahrheit. Der Legacy-Scan bleibt nur
+    Fallback."""
+    p = _StubProject(["MIC1.wav", "Legacy Mix.mp3"], mix_track="Slot Mix.mp3")
+    assert get_mix_track(p) == "Slot Mix.mp3"
+
+
+def test_get_mix_track_falls_back_to_legacy_mic_scan():
+    p = _StubProject(["MIC1.wav", "Legacy Mix.mp3"], mix_track=None)
+    assert get_mix_track(p) == "Legacy Mix.mp3"
 
 
 def test_get_mix_track_returns_none_when_no_mix():
@@ -138,6 +152,17 @@ def test_get_mix_track_returns_none_for_empty_project():
 
 def test_get_source_mic_tracks_filters_mix_out():
     p = _StubProject(["MIC1.wav", "Sheila Mix.mp3", "MIC2.wav"])
+    assert get_source_mic_tracks(p) == ["MIC1.wav", "MIC2.wav"]
+
+
+def test_get_source_mic_tracks_filters_structural_mix_duplicate():
+    """Gate-B-Zwischenzustand: v4 hat mix_track, mic_tracks enthält
+    den Mix aber noch legacy-voll. Source-Mics müssen trotzdem echte
+    Mics bleiben."""
+    p = _StubProject(
+        ["MIC1.wav", "Slot Mix.mp3", "MIC2.wav"],
+        mix_track="Slot Mix.mp3",
+    )
     assert get_source_mic_tracks(p) == ["MIC1.wav", "MIC2.wav"]
 
 
@@ -246,9 +271,10 @@ class _StubSession:
     mic_audios-Liste. Alle anderen Session-Attribute werden vom
     Audio-Routing-Helper nicht gelesen."""
 
-    def __init__(self, mic_tracks, mic_audios):
-        self.project = _StubProject(mic_tracks)
+    def __init__(self, mic_tracks, mic_audios, mix_audio=None, mix_track=None):
+        self.project = _StubProject(mic_tracks, mix_track=mix_track)
         self.mic_audios = mic_audios
+        self.mix_audio = mix_audio
 
 
 def test_get_speech_audio_segment_uses_only_mix_when_present():
@@ -289,6 +315,55 @@ def test_get_speech_audio_segment_uses_only_mix_when_present():
         f"Tatsächlich {len(calls)} overlay-Aufrufe — Phasing-Bug "
         f"käme zurück."
     )
+
+
+def test_get_speech_audio_segment_uses_structural_mix_audio_first():
+    """#77 Task 3: structural mix_audio gewinnt vor der Legacy-
+    mic_tracks/mic_audios-Welt."""
+    from core.audio_routing import get_speech_audio_segment
+
+    mic1 = _tone(330, -20)
+    mic2 = _tone(380, -20)
+    mix = _tone(440, -10)
+    s = _StubSession(
+        ["MIC1.wav", "MIC2.wav"],
+        [mic1, mic2],
+        mix_audio=mix,
+        mix_track="Slot Mix.mp3",
+    )
+
+    calls = []
+    original_overlay = AudioSegment.overlay
+
+    def counting_overlay(self, *args, **kwargs):
+        calls.append(1)
+        return original_overlay(self, *args, **kwargs)
+
+    with patch.object(AudioSegment, "overlay", counting_overlay):
+        seg = get_speech_audio_segment(s, 0, 1000)
+
+    assert seg is not None
+    assert abs(seg.dBFS - mix[0:1000].dBFS) < 0.5
+    assert calls == []
+
+
+def test_get_speech_audio_segment_structural_mix_ignores_mic_alignment():
+    """Wenn ein strukturell geladenes Mix-Audio vorhanden ist, darf ein
+    temporärer Legacy-Mic-Mismatch den phasingfreien Mix-Pfad nicht
+    blockieren."""
+    from core.audio_routing import get_speech_audio_segment
+
+    mix = _tone(440, -10)
+    s = _StubSession(
+        ["MIC1.wav", "MIC2.wav"],
+        [_tone(330, -20)],  # absichtlicher Mismatch
+        mix_audio=mix,
+        mix_track="Slot Mix.mp3",
+    )
+
+    seg = get_speech_audio_segment(s, 0, 1000)
+    assert seg is not None
+    assert abs(seg.dBFS - mix[0:1000].dBFS) < 0.5
 
 
 def test_get_speech_audio_segment_overlays_real_mics_when_no_mix():

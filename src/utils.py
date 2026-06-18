@@ -35,6 +35,28 @@ else:
     FFPROBE_BIN = "ffprobe"
 
 
+# PeakCut ist auf Python 3.11 gebaut (pydub/audioop — audioop faellt in 3.13 weg).
+REQUIRED_PYTHON = (3, 11)
+
+
+def python_version_warning(version_info=None):
+    """Weiche Versions-Wache: Warntext, wenn NICHT auf Python 3.11, sonst None.
+
+    Bewusst weich (nur Warnung, KEIN Abbruch): der produktive Launcher in
+    /Applications darf an einer falschen Python-Version nicht still stehen
+    bleiben. pydub haengt am stdlib-``audioop``, das in Python 3.13 wegfaellt.
+    """
+    vi = tuple(version_info if version_info is not None else sys.version_info)
+    if (vi[0], vi[1]) != REQUIRED_PYTHON:
+        running = ".".join(str(x) for x in vi[:3])
+        return (
+            f"PeakCut ist fuer Python {REQUIRED_PYTHON[0]}.{REQUIRED_PYTHON[1]} "
+            f"gebaut, laeuft aber auf {running}. pydub/audioop kann ab Python "
+            f"3.13 fehlen — bitte Python 3.11 verwenden."
+        )
+    return None
+
+
 def get_logger(name: str = "peakcut") -> logging.Logger:
     """Get a configured logger that writes to logs/peakcut.log.
 

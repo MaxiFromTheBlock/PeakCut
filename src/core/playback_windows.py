@@ -9,7 +9,7 @@ disabled, wenn kein gültiger Sinnabschnitt vorliegt.
 from dataclasses import dataclass
 
 from .playback_modes import (
-    PLAYBACK_MODE_KEY, PLAYBACK_MODE_SPEAK, PLAYBACK_MODE_SMART,
+    PLAYBACK_MODE_KEY, PLAYBACK_MODE_SPEAK,
     normalize_playback_mode,
 )
 from .clip_candidates import DISCARDED
