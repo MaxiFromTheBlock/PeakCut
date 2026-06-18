@@ -156,8 +156,8 @@ def test_xml_audio_clips_are_premiere_importable(tmp_path):
     assert xml.count("<mediatype>audio</mediatype>") == 2
     assert xml.count("<duration>") >= 2          # je Clip eine Dauer
     assert "<channelcount>" in xml               # Datei-Audio-Beschreibung
-    assert '<file id="sinn-audio">' in xml       # volle Definition (1x)
-    assert '<file id="sinn-audio"/>' in xml      # spätere Referenz
+    assert '<file id="sinn-audio-1">' in xml     # volle Definition (1x je Spur)
+    assert '<file id="sinn-audio-1"/>' in xml    # spätere Referenz
     assert "<samplecharacteristics>" in xml      # Sequenz-Audioformat
 
 

@@ -31,11 +31,14 @@ def _marker_numbers(xml):
     return re.findall(r"<name>Stelle (\d+)</name>", xml)
 
 
+_MICS = ["MIC1.wav", "MIC2.wav", "Mix.wav"]      # 2 Einzelmics + Mix
+
+
 def _full_session(tmp_path):
     p = PeakCutProject()
-    p.set_files(str(tmp_path / "KB.wav"), [str(tmp_path / "MIC1 mix.wav")],
+    p.set_files(str(tmp_path / "KB.wav"), [str(tmp_path / m) for m in _MICS],
                 [str(tmp_path / "CAM.mp4")])
-    for f in ("KB.wav", "MIC1 mix.wav", "CAM.mp4"):
+    for f in ["KB.wav", "CAM.mp4", *_MICS]:
         (tmp_path / f).write_bytes(b"\x00")
     p.guest_name = "Hartmut Rosa"
     s = PeakCutSession(p, {"fps": 25, "context_duration_ms": 15000})
@@ -67,6 +70,18 @@ def test_both_xmls_share_marker_numbers_for_common_peaks(tmp_path):
     assert sm_nums == ["1", "3"]           # nur Peaks mit Smart-Kandidat
     # Stelle N in smart == Stelle N in raw (Teilmenge, identische Nummern)
     assert set(sm_nums).issubset(set(kb_nums))
+
+
+def test_smart_has_same_audio_tracks_as_raw(tmp_path):
+    # Vergleichbarkeit: "smart" trägt dieselben Tonspuren (Einzelmics + Mix)
+    # wie "raw", nicht nur den Mix.
+    s = _full_session(tmp_path)
+    kb = open(XMLExporter().export(s), encoding="utf-8").read()
+    sm = open(SinnabschnittXMLExporter().export(s), encoding="utf-8").read()
+    for mic in _MICS:
+        base = os.path.splitext(mic)[0]
+        assert f"<name>{base}</name>" in kb      # in raw vorhanden (Vorlage)
+        assert f"<name>{base}</name>" in sm      # jetzt auch in smart
 
 
 def test_export_filenames_unchanged(tmp_path):

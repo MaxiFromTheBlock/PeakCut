@@ -110,8 +110,7 @@ class SinnabschnittXMLExporter:
         if video_paths:
             vid_w, vid_h = _probe_video_info(video_paths[0])
 
-        ref = _select_audio_reference(session)          # Mix bevorzugt
-        ref_base = os.path.basename(ref)
+        ref = _select_audio_reference(session)   # nur für Format-Probe (Mix)
         sample_rate, bit_depth, channels = _probe_audio_info(ref)
 
         rate = (f"<rate><timebase>{fps}</timebase>"
@@ -204,7 +203,9 @@ class SinnabschnittXMLExporter:
                 f.write('        </track>\n')
             f.write('      </video>\n')
 
-            # === AUDIO: eine Spur (Mix bevorzugt, kein Phasing) ===
+            # === AUDIO: Spuren wie "raw" (alle mic_tracks: Einzelmics + Mix),
+            # Quelle = candidate.boundary (kompakt, ohne Offset). Mehrspurig,
+            # damit smart und raw vergleichbar sind (Max-Wunsch). ===
             f.write('      <audio>\n')
             f.write('        <format>\n')
             f.write('          <samplecharacteristics>\n')
@@ -212,49 +213,54 @@ class SinnabschnittXMLExporter:
             f.write(f'            <depth>{bit_depth}</depth>\n')
             f.write('          </samplecharacteristics>\n')
             f.write('        </format>\n')
-            f.write('        <track>\n')
-            rec = 0
-            for clip_idx, (number, c) in enumerate(smart):
-                in_f = ms_to_frames(c.boundary.start_ms, fps)
-                out_f = ms_to_frames(c.boundary.end_ms, fps)
-                dur = max(1, out_f - in_f)
-                start, end = rec, rec + dur
-                rec = end
-                f.write(f'          <clipitem id="sinn-a1-{number}">\n')
-                f.write(f'            <name>{escape(os.path.splitext(ref_base)[0])}'
-                        f'</name>\n')
-                f.write(f'            <duration>{dur}</duration>\n')
-                f.write(f'            {rate}\n')
-                f.write(f'            <start>{start}</start>\n')
-                f.write(f'            <end>{end}</end>\n')
-                f.write(f'            <in>{in_f}</in>\n')
-                f.write(f'            <out>{out_f}</out>\n')
-                if clip_idx == 0:
-                    f.write('            <file id="sinn-audio">\n')
-                    f.write(f'              <name>{escape(ref_base)}</name>\n')
-                    f.write(f'              <pathurl>{_file_url(ref)}'
-                            f'</pathurl>\n')
-                    f.write(f'              {rate}\n')
-                    f.write(f'              {tc}\n')
-                    f.write('              <media>\n')
-                    f.write('                <audio>\n')
-                    f.write('                  <samplecharacteristics>\n')
-                    f.write(f'                    <samplerate>{sample_rate}'
-                            f'</samplerate>\n')
-                    f.write(f'                    <depth>{bit_depth}</depth>\n')
-                    f.write('                  </samplecharacteristics>\n')
-                    f.write(f'                  <channelcount>{channels}'
-                            f'</channelcount>\n')
-                    f.write('                </audio>\n')
-                    f.write('              </media>\n')
-                    f.write('            </file>\n')
-                else:
-                    f.write('            <file id="sinn-audio"/>\n')
-                f.write('            <sourcetrack>\n')
-                f.write('              <mediatype>audio</mediatype>\n')
-                f.write('            </sourcetrack>\n')
-                f.write('          </clipitem>\n')
-            f.write('        </track>\n')
+            for track_idx, audio_path in enumerate(session.project.mic_tracks):
+                file_id = f"sinn-audio-{track_idx + 1}"
+                audio_file = os.path.basename(audio_path)
+                clip_name = escape(os.path.splitext(audio_file)[0])
+                f.write('        <track>\n')
+                rec = 0
+                for clip_idx, (number, c) in enumerate(smart):
+                    in_f = ms_to_frames(c.boundary.start_ms, fps)
+                    out_f = ms_to_frames(c.boundary.end_ms, fps)
+                    dur = max(1, out_f - in_f)
+                    start, end = rec, rec + dur
+                    rec = end
+                    f.write(f'          <clipitem id="sinn-a{track_idx + 1}'
+                            f'-{number}">\n')
+                    f.write(f'            <name>{clip_name}</name>\n')
+                    f.write(f'            <duration>{dur}</duration>\n')
+                    f.write(f'            {rate}\n')
+                    f.write(f'            <start>{start}</start>\n')
+                    f.write(f'            <end>{end}</end>\n')
+                    f.write(f'            <in>{in_f}</in>\n')
+                    f.write(f'            <out>{out_f}</out>\n')
+                    if clip_idx == 0:
+                        f.write(f'            <file id="{file_id}">\n')
+                        f.write(f'              <name>{escape(audio_file)}'
+                                f'</name>\n')
+                        f.write(f'              <pathurl>{_file_url(audio_path)}'
+                                f'</pathurl>\n')
+                        f.write(f'              {rate}\n')
+                        f.write(f'              {tc}\n')
+                        f.write('              <media>\n')
+                        f.write('                <audio>\n')
+                        f.write('                  <samplecharacteristics>\n')
+                        f.write(f'                    <samplerate>{sample_rate}'
+                                f'</samplerate>\n')
+                        f.write(f'                    <depth>{bit_depth}</depth>\n')
+                        f.write('                  </samplecharacteristics>\n')
+                        f.write(f'                  <channelcount>{channels}'
+                                f'</channelcount>\n')
+                        f.write('                </audio>\n')
+                        f.write('              </media>\n')
+                        f.write('            </file>\n')
+                    else:
+                        f.write(f'            <file id="{file_id}"/>\n')
+                    f.write('            <sourcetrack>\n')
+                    f.write('              <mediatype>audio</mediatype>\n')
+                    f.write('            </sourcetrack>\n')
+                    f.write('          </clipitem>\n')
+                f.write('        </track>\n')
             f.write('      </audio>\n')
 
             f.write('    </media>\n')
