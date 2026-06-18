@@ -118,7 +118,15 @@ Export-Orchestrierung aus dem GUI (ARCH-1, vor NAS). Akut offen aus der Eigen-Pr
 Sinnabschnitt-„nur-Ton"-Bug mit Max klären; nummerierte Marker (klein); SRT (groß).
 (Die frühere „V3 Vision: Smart Scan / Create Mix / Hub"-Liste war überholt 2026-05-18.)
 
-## Offene Slices (Stand 2026-06-17)
+## Offene Slices (Stand 2026-06-18)
+
+**Marker + Vergleichbarkeit GEBAUT auf develop (2026-06-18), Max-Premiere-Abnahme ✓:**
+Keyboardstellen-XML und Sinnabschnitt-XML sind jetzt direkt vergleichbar — beide mit
+Video + denselben Tonspuren + nummerierten Bereich-Markern „Stelle N" (synchron trotz
+candidate.peak_id-Versatz). Sequenzen „Keyboardstellen raw"/„smart", Clip-Namen =
+Quelldateien. Neuer Helfer `core/xml_sequence_helpers.py`. Carl-Plan, TDD (785 Tests),
+Pin-1 bewusst neu eingefroren. **Offen:** Carl-Schluss-Review; nächster Slice „smarte
+Grenzen auf Satzanfang/-ende einrasten" (mechanisch, ≠ #70-Aufhänger-Wahl).
 
 **#77 Import-Refactor — Strukturteil GEBAUT auf develop (2026-06-16), Rest geparkt:**
 Eigenes `project.mix_track`-Feld, zentraler Klassifizierer (`core/import_classifier.py`),

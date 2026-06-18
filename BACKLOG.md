@@ -6,7 +6,7 @@
 >
 > **„#76", „#77", „G1", „ARCH-1" usw. sind nur Namen/Label — KEINE Aufgabenzahl.**
 >
-> Stand: 2026-06-17 · ~22 offene Punkte · Quelle: ultracode-Sweep (Repo-Docs,
+> Stand: 2026-06-18 · ~21 offene Punkte · Quelle: ultracode-Sweep (Repo-Docs,
 > Code-Kommentare, GitHub-Issues=0, Memory, Notion=0), dedupliziert.
 > (Putzfirma-Hygiene-Pass 2026-06-16: Doku-Entrümpelung erledigt — siehe unten.)
 >
@@ -15,20 +15,15 @@
 ---
 
 ## 🐛 Bugs
-- **Sinnabschnitt-XML zeigt in Premiere nur Ton (kein Bild)** `[?]` · braucht: Max-Klärung — **NEU, offen**
-  Seit dem Import-Fix lässt sich die Sinnabschnitte-XML öffnen, aber in der
-  Timeline liegt nur eine Tonspur, kein Video. Aktuell ist diese Zusatz-Datei
-  bewusst eine reine Ton-Spannenliste (v1-Scope, „leichtgewichtig"). Max hat
-  beim echten Arbeiten an der Philip-Siefer-Folge aber etwas anderes erwartet.
-  Erst klären: Was soll in der Timeline liegen (Multicam wie beim Folgenschnitt?
-  nur Marker?), dann entscheiden, ob wir Bild ergänzen. NICHT anfassen, bevor das
-  geklärt ist.
+- _(aktuell keine offenen)_
 
 ## 🔧 Funktions-Ausbau (nächste Features)
-- **Nummerierte Marker in der Keyboardstellen-XML** `[M]` · braucht: nichts — **NEU**
-  Max-Wunsch aus der Philip-Siefer-Produktion: die Keyboard-Stellen in der Timeline
-  durchnummerieren (1, 2, 3, 4 …), damit man sie in Premiere schnell wiederfindet.
-  Kleines Feature, eigener Slice (Carl-Briefing genügt).
+- **Sinnabschnitt-Grenzen auf Satzanfang/-ende einrasten** `[M]` · braucht: Carl-Plan — **NEU, nächster Slice**
+  Aus der Philip-Siefer-Produktion: smarte Sinnabschnitte fangen/hören teils mitten
+  im Satz an/auf (z. B. Stelle 7 endet auf „…wo."). Die Grenzen sollen strikt auf
+  Satzanfang/-ende einrasten (mechanisch). Vorab prüfen, ob das Transkript saubere
+  Satzgrenzen liefert, an die wir andocken können. **NICHT** die Aufhänger-Wahl
+  (welcher Satz ist der beste Einstieg) — das ist redaktionelles Urteil = #70.
 - **Import-Umbau: feste Slots statt Namensraten** (#37/#77) `[XL]` · braucht: Carl-Plan — **STRUKTURTEIL ERLEDIGT, ruht**
   Eigenes Mix-Feld statt Mix-in-mic_tracks, Schema v4 rückwärtskompatibel, ein
   zentraler Klassifizierer (letzte Insel eingesammelt). Strukturteil fertig +
@@ -40,7 +35,8 @@
   Nächste Energie → Produkt-Validierung (#70 + Cutter-Sign-off).
 - **Prompt-Tuning für die KI-Clip-Grenzen** (#70) `[L]` · braucht: Max-Material
   Few-Shot-Beispiele + Anti-Muster + HM-Stilprofil, messbar über A/B-Vergleich.
-  Gate (jetzt erfüllt): erst nach #76 Wiedergabe.
+  Beinhaltet die **Aufhänger-Wahl** (welcher Satz ist der beste Einstieg — z. B.
+  Stelle 7: Frage „Woher kommt das?" vs. die Erklärung). Gate (erfüllt): nach #76.
 - **Totale bei schnellem Dialog/Cross-Talk** (Slice A) `[L]` · braucht: Max-Material
   Heute nur in Monolog-Blöcken ≥90s; soll bei Cross-Talk kommen, aber NICHT bei
   humorvollem Schlagabtausch. Wartet auf Max' Material-Markierung aus 1plus1.
@@ -94,8 +90,9 @@
 ---
 
 ## ✅ Erledigt (Historie, Kurzform)
+- **Marker + Vergleichbarkeit Keyboardstellen ↔ Sinnabschnitte** — Carl-Plan, TDD (5 Tasks, 785 Tests). Beide XMLs: Video + Ton (smart hat jetzt dieselben Tonspuren wie raw), nummerierte Bereich-Marker „Stelle N" (synchron trotz peak_id-Versatz), Clip-Namen = Quelldateien, Sequenzen „Keyboardstellen raw"/„smart". Pin-1 bewusst neu eingefroren. Max in Premiere abgenommen (Philip Siefer). Carl-Schluss-Check offen (2026-06-18)
 - **Folgenschnitt-XML real bestätigt** — Max hat erstmals seit Langem selbst eine Postproduktion gemacht (Philip Siefer) und die Folgenschnitt-XML „funktioniert super". Erste echte Eigen-Nutzung außerhalb der Smoke-Tests (2026-06-17)
-- **Sinnabschnitt-XML in Premiere importierbar** — den Audio-Clips fehlten FCP7-Pflichtangaben (Dauer, Datei-Audio-Beschreibung, Quell-Spur) → Premiere lehnte den Import ab. Jetzt aufgebaut wie die funktionierende Keyboardstellen-XML. Eigener Codepfad, Pin-1 unberührt. **Folge-Befund offen → siehe Bugs (nur Ton in der Timeline)** (2026-06-17)
+- **Sinnabschnitt-XML in Premiere importierbar + auf Multicam gehoben** — erst fehlten FCP7-Pflichtangaben (Import scheiterte), dann auf Video+Ton+Marker gehoben (siehe Marker-Slice oben). Eigener Codepfad, Keyboardstellen/Pin-1 unberührt (2026-06-17/18)
 - **Shot-Dropdown macOS — visuell bestätigt** — nicht-natives Popup + `::item`-Regeln (markierte/überfahrene Zeile blau+weiß), auch die Person-Combos (Kamera + Mic). Max-O-Ton „sah besser aus". Verifiziert per gerendertem PNG + Pixel-Probe (Commits `74a18fc`/`6f0fd55`) (2026-06-17)
 - **Crash-Fix Zuordnung** — „Weiter" stürzte ab, wenn eine Kamera einen Personen-Shot (Weit/Nah/Halbnah) OHNE Person hatte (Altbestand v2.10, ValueError im Slot → SIGABRT). Unvollständige Kamera wird jetzt toleriert statt zu crashen (2026-06-17)
 - **#77 Strukturteil** — Mix strukturell (mix_track, Schema v4), zentraler Klassifizierer, letzte Inseln vereint (Tasks 0/1/2/3/4/6, Carl-Review grün); Import-UI (7/8) + Strip (5) bewusst geparkt (2026-06-16)

@@ -773,6 +773,29 @@ Produkt):**
 
 ## Changelog
 
+### Marker + Vergleichbarkeit Keyboardstellen ↔ Sinnabschnitte (develop, 2026-06-18)
+
+Vier-Augen mit Carl (Carl-Plan, Claude-TDD, Max-Abnahme), aus der Philip-Siefer-
+Produktion. Ziel: beide XMLs direkt in Premiere vergleichbar machen.
+
+- **Neuer Helfer `core/xml_sequence_helpers.py`:** EINE Wahrheit für Stellennummer
+  (`peak.index` → Stelle 1..N über aktive Peaks) + kompakte Record-Positionen +
+  Marker. `active_smart_candidates` filtert/sortiert/nummeriert die Smart-Kandidaten
+  zentral (raw + smart + Marker hängen sich daran).
+- **Keyboardstellen-XML (`exporters.py`):** Sequenz „PeakCut" → **„Keyboardstellen
+  raw"**, nummerierte **Bereich-Marker** „Stelle N" (so lang wie die Stelle, lesbar).
+- **Sinnabschnitt-XML (`sinnabschnitt_exporter.py`):** von Audio-only auf **kompakte
+  Multicam** (Video je Kamera + dieselben Tonspuren wie raw) gehoben, Sequenz
+  **„Keyboardstellen smart"**, Clip-Namen = Quelldateien, Marker mit der **gleichen
+  Keyboardstellen-Nummer** (löst den `candidate.peak_id`-Versatz durch ignorierte
+  Peaks). TXT zählt jetzt auch in Stellennummern. Bleibt eigener Codepfad (nicht in
+  `_build_exporters`).
+- **Pin-1 bewusst zweimal neu eingefroren** (Marker + Name; dann Bereich-Marker) —
+  beabsichtigte Änderung, im Test begründet. Abnahme-Riegel = Max' Premiere-Import
+  (bestätigt: Marker lesbar, Bild+Ton, 3 Tonspuren in beiden, Nummern synchron).
+- TDD, 785 Tests grün. **Offen:** Carl-Schluss-Review; nächster Slice „Grenzen auf
+  Satzanfang/-ende einrasten" (mechanisch, ≠ #70-Aufhänger-Wahl).
+
 ### Erste Eigen-Produktion (Philip Siefer) + Sinnabschnitt-Import-Fix (develop, 2026-06-17)
 
 Max hat erstmals seit Langem selbst eine Postproduktion gemacht und PeakCut am
@@ -1431,4 +1454,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-06-17 (auf develop: #77 Strukturteil gebaut + bewusst geparkt vor der Import-UI; Fix-Runde Python-Pin/Dropdown/Crash; erste echte Eigen-Produktion (Philip Siefer) — Folgenschnitt-XML bestätigt, Sinnabschnitt-XML importierbar gemacht. OFFEN: Sinnabschnitt zeigt in Premiere nur Ton — mit Max klären. Auf main zuletzt: #76 Wiedergabe-UX (2026-06-16). Todos leben in App/BACKLOG.md (Single Source of Truth).)*
+*Zuletzt aktualisiert: 2026-06-18 (auf develop: Marker-Slice — beide XMLs jetzt Video+Ton+nummerierte Bereich-Marker, „Keyboardstellen raw"/„smart", Nummern synchron, von Max in Premiere abgenommen. Davor: #77 Strukturteil (geparkt vor Import-UI), Fix-Runde Python-Pin/Dropdown/Crash, Philip-Siefer-Eigen-Produktion. OFFEN: Carl-Schluss-Review Marker-Slice; nächster Slice „Grenzen auf Satzanfang/-ende einrasten". Auf main zuletzt: #76 Wiedergabe-UX (2026-06-16). Todos in App/BACKLOG.md.)*
