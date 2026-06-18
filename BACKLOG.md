@@ -18,12 +18,17 @@
 - _(aktuell keine offenen)_
 
 ## 🔧 Funktions-Ausbau (nächste Features)
-- **Sinnabschnitt-Grenzen auf Satzanfang/-ende einrasten** `[M]` · braucht: Carl-Plan — **NEU, nächster Slice**
+- **Sinnabschnitt-Grenzen auf Satzanfang/-ende einrasten** `[M]` · braucht: Carl-Plan
   Aus der Philip-Siefer-Produktion: smarte Sinnabschnitte fangen/hören teils mitten
-  im Satz an/auf (z. B. Stelle 7 endet auf „…wo."). Die Grenzen sollen strikt auf
-  Satzanfang/-ende einrasten (mechanisch). Vorab prüfen, ob das Transkript saubere
-  Satzgrenzen liefert, an die wir andocken können. **NICHT** die Aufhänger-Wahl
-  (welcher Satz ist der beste Einstieg) — das ist redaktionelles Urteil = #70.
+  im Satz an/auf (z. B. Stelle 7 endet auf „…wo.").
+  **Befund (geprüft 2026-06-18):** Das Whisper-Transkript hat fast KEINE Satzzeichen
+  (54 Punkte / 7 Fragezeichen auf 14.400 Wörter, nur ~14 % der Blöcke enden auf `.?!`)
+  → kein verlässliches „echtes Satzende" zum Einrasten. PeakCut schneidet heute schon
+  an Sprechpausen (~0,9 s), aber „Satzende" = nur Whisper-Blockende, kein echtes.
+  Zwei Wege: **(a) günstig** — Pausen-Schwelle nachschärfen + Entscheider-Hinweis
+  „an fertiger Aussage enden", an echtem Material gegenchecken; **(b) sauber** — echtes
+  Satz-Signal besorgen (besseres Transkript/Descript oder KI-Satzgrenzen-Schritt).
+  Erst (a), dann ggf. (b). **NICHT** die Aufhänger-Wahl (bester Einstiegssatz) → #70.
 - **Import-Umbau: feste Slots statt Namensraten** (#37/#77) `[XL]` · braucht: Carl-Plan — **STRUKTURTEIL ERLEDIGT, ruht**
   Eigenes Mix-Feld statt Mix-in-mic_tracks, Schema v4 rückwärtskompatibel, ein
   zentraler Klassifizierer (letzte Insel eingesammelt). Strukturteil fertig +
