@@ -195,9 +195,11 @@ def test_person_combos_use_readable_popup():
         + [pc for _r, pc in page._mic_widgets]
     )
     assert page._camera_widgets and page._mic_widgets, "Zeilen nicht gebaut"
+    from gui.apple_style import COLORS
     for pc in person_combos:
         ss = pc.view().styleSheet()
-        assert "::item:selected" in ss and "#007AFF" in ss, (
+        # palette-unabhaengig: Akzent-Highlight muss da sein (egal welcher Hex)
+        assert "::item:selected" in ss and COLORS['accent_blue'] in ss, (
             "Person-Combo hat kein lesbares Popup (_apply_readable_popup fehlt)")
 
 
@@ -212,13 +214,14 @@ def test_shot_combo_uses_non_native_view_for_readable_popup():
     # (blau + weiß) erzwingt Qts Item-Rendering und macht die Zeile lesbar.
     from PyQt6.QtWidgets import QListView
     from gui.assignment_page import make_shot_combo, SHOT_CHOICES
+    from gui.apple_style import COLORS
 
     combo = make_shot_combo()
     view = combo.view()
     assert isinstance(view, QListView)
     ss = view.styleSheet()
     assert "::item:selected" in ss
-    assert "#007AFF" in ss   # accent_blue als Hintergrund der markierten Zeile
+    assert COLORS['accent_blue'] in ss  # Akzent als markierte-Zeile-Hintergrund (palette-unabh.)
     assert "white" in ss      # weißer Text darauf = lesbar
     assert combo.count() == len(SHOT_CHOICES)
 
