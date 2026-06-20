@@ -792,7 +792,10 @@ Verhaltensänderung**, damit das Web den Kern *aufruft* statt ihn nachzubauen
   `test_folgenschnitt_assignment_page.py` **unverändert** grün.
 - Keine Umbenennung, keine neuen Defaults, keine Semantik-Glättung.
 - **793 Tests grün, Pin-1 byte-identisch.** Auf `develop` (7062e19), nach
-  `feature/redesign` gemergt. **Offen:** Carl-Cross-Review.
+  `feature/redesign` gemergt. **Carl-Cross-Review grün (2026-06-20, keine
+  P1/P2).** P3: `_default_unused_clips_mode` bewusst NICHT nach `gui`
+  zurück-exportiert (kleinere Oberfläche). Slice-1-Auflage (Carl): expliziter
+  Test, dass das Qt-freie Engine-venv `core.folgenschnitt_assignment` laden kann.
 
 ### Marker + Vergleichbarkeit Keyboardstellen ↔ Sinnabschnitte (develop, 2026-06-18)
 
