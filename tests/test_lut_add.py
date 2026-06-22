@@ -24,6 +24,26 @@ def _w(p, text):
     return str(p)
 
 
+def test_load_cube_build_lookup_false_skips_table(tmp_path):
+    """build_lookup=False laedt LUT (size+data) OHNE die teure 256³-Tabelle — fuer
+    den Web-Grade (Engine braucht nur Texturdaten, kein apply_fast). Default unberuehrt."""
+    import numpy as np
+    src = _w(tmp_path / "x.cube", _VALID)
+    lp = lut_processor.LUTProcessor()
+    assert lp.load_cube(src, build_lookup=False) is True
+    assert lp.lut_size == 2 and lp.lut_data is not None
+    assert lp._flat_lookup is None                       # Tabelle NICHT gebaut
+    assert lp.apply_to_image(np.zeros((1, 1, 3), np.uint8)).shape == (1, 1, 3)  # Trilinear geht
+
+
+def test_load_cube_default_builds_table(tmp_path):
+    """Default (build_lookup=True) unveraendert: 256³-Tabelle gebaut, apply_fast geht."""
+    src = _w(tmp_path / "x.cube", _VALID)
+    lp = lut_processor.LUTProcessor()
+    assert lp.load_cube(src) is True
+    assert lp._flat_lookup is not None
+
+
 def test_valid_cube_is_copied(tmp_path):
     src = _w(tmp_path / "MyLook.cube", _VALID)
     luts = tmp_path / "luts"
