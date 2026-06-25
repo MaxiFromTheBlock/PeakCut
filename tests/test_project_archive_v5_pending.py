@@ -13,6 +13,8 @@ import json
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from core.import_model import ConfirmedImportSlots  # noqa: E402
@@ -21,7 +23,9 @@ from core.project_archive import (  # noqa: E402
     ARCHIVE_DIR,
     ARCHIVE_FILE,
     ANALYSIS_STATE_PENDING,
+    ProjectArchiveError,
     save_pending_import_archive,
+    save_project_archive,
     read_pending_import,
     load_project_archive,
 )
@@ -126,4 +130,67 @@ def test_read_pending_returns_none_for_non_pending(tmp_path):
     data["analysis_state"] = "analyzed"
     with open(p, "w") as f:
         json.dump(data, f)
+    assert read_pending_import(root) is None
+
+
+# --- Carl-P1: pending mit kaputtem/Zukunfts-Inhalt NIE still auf None (sonst faellt der
+# Analysepfad auf die Namensheuristik zurueck) -> kontrollierter ProjectArchiveError. ---
+
+def _write_pending_then_mutate(root, mutate):
+    m = _real_media(root)
+    save_pending_import_archive(root, _slots(m), material_sources=[root])
+    p = os.path.join(root, ARCHIVE_DIR, ARCHIVE_FILE)
+    data = _archive_json(root)
+    mutate(data)
+    with open(p, "w") as f:
+        json.dump(data, f)
+    return root
+
+
+def test_pending_future_schema_rejected(tmp_path):
+    # DATA-2 auch fuer den Pending-Reader: Zukunfts-Akte -> nicht still laden.
+    root = _write_pending_then_mutate(
+        str(tmp_path / "mat"),
+        lambda d: d.__setitem__("schema_version", CURRENT_SCHEMA_VERSION + 1))
+    with pytest.raises(ProjectArchiveError):
+        read_pending_import(root)
+
+
+def test_pending_missing_slots_rejected(tmp_path):
+    root = _write_pending_then_mutate(
+        str(tmp_path / "mat"), lambda d: d.pop("confirmed_import_slots"))
+    with pytest.raises(ProjectArchiveError):
+        read_pending_import(root)
+
+
+def test_pending_broken_slots_rejected(tmp_path):
+    root = _write_pending_then_mutate(
+        str(tmp_path / "mat"),
+        lambda d: d.__setitem__("confirmed_import_slots", "kaputt"))
+    with pytest.raises(ProjectArchiveError):
+        read_pending_import(root)
+
+
+def test_pending_mics_not_list_rejected(tmp_path):
+    # mics/videos muessen Listen sein, nicht still String-iteriert werden.
+    root = _write_pending_then_mutate(
+        str(tmp_path / "mat"),
+        lambda d: d["confirmed_import_slots"].__setitem__("mics", "MIC1.wav"))
+    with pytest.raises(ProjectArchiveError):
+        read_pending_import(root)
+
+
+def test_normal_save_does_not_preserve_pending(tmp_path):
+    # Carl-P2: Pending wird NICHT ueber den normalen Autosave konserviert. Beabsichtigt —
+    # der Analysepfad konsumiert Pending ueber read_pending_import() und speichert dann
+    # FINAL analysiert. Ein normaler save_project_archive() auf der pending-geladenen
+    # Session verliert confirmed_import_slots/material_sources/analysis_state.
+    root = str(tmp_path / "mat")
+    m = _real_media(root)
+    save_pending_import_archive(root, _slots(m), material_sources=[root])
+    session = load_project_archive(root, {"fps": 25})
+    save_project_archive(session, root=root)
+    data = _archive_json(root)
+    assert "confirmed_import_slots" not in data
+    assert data.get("analysis_state") is None
     assert read_pending_import(root) is None

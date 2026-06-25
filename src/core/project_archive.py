@@ -385,7 +385,9 @@ def build_pending_import_payload(root, slots, material_sources=None, *,
 def save_pending_import_archive(root, slots, material_sources=None, *,
                                 config=None, guest_name=None):
     """Schreibt die v5-Pending-Akte atomar nach root/.peakcut/project.json.
-    Schreibt NIE ueber eine Zukunfts-Akte (DATA-2)."""
+    Schreibt NIE ueber eine Zukunfts-Akte (DATA-2). Carl-P2: root realpath-normalisiert,
+    bevor _rel()/archive_dir gerechnet werden (stabiler/reproduzierbarer als roher Pfad)."""
+    root = os.path.realpath(root)
     archive_dir = os.path.join(root, ARCHIVE_DIR)
     os.makedirs(archive_dir, exist_ok=True)
     archive_path = os.path.join(archive_dir, ARCHIVE_FILE)
@@ -396,10 +398,28 @@ def save_pending_import_archive(root, slots, material_sources=None, *,
     return archive_path
 
 
+def _require_str_or_none(value, label):
+    if value is not None and not isinstance(value, str):
+        raise ProjectArchiveError(f"Pending-Akte: {label} ungueltig (kein Pfad-String)")
+    return value
+
+
+def _require_str_list(value, label):
+    if not isinstance(value, list):
+        raise ProjectArchiveError(f"Pending-Akte: {label} muss eine Liste sein")
+    if any(not isinstance(p, str) for p in value):
+        raise ProjectArchiveError(f"Pending-Akte: {label} enthaelt Nicht-Strings")
+    return value
+
+
 def read_pending_import(archive_path_or_root):
     """Liest eine v5-Pending-Import-Akte -> {slots, material_sources, analysis_state}
-    mit ABSOLUTEN Pfaden. Kein pending-Import (alte/normale/analysierte Akte) -> None.
-    Reiner Reader fuer den Analyse-Schnitt (iii); baut KEINE Session."""
+    mit ABSOLUTEN Pfaden. Reiner Reader fuer den Analyse-Schnitt (iii); baut KEINE Session.
+
+    Carl-P1: Datei fehlt / analysis_state != "pending" (alt/normal/analysiert/unbekannt)
+    -> None. Aber sobald die Akte sich ALS pending deklariert, wird kaputter/Zukunfts-
+    Inhalt NIE still ignoriert (sonst faellt der Analysepfad auf die Namensheuristik
+    zurueck) -> kontrollierter ProjectArchiveError. DATA-2 bleibt damit auch hier intakt."""
     archive_path = _resolve_archive_path(archive_path_or_root)
     if not os.path.isfile(archive_path):
         return None
@@ -410,19 +430,31 @@ def read_pending_import(archive_path_or_root):
         raise ProjectArchiveError(f"Projektakte unlesbar: {e}") from e
     if not isinstance(data, dict) or data.get("analysis_state") != ANALYSIS_STATE_PENDING:
         return None
+    # Ab hier ALS pending deklariert -> strikt validieren, nie still auf None.
+    _assert_schema_readable(data)  # DATA-2: Zukunfts-Akte -> ProjectArchiveError
     cis = data.get("confirmed_import_slots")
     if not isinstance(cis, dict):
-        return None
+        raise ProjectArchiveError(
+            "Pending-Akte ohne gueltige confirmed_import_slots")
+    marker = _require_str_or_none(cis.get("marker"), "marker")
+    mix = _require_str_or_none(cis.get("mix"), "mix")
+    transcript = _require_str_or_none(cis.get("transcript"), "transcript")
+    mics = _require_str_list(cis.get("mics", []), "mics")
+    videos = _require_str_list(cis.get("videos", []), "videos")
+    sources_raw = data.get("material_sources")
+    if sources_raw is not None:
+        _require_str_list(sources_raw, "material_sources")
+
     root = os.path.dirname(os.path.dirname(archive_path))
     from .import_model import ConfirmedImportSlots
     slots = ConfirmedImportSlots(
-        marker=_abs(cis.get("marker"), root) if cis.get("marker") else None,
-        mix=_abs(cis.get("mix"), root) if cis.get("mix") else None,
-        mics=tuple(_abs(p, root) for p in cis.get("mics", [])),
-        videos=tuple(_abs(p, root) for p in cis.get("videos", [])),
-        transcript=_abs(cis.get("transcript"), root) if cis.get("transcript") else None,
+        marker=_abs(marker, root) if marker else None,
+        mix=_abs(mix, root) if mix else None,
+        mics=tuple(_abs(p, root) for p in mics),
+        videos=tuple(_abs(p, root) for p in videos),
+        transcript=_abs(transcript, root) if transcript else None,
     )
-    sources = [_abs(s, root) for s in (data.get("material_sources") or [])]
+    sources = [_abs(s, root) for s in (sources_raw or [])]
     return {"slots": slots, "material_sources": sources,
             "analysis_state": data.get("analysis_state")}
 
