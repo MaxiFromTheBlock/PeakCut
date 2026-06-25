@@ -95,6 +95,31 @@ def test_is_mix_track_rejects_false_positives(path):
     assert not is_mix_track(path)
 
 
+# B1 (Carl): Recorder-Mixdown-Praefix p\d+mix / p\d+mixdown erkennen — die HM-Studio-
+# Konvention "P8Mix" (ein Token) rutschte sonst als Mic durch -> Phasing-Wurzel (#71a).
+@pytest.mark.parametrize(
+    "path",
+    [
+        "_20260624_HotelMatze_JohannaKlug_P8Mix_2026_0623_1009.WAV",
+        "P8Mix.wav",
+        "P8Mixdown.wav",
+        "P4Mix.mp3",
+        "recording_p16mix.wav",
+    ],
+)
+def test_is_mix_track_matches_recorder_device_prefix(path):
+    assert is_mix_track(path)
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["remix.wav", "Summer_Remix_V1.wav", "p8mixer.wav", "pmix.wav", "8mix.wav"],
+)
+def test_is_mix_track_device_prefix_no_false_positives(path):
+    # ENG: braucht p + Ziffer(n) + "mix"/"mixdown" als ganzes Token. remix/mixer/pmix/8mix raus.
+    assert not is_mix_track(path)
+
+
 @pytest.mark.parametrize(
     "path",
     [

@@ -34,6 +34,11 @@ _TRANSCRIPT_EXTENSIONS = frozenset({".docx"})
 _MIX_TOKENS = frozenset({"mix", "mixdown"})
 _MARKER_TOKENS = frozenset({"keyboard", "keys", "klavier", "marker"})
 _TOKEN_SPLIT = re.compile(r"[^a-z0-9]+")
+# B1 (Carl): Recorder-Mixdown-Praefix als EIN Token — HM-Studio exportiert den Mix als
+# "P8Mix" (P8 = Zoom/P8-Recorder), der sonst als Mic durchrutscht -> #71a-Phasing. ENGES
+# Muster (p + Ziffern + "mix"/"mixdown" als GANZES Token), bewusst KEINE Suffix-Regel,
+# damit "remix"/"mixer" nicht faelschlich als Mix gelten.
+_MIX_DEVICE_RE = re.compile(r"^p\d+mix(?:down)?$")
 
 
 @dataclass(frozen=True)
@@ -88,7 +93,9 @@ def is_transcript_path(path) -> bool:
 
 
 def is_mix_track(path) -> bool:
-    return any(token in _MIX_TOKENS for token in _tokens(path))
+    return any(
+        token in _MIX_TOKENS or _MIX_DEVICE_RE.match(token) for token in _tokens(path)
+    )
 
 
 def is_marker_track(path) -> bool:
