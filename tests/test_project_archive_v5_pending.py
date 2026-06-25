@@ -180,6 +180,37 @@ def test_pending_mics_not_list_rejected(tmp_path):
         read_pending_import(root)
 
 
+def test_confirm_write_rejects_analyzed_akte(tmp_path):
+    # Carl-P1b: save_pending darf eine bereits analysierte/normale Akte NIE auf leere
+    # Pending-Sektionen zuruecksetzen -> ProjectArchiveError, Akte byte-unveraendert.
+    root = str(tmp_path / "mat")
+    m = _real_media(root)
+    save_pending_import_archive(root, _slots(m), material_sources=[root])
+    p = os.path.join(root, ARCHIVE_DIR, ARCHIVE_FILE)
+    data = _archive_json(root)
+    data.pop("analysis_state")          # -> analysiert/normal (kein pending mehr)
+    with open(p, "w") as f:
+        json.dump(data, f)
+    with open(p, "rb") as f:
+        before = f.read()
+    with pytest.raises(ProjectArchiveError):
+        save_pending_import_archive(root, _slots(m), material_sources=[root])
+    with open(p, "rb") as f:
+        assert f.read() == before       # unveraendert
+
+
+def test_confirm_write_updates_existing_pending(tmp_path):
+    # Carl-P1b: eine vorhandene PENDING-Akte darf aktualisiert werden (zweites Confirm).
+    root = str(tmp_path / "mat")
+    m = _real_media(root)
+    save_pending_import_archive(root, _slots(m), material_sources=[root])
+    slots2 = ConfirmedImportSlots(
+        marker=m["MIC1.wav"], mics=(m["MIC2.wav"],), videos=(m["Cam01.mp4"],))
+    save_pending_import_archive(root, slots2, material_sources=[root])
+    pend = read_pending_import(root)
+    assert os.path.basename(pend["slots"].marker) == "MIC1.wav"
+
+
 def test_normal_save_does_not_preserve_pending(tmp_path):
     # Carl-P2: Pending wird NICHT ueber den normalen Autosave konserviert. Beabsichtigt —
     # der Analysepfad konsumiert Pending ueber read_pending_import() und speichert dann

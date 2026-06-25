@@ -382,16 +382,36 @@ def build_pending_import_payload(root, slots, material_sources=None, *,
     }
 
 
+def _assert_pending_write_allowed(archive_path):
+    """Carl-P1b: confirm darf nur schreiben, wenn es KEINE Akte gibt ODER bereits eine
+    PENDING-Akte (zweites Confirm = Update). Eine normale/analysierte Akte NIE auf leere
+    Pending-Sektionen zuruecksetzen -> ALREADY_ANALYZED."""
+    if not os.path.isfile(archive_path):
+        return
+    try:
+        with open(archive_path) as f:
+            existing = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return  # kaputte Akte -> Schreiben darf reparieren (wie _assert_archive_write_allowed)
+    if isinstance(existing, dict) and existing.get("analysis_state") == ANALYSIS_STATE_PENDING:
+        return  # Pending-Update erlaubt
+    raise ProjectArchiveError(
+        "ALREADY_ANALYZED: vorhandene Akte ist bereits analysiert/normal — Confirm wuerde "
+        "sie auf leere Pending-Sektionen zuruecksetzen")
+
+
 def save_pending_import_archive(root, slots, material_sources=None, *,
                                 config=None, guest_name=None):
-    """Schreibt die v5-Pending-Akte atomar nach root/.peakcut/project.json.
-    Schreibt NIE ueber eine Zukunfts-Akte (DATA-2). Carl-P2: root realpath-normalisiert,
-    bevor _rel()/archive_dir gerechnet werden (stabiler/reproduzierbarer als roher Pfad)."""
+    """Schreibt die v5-Pending-Akte atomar nach root/.peakcut/project.json. Schreibt NIE
+    ueber eine Zukunfts-Akte (DATA-2) und NIE ueber eine analysierte Akte (Carl-P1b);
+    eine vorhandene Pending-Akte darf aktualisiert werden. Carl-P2: root realpath-
+    normalisiert, bevor _rel()/archive_dir gerechnet werden."""
     root = os.path.realpath(root)
     archive_dir = os.path.join(root, ARCHIVE_DIR)
     os.makedirs(archive_dir, exist_ok=True)
     archive_path = os.path.join(archive_dir, ARCHIVE_FILE)
     _assert_archive_write_allowed(archive_path)
+    _assert_pending_write_allowed(archive_path)
     payload = build_pending_import_payload(
         root, slots, material_sources, config=config, guest_name=guest_name)
     atomic_io.write_json_atomic(archive_path, payload, indent=2, ensure_ascii=False)
