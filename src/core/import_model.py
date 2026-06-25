@@ -30,7 +30,8 @@ class ImportEvidence:
     duration_ms: int | None = None
     episode_length: bool = False        # im Dauer-Cluster (Aufnahme), nicht Bibliothek/SFX
     is_video: bool = False
-    impulse_density: float | None = None  # Marker-Signal: viel Stille + harte Impulse
+    silence_ratio: float | None = None    # Anteil quasi-Stille (Marker + leerer Kanal beide hoch)
+    peak_level: float | None = None       # max. Impuls-Pegel (Marker laut, leerer Kanal ~0)
     speech_likeness: float | None = None  # Speech-Signal: kontinuierliches Sprachmuster
     mix_density: float | None = None      # Mix-Signal: summierter, durchgehender Vollpegel
     name_hint: str | None = None          # Namens-Token-Hinweis (ROLE_*), NUR Zusatzsignal
