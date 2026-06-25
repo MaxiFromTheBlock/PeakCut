@@ -34,7 +34,8 @@ def test_full_material_enables_everything():
 def test_no_marker_disables_only_keyboardstellen():
     # Max-Kernpunkt: ohne Marker gibt es trotzdem Folgenschnitt + Screenshots (+ Sinnabschnitte)
     slots = ConfirmedImportSlots(
-        marker=None, mix="P8Mix.wav", mics=("MIC1.wav",), videos=("Cam01.mp4",), transcript="t.json",
+        marker=None, mix="P8Mix.wav", mics=("MIC1.wav",),
+        videos=("Cam01.mp4", "Cam02.mp4"), transcript="t.json",  # >=2 Kameras
     )
     caps = compute_capabilities(slots)
     assert caps.enabled(CAP_SCREENSHOTS)
@@ -57,7 +58,7 @@ def test_single_video_only_enables_just_screenshots():
 def test_mics_without_mix_enables_with_warning():
     # Mix ist OPTIONAL: Folgenschnitt/Sinnabschnitte gehen ueber echte Mics, mit Hinweis.
     slots = ConfirmedImportSlots(
-        mics=("MIC1.wav", "MIC2.wav"), videos=("Cam01.mp4",),  # kein Mix, kein Marker, kein Transkript
+        mics=("MIC1.wav", "MIC2.wav"), videos=("Cam01.mp4", "Cam02.mp4"),  # >=2 Kameras, kein Mix/Marker/Transkript
     )
     caps = compute_capabilities(slots)
     assert caps.enabled(CAP_FOLGENSCHNITT)
@@ -65,6 +66,17 @@ def test_mics_without_mix_enables_with_warning():
     assert caps.enabled(CAP_SINNABSCHNITTE)
     assert any("Transkript" in w for w in caps.get(CAP_SINNABSCHNITTE).warnings)  # noch kein Transkript
     assert not caps.enabled(CAP_KEYBOARDSTELLEN)
+
+
+def test_folgenschnitt_needs_two_cameras():
+    # Max-Entscheid: Folgenschnitt erst ab 2 Kameras (Umschnitt zwischen Winkeln).
+    one_cam = ConfirmedImportSlots(mics=("MIC1.wav",), videos=("Cam01.mp4",))
+    caps1 = compute_capabilities(one_cam)
+    assert not caps1.enabled(CAP_FOLGENSCHNITT)
+    assert "weitere Kamera" in caps1.get(CAP_FOLGENSCHNITT).missing
+    assert caps1.enabled(CAP_SCREENSHOTS)  # Screenshots gehen trotzdem (1 Kamera)
+    two_cam = ConfirmedImportSlots(mics=("MIC1.wav",), videos=("Cam01.mp4", "Cam02.mp4"))
+    assert compute_capabilities(two_cam).enabled(CAP_FOLGENSCHNITT)
 
 
 def test_empty_material_enables_nothing():

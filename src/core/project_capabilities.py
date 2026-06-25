@@ -71,19 +71,21 @@ def compute_capabilities(slots: ConfirmedImportSlots) -> ProjectCapabilities:
         evidence=("Marker-Spur bestaetigt",) if has_marker else (),
     )
 
-    # Folgenschnitt (Multicam-Rohschnitt): Videos + eine Sprach-Tonquelle. Kein Mix -> Mics-Fallback.
+    # Folgenschnitt (Multicam-Rohschnitt): braucht das UMSCHALTEN zwischen Winkeln -> >=2
+    # Kameras (Max-Entscheid 25.06.) + eine Sprach-Tonquelle. Kein Mix -> Mics-Fallback.
+    has_multicam = len(slots.videos) >= 2
     fs_missing = []
-    if not has_video:
-        fs_missing.append("Video")
+    if not has_multicam:
+        fs_missing.append("2 Kameras" if len(slots.videos) == 0 else "weitere Kamera")
     if not has_speech:
         fs_missing.append("Sprecher-Mics oder Mix")
     fs_warnings = []
-    if has_video and has_speech and not has_mix:
+    if has_multicam and has_speech and not has_mix:
         fs_warnings.append("kein Mix — Ton/Sync ueber echte Mics")
     caps[CAP_FOLGENSCHNITT] = Capability(
-        CAP_FOLGENSCHNITT, enabled=(has_video and has_speech),
+        CAP_FOLGENSCHNITT, enabled=(has_multicam and has_speech),
         missing=tuple(fs_missing), warnings=tuple(fs_warnings),
-        evidence=(f"{len(slots.videos)} Video(s) + Sprach-Ton",) if (has_video and has_speech) else (),
+        evidence=(f"{len(slots.videos)} Kameras + Sprach-Ton",) if (has_multicam and has_speech) else (),
     )
 
     # Sinnabschnitte: Sprach-Ton (Mix oder Mics); Transkript fehlt -> wird erzeugt (kein Blocker).
