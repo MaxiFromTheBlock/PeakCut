@@ -45,8 +45,9 @@ class _FakeSession:
 
 
 def test_constants_are_frozen():
-    # Slice B 2026-06-03: bump auf v3 (+ folgenschnitt_unused_clips_mode).
-    assert CURRENT_SCHEMA_VERSION == 4
+    # Import Slice 3 (Carl-Gate): bump auf v5 (confirmed_import_slots + material_sources
+    # + analysis_state). v4-Slots bleiben additiv.
+    assert CURRENT_SCHEMA_VERSION == 5
     assert ARCHIVE_DIR == ".peakcut"
     assert ARCHIVE_FILE == "project.json"
 
