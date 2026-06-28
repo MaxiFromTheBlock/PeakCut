@@ -114,22 +114,62 @@ def ffprobe_duration_ms(path: str):
         return None
 
 
-def audio_silence_peak(path: str):
-    """Duenne Inhalts-Evidence aus einem kurzen Ausschnitt (<=120s): (Stille-Anteil,
-    Impuls-Pegel). Marker = hohe Stille + hoher Pegel; leerer Kanal = hohe Stille + ~0
-    Pegel; Speech/Mix = niedrige Stille. None bei Fehler."""
+def audio_silence_peak(path: str, *, windows: int = 8, window_s: int = 15):
+    """Duenne Inhalts-Evidence (Stille-Anteil, Impuls-Pegel) — HYBRID (Spec 2026-06-28):
+    verstreute Fenster ueber die GANZE Datei (silence = Mittel, peak = max). Ist ein langer
+    Kandidat sehr still, zeigt aber noch keinen Impuls, ein bounded Voll-Peak-Pass NUR fuer
+    diese — so werden spaerliche Fusspedal-Klicks (z.B. erst nach 120s) gefangen, ohne kurze
+    SFX teuer zu scannen (die sind nicht Episoden-Laenge -> diese Funktion wird fuer sie gar
+    nicht gerufen). Marker = hohe Stille + hoher Pegel; leerer Kanal = hohe Stille + ~0;
+    Speech/Mix = niedrige Stille. None bei Fehler."""
     try:
         import soundfile as sf
         import numpy as np
         with sf.SoundFile(path) as f:
-            frames = min(len(f), f.samplerate * 120)
-            data = f.read(frames, dtype="float32")
-        if getattr(data, "ndim", 1) > 1:
-            data = data.mean(axis=1)
-        if len(data) == 0:
-            return None
-        a = np.abs(data)
-        return float((a < 0.01).mean()), float(a.max())
+            sr = f.samplerate
+            total = len(f)
+            wn = int(window_s * sr)
+            if total <= 0 or sr <= 0:
+                return None
+            # Kurze Datei: einmal alles (kein Seek-Aufwand).
+            if wn <= 0 or total <= windows * wn:
+                data = f.read(total, dtype="float32")
+                if getattr(data, "ndim", 1) > 1:
+                    data = data.mean(axis=1)
+                if len(data) == 0:
+                    return None
+                a = np.abs(data)
+                return float((a < 0.01).mean()), float(a.max())
+            # Verstreute Fenster ueber die ganze Datei.
+            step = (total - wn) / (windows - 1)
+            silences: list = []
+            peak = 0.0
+            for k in range(windows):
+                f.seek(int(k * step))
+                data = f.read(wn, dtype="float32")
+                if getattr(data, "ndim", 1) > 1:
+                    data = data.mean(axis=1)
+                if len(data) == 0:
+                    continue
+                a = np.abs(data)
+                silences.append(float((a < 0.01).mean()))
+                peak = max(peak, float(a.max()))
+            if not silences:
+                return None
+            silence = float(np.mean(silences))
+            # Hybrid: sehr still, aber noch kein Impuls -> bounded Voll-Pass nur fuer das
+            # Maximum (faengt einen einzelnen, spaerlichen Klick irgendwo in der Folge).
+            if silence >= MARKER_SILENCE_THRESHOLD and peak < MARKER_PEAK_THRESHOLD:
+                f.seek(0)
+                block = max(1, sr * 30)
+                while True:
+                    chunk = f.read(block, dtype="float32")
+                    if len(chunk) == 0:
+                        break
+                    if getattr(chunk, "ndim", 1) > 1:
+                        chunk = chunk.mean(axis=1)
+                    peak = max(peak, float(np.abs(chunk).max()))
+            return silence, peak
     except Exception:
         return None
 

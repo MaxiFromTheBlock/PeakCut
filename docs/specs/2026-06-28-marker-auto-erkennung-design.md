@@ -53,23 +53,33 @@ interaktiven Scan beim Öffnen.
 
 **(c) Status quo.** Marker dünn lassen, Confirm + Warnung fangen es. Kein Code.
 
-## Vorschlag
+## Vorschlag — HYBRID (v1, mit Carl abgestimmt 28.06.)
 
-**(a)** für den interaktiven Scan: verstreute Stichprobe, bounded cost, fängt genau den
-Ilka-Fall. `audio_silence_peak` bekommt eine Fenster-Strategie; `_suggest`-Schwellen
-(`MARKER_SILENCE_THRESHOLD` 0.85 / `MARKER_PEAK_THRESHOLD` 0.2) bleiben erstmal.
+Nicht nur reine verstreute Stichprobe, sondern zweistufig:
+1. **Verstreute Fenster über die ganze Datei** (z. B. 8×15 s) → `silence_ratio` = Mittel,
+   `peak` = **max** über die Fenster.
+2. **Bounded Voll-Peak-Pass NUR für „verdächtige" Kandidaten:** ist ein langer Kandidat
+   **sehr still** (`silence >= MARKER_SILENCE_THRESHOLD`), zeigt aber **noch keinen Impuls**
+   (`peak < MARKER_PEAK_THRESHOLD`), dann blockweise über die ganze Datei NUR das Maximum
+   suchen — fängt **spärliche Fußpedal-Klicks**. Greift nur für diese wenigen stillen
+   Episoden-Kandidaten; **die 188 SFX werden nie teuer gescannt** (kurz → nicht
+   Episoden-Länge → `audio_silence_peak` wird für sie gar nicht erst gerufen).
 
-Optionaler v2-Feinschliff (mit Carl, falls nötig): Marker = wenige **scharfe** Transienten
-(Impuls-Dichte/Anstiegszeit), um ein lautes-aber-kontinuierliches Signal sauberer vom
-Fußpedal zu trennen. Erst, wenn (a) in der Praxis Fehlgriffe zeigt.
+`_suggest`-Schwellen (`MARKER_SILENCE_THRESHOLD` 0.85 / `MARKER_PEAK_THRESHOLD` 0.2 /
+`EMPTY_PEAK_THRESHOLD` 0.05) bleiben. Name bleibt Evidence, Confirm bleibt Wahrheit.
 
-## Gate / Test
+Optionaler v2 (nur falls v1 in der Praxis Fehlgriffe zeigt): Marker = wenige **scharfe**
+Transienten (Impuls-Dichte/Anstiegszeit), um lautes-aber-kontinuierliches Signal sauberer
+vom Fußpedal zu trennen.
 
-- Audio-Heuristik = **Carls Gebiet → 4-Augen**, kein Solo-Bau.
-- TDD am Scanner: injizierbares `audio_signal`/`probe_duration` schon vorhanden
-  (`scan_material(paths, audio_signal=…)`) → Fenster-Strategie unit-testbar ohne echtes Audio.
-- **Real-Smoke** an Ilka `1_Material`: MIC4 wird jetzt als Marker **vorgeschlagen**
-  (Confidence-Badge ok), die übrigen Rollen unverändert.
+## Gate / Test (Carl)
+
+- Audio-Heuristik = **Carls Gebiet → 4-Augen**.
+- **Klick erst nach 120 s wird erkannt** (der Kernfall — verstreute Fenster + Voll-Pass).
+- **Leerer langer Kanal bleibt `ignore`** (still + kein Impuls auch nach Voll-Pass → Peak ~0).
+- **Speech/Mix wird nicht Marker** (niedrige Stille → kein Marker, egal welcher Peak).
+- **Real-Smoke Ilka `1_Material`:** MIC4 wird als Marker **vorgeschlagen**, **P8Mix bleibt Mix**,
+  übrige Rollen unverändert.
 - Voller Desktop-Lauf + `test_audio_routing_safety` (Pin-1) grün — darf sich nicht bewegen.
 
 ## Verwandt
