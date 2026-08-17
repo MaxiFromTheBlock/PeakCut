@@ -6,16 +6,36 @@
 >
 > **„#76", „#77", „G1", „ARCH-1" usw. sind nur Namen/Label — KEINE Aufgabenzahl.**
 >
-> Stand: 2026-06-18 · ~21 offene Punkte · Quelle: ultracode-Sweep (Repo-Docs,
-> Code-Kommentare, GitHub-Issues=0, Memory, Notion=0), dedupliziert.
-> (Putzfirma-Hygiene-Pass 2026-06-16: Doku-Entrümpelung erledigt — siehe unten.)
+> Stand: **2026-08-17** (davor 2026-06-18) · Quelle: Carl-Gesundheitscheck 12.08. +
+> Ultracode-Sweep 17.08., Befunde am Code gegengeprüft.
 >
 > Je Punkt: **[Aufwand S/M/L/XL]** · **braucht:** Carl-Plan / Max-Entscheidung / Max-Material / nichts.
+>
+> ### ⚠️ Wo die Arbeit gerade wirklich liegt
+> Seit Juli läuft die Hauptarbeit an der **neuen Oberfläche** im Schwester-Repo
+> `PeakCut-web`, nicht an diesem Kern. **Max-Entscheid 2026-08-17: Sie soll die
+> PyQt-App ersetzen** — Paketierung, Selbst-Start der Engine und CheckIn-Anbindung
+> sind damit echte Aufgaben. Die dortige Reihenfolge steht in
+> `PeakCut/App/docs/CONTEXT.md` → „Aktuelle Prioritaeten". Todos, die **nur** die
+> neue Oberfläche betreffen, gehören nicht in diese Liste; alles was den **Kern**
+> anfasst, schon.
 
 ---
 
 ## 🐛 Bugs
-- _(aktuell keine offenen)_
+- **Desktop-Export und Web-Export liefern unterschiedliche Dateisätze** `[M]` · braucht: Carl-Plan
+  **NEU 2026-08-17 (Ultracode-Sweep).** Der Export-Knopf der PyQt-App schreibt **keine**
+  Sinnabschnitt-Dateien (`gui/workers.py:295-298` — bedingter Pfad), die Web-Engine
+  schreibt sie **immer** (`PeakCut-web/engine/engine_core.py:290-292`). Der Byte-
+  Paritäts-Vergleich kann das strukturell **nicht** sehen, weil sein Desktop-Teil die
+  Bedingung umgeht — er meldet grün, obwohl die Ergebnisse sich unterscheiden.
+  Fällt sauber mit ARCH-1 (eine Export-Steuerung) weg; bis dahin ist es eine Falle.
+- **Gastname kommt nicht aus dem Kern zurück** `[S]` · braucht: nichts
+  **NEU 2026-08-17.** `core/project_archive.py:478-479` gibt den gespeicherten
+  Gastnamen beim Analyse-Abschluss nicht heraus, deshalb verpufft er im Web-Pfad
+  (dort baut `analyze_runner.py:159-162` die Akte danach frisch auf). Betrifft den
+  Kern, nicht nur die Oberfläche — der Gastname färbt die Sprecher-Vorbelegung **vor**
+  der Analyse, ist also nicht nachreichbar. Folge sonst: Exportordner „Unknown".
 
 ## 🔧 Funktions-Ausbau (nächste Features)
 - **Sinnabschnitt-Grenzen auf Satzanfang/-ende einrasten** `[M]` · braucht: Carl-Plan
@@ -29,15 +49,17 @@
   „an fertiger Aussage enden", an echtem Material gegenchecken; **(b) sauber** — echtes
   Satz-Signal besorgen (besseres Transkript/Descript oder KI-Satzgrenzen-Schritt).
   Erst (a), dann ggf. (b). **NICHT** die Aufhänger-Wahl (bester Einstiegssatz) → #70.
-- **Import-Umbau: feste Slots statt Namensraten** (#37/#77) `[XL]` · braucht: Carl-Plan — **STRUKTURTEIL ERLEDIGT, ruht**
-  Eigenes Mix-Feld statt Mix-in-mic_tracks, Schema v4 rückwärtskompatibel, ein
-  zentraler Klassifizierer (letzte Insel eingesammelt). Strukturteil fertig +
-  Carl-Review grün: Task 0/1/2/3/4/6 (756 Tests, Pin-1 stabil). **Task 5 „Mix aus
-  mic_tracks strippen" geparkt** (Pin-1-riskant + kosmetisch, weil XMLExporter die
-  Audiospuren noch direkt aus mic_tracks baut), **Import-UI (Task 7) + Transcript
-  (Task 8) pausiert** bis die Produkt-/Kunden-Richtung klar ist (Marker-Pflicht?
-  Erkennung per Audio-Inhalt? für wen?). Scope-Entscheidung 2026-06-16 im Plan.
-  Nächste Energie → Produkt-Validierung (#70 + Cutter-Sign-off).
+- **Import-Umbau: feste Slots statt Namensraten** (#37/#77) `[XL]` · braucht: nichts — **IM KERN GEBAUT, in der PyQt-App NICHT VERDRAHTET**
+  **Korrigiert 2026-08-17.** Die alte Notiz („Strukturteil erledigt, Rest geparkt")
+  ist überholt: Der capability-driven Import ist im Kern **fertig** —
+  `core/material_scanner.py` (Rollen-Vorschlag inkl. Marker-Erkennung am Signal),
+  `core/project_capabilities.py` (7 verriegelte Tests), `core/import_model.py`,
+  `core/import_project.py`, Schema **v5** mit PENDING-Zwischenzustand
+  (`project_archive.read_pending_import`). Alles auf allen drei Zweigen (Merge `deb6265`).
+  **Was fehlt:** `material_scanner` hat in `App/src` **keinen einzigen Aufrufer**. Die
+  PyQt-App rät weiter per Dateiname (`gui/main_window.py:219-236`). Genutzt wird der
+  Pivot bisher nur von der neuen Oberfläche. → Verdrahten + AUD-1 in einem Rutsch.
+  Weiter geparkt: Task 5 „Mix aus `mic_tracks` strippen" (Pin-1-riskant + kosmetisch).
 - **Prompt-Tuning für die KI-Clip-Grenzen** (#70) `[L]` · braucht: Max-Material
   Few-Shot-Beispiele + Anti-Muster + HM-Stilprofil, messbar über A/B-Vergleich.
   Beinhaltet die **Aufhänger-Wahl** (welcher Satz ist der beste Einstieg — z. B.
@@ -65,8 +87,14 @@
   Worker-Handle-Disziplin (Neustart ohne sauberen Abbau), echte QThread-Tests
   (TEST-1). Durch #76 teilweise entschärft, Rest offen.
 - **Letzte Klassifizierer-Insel zusammenführen** (AUD-1) `[S]` · braucht: nichts
-  „Ist das Mix/Keyboard/Mic?" wird noch an mehreren Stellen unterschiedlich
-  beantwortet. *Kann im Import-Umbau (#77) aufgehen.*
+  **Präzisiert 2026-08-17 (selbst nachgegrept, vorher zu pauschal formuliert):** Der
+  ganze `core/`-Baum geht inzwischen über `import_classifier` — `audio_routing:52`,
+  `speaker_activity:52-57`, `guest_name:18`, `material_scanner:16`, `import_model:13`,
+  `project:43`. **Übrig ist GENAU EINE Insel:** `gui/main_window.py:231`
+  (`_categorize_files`) prüft weiter inline `any(kw in filename for kw in
+  ["keyboard","keys","klavier"])` und kennt weder das Mix-Gerätemuster (P8Mix) noch
+  die Inhalts-Erkennung. Sinnvoll zusammen mit dem Verdrahten von
+  `core/material_scanner.py` in die PyQt-App zu erledigen (siehe Punkt darunter).
 
 ## 🧹 Hygiene & Wartung
 - **Versions-Drift in build.sh / PeakCut.spec** (stehen auf 2.9.0, App ist 2.11) `[S]` · braucht: Max-Entscheidung

@@ -377,27 +377,60 @@ Shortcuts sind nur auf der Review-Page aktiv (Page Index 3).
 
 ---
 
-## File Naming Conventions
+## Rollen-Erkennung (Marker / Mix / Mic / Kamera)
 
-- **Keyboard Audio**: Dateiname enthält "keyboard", "keys", oder "klavier"
-- **Reference Audio**: Dateiname enthält "mix"
+**Achtung: zwei Wege im Repo, bewusst — nicht verwechseln.**
+
+### 1. Namens-Heuristik (`core/import_classifier.py`) — der Weg, den die PyQt-App geht
+- **Marker/Keyboard**: Dateiname enthält `keyboard`, `keys` oder `klavier`
+- **Mix/Referenz**: Token `mix`/`mixdown` **oder** Gerätemuster `_MIX_DEVICE_RE = ^p\d+mix(?:down)?$`
+  (fängt die HM-Studio-Konvention „P8Mix" — Commit `91cc8ae`, Wurzelfix des Phasing-Bugs
+  bei Johanna Klug). `remix`/`mixer`/`pmix` bleiben bewusst draußen.
 - **Videos**: `.mp4` oder `.mov`
+- Tokenisierung splittet auf nicht-alphanumerisch (`import_classifier._tokens`).
+
+### 2. Inhalts-Erkennung (`core/material_scanner.py`) — der neue, robustere Weg
+Erkennt den Marker **am Signal statt am Namen**: viel Stille + laute Einzelimpulse
+(`material_scanner.py:56-63`, Commit `4fbb3d1` „Marker-Auto-Erkennung Hybrid" —
+verstreute Fenster + bounded Voll-Pass). Der Test benennt die Datei absichtlich
+`MIC4.wav` (`tests/test_marker_detection_hybrid.py:65-69`), weil genau dieser reale
+HM-Fall über den Namen NICHT erkennbar war.
+
+**Status ehrlich:** `material_scanner` hat in `App/src` **noch keinen Aufrufer** —
+die PyQt-App rät weiterhin über den Dateinamen (`gui/main_window.py:219-236`).
+Genutzt wird die Inhalts-Erkennung bisher nur von der Web-Oberfläche
+(`PeakCut-web`, Bestätigen-Schritt). Das Zusammenführen ist offen (BACKLOG: AUD-1).
 
 ---
 
 ## Git Workflow
 
-### Branch-Struktur
+### Branch-Struktur (Stand 2026-08-17)
 ```
-main     ← Stable Releases
-develop  ← Aktive Entwicklung (hier arbeiten)
+main              ← Stable Releases
+develop           ← Integrationszweig
+feature/redesign  ← HIER WIRD SEIT 2026-06-22 GEARBEITET (= Max' Produktionsstand)
 ```
 
+**Wichtig — warum `feature/redesign` und nicht `develop`:** Der Launcher in
+`/Applications/PeakCut.app` ruft den Repo-Code **direkt** auf. Was ausgecheckt ist,
+ist die produktiv laufende App. Max arbeitet seit dem 25.06. aus `feature/redesign`;
+der Zweig ist also kein Nebengleis, sondern der scharfe Stand.
+
+Seit dem Merge `deb6265` (2026-08-17) sind **alle drei Zweige inhaltlich identisch**
+(845 Tests grün, CI grün). Vorher lag `feature/redesign` 18 Commits vorn und trug als
+einziger Schema v5 + die Import-Pivot-Module — ein Zweigwechsel machte damit sowohl
+Max' Produktionsakte unlesbar als auch die Web-Oberfläche im Schwester-Repo
+`PeakCut-web` unstartbar. **Nicht wieder auseinanderlaufen lassen.**
+
 ### Regeln
-- **Kleine Features**: Direkt auf `develop`
+- **Kleine Features**: Direkt auf dem Arbeitszweig
 - **Große Features** (>1 Tag): Neuer `feature/name` Branch
 - **Nach jeder Änderung**: Committen!
 - **Commit-Message**: Kurz, prägnant, mit Co-Author
+- **main-Merge**: `--no-ff` Marker-Commit, braucht Max-Go (Konvention seit `26f8097`)
+- **Vor jedem Zweigwechsel prüfen:** Läuft gerade eine Produktion? Trägt der Zielzweig
+  `CURRENT_SCHEMA_VERSION` ≥ dem, was in Max' Akten steht?
 
 ---
 

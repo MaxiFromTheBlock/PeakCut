@@ -1,8 +1,23 @@
 # PeakCut — Kontext
 
+> **Stand: 2026-08-17.** Davor war dieses Dokument auf dem Stand vom 18.06. eingefroren
+> und in mehreren Punkten nachweislich falsch (Schema-Version, „Import geparkt", ein
+> bereits gelöster Bug als offen). Beim Fortschreiben: Behauptungen gegen den Code
+> prüfen, nicht gegen die Erinnerung.
+
 ## Architektur
 
-**Python/PyQt6 Desktop-App**
+**Ein Kern, zwei Oberflächen — beide sind Mac-Programme, nichts läuft im Internet.**
+
+| | Repo / Zweig | Was |
+|---|---|---|
+| **Kern + PyQt-Oberfläche** | `PeakCut/App` · `feature/redesign` | Das produktive PeakCut. Analyse, Erkennung, Zuordnung, alle Exporter + die Oberfläche, mit der Max arbeitet. Python 3.11 + PyQt6. |
+| **Neue Oberfläche** | `PeakCut-web` · `develop` | Electron + React. Rechnet **nichts** selbst, ruft den Kern nebenan auf (`engine/engine_core.py` hängt `../../PeakCut/App/src` in den Import-Pfad). „web" = Bautechnik der Oberfläche, **kein** Server, keine Cloud. |
+
+**Zielbild (Max-Entscheid 2026-08-17): Die neue Oberfläche soll die PyQt-App
+ersetzen.** Damit sind Paketierung (installierbar per Doppelklick), Selbst-Start der
+Engine und CheckIn-Anbindung echte Aufgaben, keine Optionen. Bis dahin bleibt die
+PyQt-App der Produktionsstand.
 
 Zentrale Referenz: ../CLAUDE.md (App/CLAUDE.md im Repo) — da steht ALLES.
 Dieses Dokument ist die Kurzversion fuer den PO.
@@ -109,16 +124,59 @@ Dieses Dokument ist die Kurzversion fuer den PO.
 - Signal: .peakcut_done im Export-Dir (workers.py)
 - export_dir ist settable Property auf PeakCutProject
 
-## Aktuelle Prioritaeten
+## Aktuelle Prioritaeten (Stand 2026-08-17)
 
-Maßgeblich = „Offene Slices" unten (immer aktuell) + App/BACKLOG.md (Todo-SSOT).
-Reihenfolge: #77 Strukturteil ist gebaut (Rest geparkt) → Produkt-Validierung (#70
-Prompt-Tuning + Cutter-Sign-off) → Slice A (Dialog-Totale Cross-Talk) →
-Export-Orchestrierung aus dem GUI (ARCH-1, vor NAS). Akut offen aus der Eigen-Produktion:
-Sinnabschnitt-„nur-Ton"-Bug mit Max klären; nummerierte Marker (klein); SRT (groß).
-(Die frühere „V3 Vision: Smart Scan / Create Mix / Hub"-Liste war überholt 2026-05-18.)
+Maßgeblich = „Offene Slices" unten + App/BACKLOG.md (Todo-SSOT).
 
-## Offene Slices (Stand 2026-06-18)
+Die Energie liegt seit Juli auf der **neuen Oberfläche** (`PeakCut-web`), nicht am
+Kern. Reihenfolge dort, nach dem Gesundheitscheck (Carl) + Ultracode-Sweep (Claude)
+vom 12./17.08.:
+
+1. ✅ **Kern-Zweige zusammengeführt** (Merge `deb6265`) — Schema v5 jetzt überall.
+2. **Doku geradeziehen** (dieses Dokument, CLAUDE.md, PeakCut-web/README.md).
+3. **Startprüfung Web↔Kern** — Schema-/Modul-Handshake statt „nimm den Nachbarordner".
+   Muss `export_parity.py` mitnehmen (eigener zweiter Draht zum Kern).
+4. **Gastname durchreichen** — reißt heute an drei Stellen; färbt die Sprecher-
+   Vorbelegung VOR der Analyse, also nicht nachreichbar.
+5. **Oberfläche ehrlich machen** — sie sagt „Marker optional" und bricht ohne Marker ab.
+6. **A/V-Selbstcheck reparieren** — `verify:review` ist seit 21.06. TOT (läuft in einen
+   Timeout, kann gar nicht grün werden). Der gesamte Juli-Umbau am Abspieler entstand
+   ohne Messgerät.
+7. **Kalter Handdurchlauf** (Max) → Export-Vergleich → `develop` → `main`.
+8. Danach: Sicherheits-Kleinkram, CI im Web-Repo, Electron-Aktualisierung, ARCH-1.
+
+Am Kern selbst weiter offen: Produkt-Validierung (#70 Prompt-Tuning + Cutter-Sign-off),
+Slice A (Dialog-Totale Cross-Talk), Export-Steuerung in den Kern (ARCH-1, vor NAS),
+SRT (groß). (Die frühere „V3 Vision: Smart Scan / Create Mix / Hub"-Liste war überholt
+2026-05-18.)
+
+## Offene Slices
+
+### Kern-Zweige zusammengeführt (2026-08-17, Merge `deb6265`)
+`feature/redesign` → `develop` → `main`, alle drei inhaltlich identisch, 845 Tests +
+CI grün. Vorher trug nur `feature/redesign` Schema v5 und die Import-Pivot-Module —
+ein Zweigwechsel hätte Max' Produktionsakte unlesbar und die neue Oberfläche
+unstartbar gemacht. Enthält: Phasing-Wurzelfix `91cc8ae` (P8Mix), Marker-Auto-
+Erkennung `4fbb3d1` (Inhalt statt Name), Import-Pivot (capability-driven, Schema v5
+mit PENDING-Zustand, `project_capabilities` mit 7 verriegelten Tests).
+
+### Import-Pivot — im Kern GEBAUT, in der PyQt-App ohne Anschluss
+`core/material_scanner.py`, `core/project_capabilities.py`, `core/import_model.py`,
+`core/import_project.py`, `project_archive.read_pending_import` sind fertig und
+getestet. **Aber:** `material_scanner` hat in `App/src` keinen Aufrufer — die PyQt-App
+rät weiterhin per Dateiname (`gui/main_window.py:219-236`). Genutzt wird der Pivot
+bisher nur von der neuen Oberfläche. (Ersetzt die alte Notiz „#77 Strukturteil gebaut,
+Rest geparkt" — der Rest ist gebaut, nur nicht verdrahtet.)
+
+### Capability-Vertrag vs. Realität (offen, Produktentscheidung)
+`tests/test_project_capabilities.py:35` verriegelt: ohne Marker gehen Screenshots,
+Folgenschnitt und Sinnabschnitte trotzdem. **Gebaut ist das nicht** — der Kern selbst
+verlangt den Marker (`core/analysis_process.py:127-131`), die PyQt-App auch
+(`gui/main_window.py:174-186`), die Web-Analyse bricht mit `KEIN_MARKER` ab. Der
+Vertrag ist eine Absichtserklärung mit Tests, kein Weg. Entweder bauen oder in der
+Oberfläche ehrlich zurücknehmen.
+
+### Ältere Slices (historisch, Stand 2026-06-18)
 
 **Marker + Vergleichbarkeit GEBAUT auf develop (2026-06-18), Max-Premiere-Abnahme ✓:**
 Keyboardstellen-XML und Sinnabschnitt-XML sind jetzt direkt vergleichbar — beide mit
@@ -139,9 +197,10 @@ Plan: `docs/plans/2026-06-16-77-import-refactor-plan.md`.
 **Erste Eigen-Produktion Philip Siefer (2026-06-17):** Max hat selbst geschnitten.
 Folgenschnitt-XML „funktioniert super" (erste echte Eigen-Nutzung). Sinnabschnitt-XML
 importierbar gemacht (fehlende FCP7-Audio-Pflichtangaben, Commit `64870c0`, eigener
-Codepfad, Pin-1 unberührt). **OFFEN (Bug):** Sinnabschnitt-XML zeigt in Premiere nur
-Ton, kein Bild — by-design (v1-Ton-Spannenliste), aber Max erwartete anderes → erst mit
-Max klären. **Neue Wünsche:** nummerierte Marker (klein), SRT-Untertitel (groß).
+Codepfad, Pin-1 unberührt). ~~**OFFEN (Bug):** Sinnabschnitt-XML zeigt nur Ton, kein
+Bild~~ → **ERLEDIGT am 2026-06-18** durch den Marker-Slice: die Sinnabschnitt-XML wurde
+von Audio-only auf kompakte Multicam gehoben (Video je Kamera + dieselben Tonspuren wie
+raw). Ebenso erledigt: **nummerierte Marker**. **Weiter offen:** SRT-Untertitel (groß).
 
 **Fix-Runde (2026-06-16/17):** Python 3.11 gepinnt, Shot-/Person-Dropdown lesbar
 (visuell bestätigt), Crash auf „Weiter" bei Personen-Shot ohne Person behoben.
@@ -185,7 +244,13 @@ Reihenfolge nach #71a-Merge (2026-05-25) und Fremdmaterial-Test (2026-06-01):
 Details + Bau-Status pro Task: App/CLAUDE.md, Sektion „Slice B
 Bau-Status — Stand 2026-06-03".
 
-## Branches
+## Branches (Stand 2026-08-17)
 
-- main: Stable Releases
-- develop: Aktive Entwicklung
+- **feature/redesign: HIER wird gearbeitet** — und das ist zugleich Max'
+  Produktionsstand, weil der Launcher den Repo-Code direkt aufruft.
+- develop: Integrationszweig
+- main: Stable Releases (`--no-ff` Marker-Commit, Max-Go nötig)
+
+Alle drei sind seit `deb6265` inhaltlich identisch. **Vor jedem Zweigwechsel prüfen:**
+läuft eine Produktion, und trägt der Zielzweig `CURRENT_SCHEMA_VERSION` ≥ dem, was in
+den vorhandenen `.peakcut`-Akten steht? Details in CLAUDE.md → „Git Workflow".
