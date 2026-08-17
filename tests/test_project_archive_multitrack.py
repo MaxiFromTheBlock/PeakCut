@@ -40,8 +40,9 @@ _BASE_CFG = {"fps": 25, "context_duration_ms": 15000}
 # ---------------------------------------------------------------------
 
 
-def test_schema_version_bumped_to_4():
-    assert CURRENT_SCHEMA_VERSION == 4
+def test_schema_version_current():
+    # v4 (Multitrack/Import-Slots) -> v5 (Import Slice 3, additiv).
+    assert CURRENT_SCHEMA_VERSION == 5
 
 
 # ---------------------------------------------------------------------

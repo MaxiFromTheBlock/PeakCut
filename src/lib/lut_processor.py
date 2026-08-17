@@ -21,12 +21,16 @@ class LUTProcessor:
         self.domain_max = np.array([1.0, 1.0, 1.0])
         self._flat_lookup = None   # Pre-computed 256³ lookup, flattened for 1D indexing
 
-    def load_cube(self, filepath: str) -> bool:
+    def load_cube(self, filepath: str, build_lookup: bool = True) -> bool:
         """
         Load a .cube LUT file.
 
         Args:
             filepath: Path to the .cube file
+            build_lookup: pre-compute the 256³ apply_fast lookup table (~1s).
+                Default True (unchanged for the desktop player). The Web-Engine
+                passes False — it only needs size + lut_data (Texturdaten), nutzt
+                apply_to_image/Trilinear, kein apply_fast.
 
         Returns:
             True if loaded successfully, False otherwise
@@ -85,7 +89,8 @@ class LUTProcessor:
                 (lut_size, lut_size, lut_size, 3)
             )
             self.lut_path = filepath
-            self._build_lookup_table()
+            if build_lookup:
+                self._build_lookup_table()
             return True
 
         except Exception as e:

@@ -773,6 +773,30 @@ Produkt):**
 
 ## Changelog
 
+### Core-Extraction Zuordnungs-Datenschicht (develop + feature/redesign, 2026-06-20)
+
+Vorbedingung für den **Web-Zuordnungs-Screen** (Schwester-Repo `PeakCut-web`,
+Carl-Fahrplan #4 Slice 1): die Web-Engine ist Qt-frei und kann
+`gui/assignment_page.py` (PyQt-Import) nicht laden. Reine Extraktion **ohne
+Verhaltensänderung**, damit das Web den Kern *aufruft* statt ihn nachzubauen
+(Carl-Invariante „Web ruft nur", kein Drift).
+
+- **Neu `core/folgenschnitt_assignment.py` (Qt-frei):** `AssignmentState`,
+  `CameraRow`, `MicRow`, `SHOT_CHOICES`, `NEUTRAL_SHOT_LABEL`,
+  `_default_unused_clips_mode`, `build_assignment_state`,
+  `preview_start_s_for_mic` — wortgleich aus `gui/assignment_page.py` gehoben.
+- `gui/assignment_page.py` importiert diese Symbole zurück (eine Wahrheit);
+  Widget/Stylesheets/`make_shot_combo` bleiben in `gui`. Tote Importe entfernt.
+- Neuer Qt-freier Kern-Test `tests/test_folgenschnitt_assignment.py` (direkt aus
+  `core` importiert, charakterisiert das unveränderte Verhalten). Bestehende
+  `test_folgenschnitt_assignment_page.py` **unverändert** grün.
+- Keine Umbenennung, keine neuen Defaults, keine Semantik-Glättung.
+- **793 Tests grün, Pin-1 byte-identisch.** Auf `develop` (7062e19), nach
+  `feature/redesign` gemergt. **Carl-Cross-Review grün (2026-06-20, keine
+  P1/P2).** P3: `_default_unused_clips_mode` bewusst NICHT nach `gui`
+  zurück-exportiert (kleinere Oberfläche). Slice-1-Auflage (Carl): expliziter
+  Test, dass das Qt-freie Engine-venv `core.folgenschnitt_assignment` laden kann.
+
 ### Marker + Vergleichbarkeit Keyboardstellen ↔ Sinnabschnitte (develop, 2026-06-18)
 
 Vier-Augen mit Carl (Carl-Plan, Claude-TDD, Max-Abnahme), aus der Philip-Siefer-
@@ -1454,4 +1478,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-06-18 (auf develop: Marker-Slice — beide XMLs jetzt Video+Ton+nummerierte Bereich-Marker, „Keyboardstellen raw"/„smart", Nummern synchron, von Max in Premiere abgenommen. Davor: #77 Strukturteil (geparkt vor Import-UI), Fix-Runde Python-Pin/Dropdown/Crash, Philip-Siefer-Eigen-Produktion. OFFEN: Carl-Schluss-Review Marker-Slice; nächster Slice „Grenzen auf Satzanfang/-ende einrasten". Auf main zuletzt: #76 Wiedergabe-UX (2026-06-16). Todos in App/BACKLOG.md.)*
+*Zuletzt aktualisiert: 2026-06-20 (develop + feature/redesign: Core-Extraction der Zuordnungs-Datenschicht nach `core/folgenschnitt_assignment.py` — Qt-freie Vorbedingung für den Web-Zuordnungs-Screen im Schwester-Repo PeakCut-web, reine Extraktion ohne Verhaltensänderung, 793 grün, Pin-1 stabil, Carl-Cross-Review offen. Davor 2026-06-18: Marker-Slice — beide XMLs Video+Ton+nummerierte Bereich-Marker, „Keyboardstellen raw"/„smart", Nummern synchron, von Max in Premiere abgenommen. OFFEN: Carl-Schluss-Review Marker-Slice; nächster Slice „Grenzen auf Satzanfang/-ende einrasten". Auf main zuletzt: #76 Wiedergabe-UX (2026-06-16). Todos in App/BACKLOG.md.)*

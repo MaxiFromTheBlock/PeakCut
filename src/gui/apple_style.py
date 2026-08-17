@@ -5,34 +5,50 @@ Structured into logical sections by UI component.
 Public API: COLORS dict + get_stylesheet() function.
 """
 
-# Apple-inspired color palette
+# Redesign v3 palette (Slice 1, 2026-06-18). Azure-Akzent #0A6FE0 statt iOS-Blau,
+# kuehl-neutrale Grautoene. Alle bisherigen Schluessel bleiben erhalten (Werte
+# aktualisiert) -> bestehender Code laeuft weiter; neue Scope-/Status-Schluessel
+# additiv. Quelle: Redesign-Briefing §2 / qt_mockup/peakcut_style.py.
 COLORS = {
     # Backgrounds
-    'bg_primary': '#FFFFFF',
-    'bg_secondary': '#F5F5F7',
-    'bg_tertiary': '#E8E8ED',
-    'bg_sidebar': '#F0F0F5',
+    'bg_primary': '#FFFFFF',     # Karten, Player-Card
+    'bg_secondary': '#F5F5F7',   # App-/Fenster-Hintergrund
+    'bg_tertiary': '#F0F0F3',    # Mulden (Inputs, Track)  [war #E8E8ED]
+    'bg_sidebar': '#ECECEF',     # Leisten, Peak-Spine     [war #F0F0F5]
 
     # Text
     'text_primary': '#1D1D1F',
-    'text_secondary': '#86868B',
-    'text_tertiary': '#AEAEB2',
+    'text_secondary': '#6E6E73',  # [war #86868B]
+    'text_tertiary': '#86868B',   # [war #AEAEB2]
+    'text_faint': '#AEAEB2',      # NEU (Meta/Hints/Mono-Kicker)
 
-    # Accents
-    'accent_blue': '#007AFF',
-    'accent_blue_hover': '#0056CC',
-    'accent_blue_pressed': '#004499',
+    # Accents (Azure) — Scope SCHNITT/Entscheidung
+    'accent_blue': '#0A6FE0',          # [war #007AFF]
+    'accent_blue_hover': '#0857B8',    # [war #0056CC]
+    'accent_blue_pressed': '#064a9e',  # [war #004499]
+    'accent_soft': '#E6F0FD',          # NEU (aktive Zeile/Toggle-BG)
     'accent_green': '#34C759',
     'accent_red': '#FF3B30',
-    'accent_orange': '#FF9500',
+    'accent_orange': '#FF9500',        # behalten (ungenutzt, Rueckwaerts-Sicherheit)
+    'accent_amber': '#E0922A',         # NEU (Smart „Verworfen")
 
     # Borders
-    'border_light': '#D2D2D7',
-    'border_medium': '#C7C7CC',
+    'border_light': '#E5E5EA',    # [war #D2D2D7]
+    'border_medium': '#D2D2D7',   # [war #C7C7CC]
+
+    # Video-Surface (neutral near-black) — NEU
+    'video_bg': '#000000',
+    'video_a': '#1C1C1E',
+    'video_b': '#2C2C2E',
+
+    # Ampel (Fenster-Buttons) — NEU
+    'traffic_red': '#F45B4E',
+    'traffic_yellow': '#F4BD4F',
+    'traffic_green': '#4FC56B',
 
     # Shadows
-    'shadow': 'rgba(0, 0, 0, 0.04)',
-    'shadow_hover': 'rgba(0, 0, 0, 0.08)',
+    'shadow': 'rgba(0, 0, 0, 0.05)',
+    'shadow_hover': 'rgba(0, 0, 0, 0.10)',
 }
 
 

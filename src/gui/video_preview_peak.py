@@ -5,6 +5,7 @@ import subprocess
 import threading
 import numpy as np
 from utils import FFMPEG_BIN, get_logger
+from core.screenshot_cmd import build_screenshot_cmd
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
 from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QTimer, QSize, QThread, QMutex, QWaitCondition
 from PyQt6.QtGui import QImage, QPixmap
@@ -166,30 +167,14 @@ class ScreenshotWorker(QThread):
 
         filepath = os.path.join(self._output_dir, filename)
 
-        # Build ffmpeg command
-        cmd = [
-            FFMPEG_BIN, "-y",  # Overwrite output
-            "-ss", str(self._position_s),  # Seek before input (fast)
-            "-i", self._video_path,
-            "-frames:v", "1",
-        ]
-
-        # Build video filter chain (brightness BEFORE LUT, like Premiere)
-        filters = []
-        if self._brightness != 0:
-            factor = 2 ** (self._brightness / 100.0)  # -100→0.5x, 0→1.0x, +100→2.0x
-            # Linear RGB multiplication (matches live preview exactly)
-            expr = f"clip(val*{factor:.4f},0,255)"
-            filters.append(f"lutrgb=r='{expr}':g='{expr}':b='{expr}'")
-        if self._lut_filename:
-            lut_path = os.path.join(self._luts_dir, self._lut_filename)
-            if os.path.exists(lut_path):
-                filters.append(f"lut3d='{lut_path}'")
-        if filters:
-            cmd.extend(["-vf", ",".join(filters)])
-
-        # Output as high-quality JPEG
-        cmd.extend(["-q:v", "2", filepath])
+        # ffmpeg-Kommando: EINE Wahrheit fuer Desktop + Web-Engine
+        # (core/screenshot_cmd). Helligkeit VOR LUT, -ss vor -i, ein Frame, JPEG q2.
+        lut_path = (os.path.join(self._luts_dir, self._lut_filename)
+                    if self._lut_filename else "")
+        cmd = build_screenshot_cmd(
+            self._video_path, self._position_s, lut_path, self._brightness, filepath,
+            ffmpeg=FFMPEG_BIN,
+        )
 
         try:
             with self._proc_lock:

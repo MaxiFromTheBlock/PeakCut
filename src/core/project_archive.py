@@ -15,11 +15,15 @@ from .folgenschnitt_multitrack_layout import (
     normalize_unused_clips_mode as _normalize_clips_mode,
 )
 
-CURRENT_SCHEMA_VERSION = 4  # v4 (additiv): marker_track/mix_track/transcript_path-Slots; Mix bleibt in mic_tracks bis Task 5 (#77)
+CURRENT_SCHEMA_VERSION = 5  # v5 (additiv, Carl-Gate Import Slice 3): confirmed_import_slots + material_sources + analysis_state (pending). v4-Slots bleiben; Mix bleibt in legacy mic_tracks (Pin-1).
 ARCHIVE_DIR = ".peakcut"
 ARCHIVE_FILE = "project.json"
 _CSV_NAME = "speaker_activity.csv"
 _CSV_REF = f"{ARCHIVE_DIR}/{_CSV_NAME}"
+
+# analysis_state: eine v5-Akte aus confirmImport ist re-entrant, aber klar noch nicht
+# analysiert. Fehlt das Feld (alte/normale Akte) -> als "analyzed" behandeln.
+ANALYSIS_STATE_PENDING = "pending"
 
 # Config-Schlüssel, die die Export-Identität beeinflussen (verifiziert).
 _CONFIG_SNAPSHOT_KEYS = ("fps", "context_duration_ms")
@@ -262,6 +266,12 @@ def parse_archive_payload(payload, fallback_config):
         # Roadmap #3 additiv & optional (NICHT in _REQUIRED_SECTIONS):
         # fehlt -> None -> alte Akten laden unverändert.
         "transcript": payload.get("transcript"),
+        # v5 additiv & optional (Import Slice 3): fehlt -> None -> alte/normale
+        # Akten unverändert. confirmed_import_slots = saubere Rollen-Wahrheit,
+        # material_sources = Provenienz, analysis_state = pending|analyzed.
+        "confirmed_import_slots": payload.get("confirmed_import_slots"),
+        "material_sources": payload.get("material_sources"),
+        "analysis_state": payload.get("analysis_state"),
     }
 
 
@@ -309,6 +319,164 @@ def save_project_archive(session, root=None):
     atomic_io.write_json_atomic(archive_path, payload, indent=2,
                                 ensure_ascii=False)
     return archive_path
+
+
+# --- Import Slice 3 / Brocken B (i): v5 PENDING-Import-Akte ----------------
+# confirmImport laeuft VOR der Analyse. Die Akte traegt die saubere Rollen-Wahrheit
+# (confirmed_import_slots, Mics OHNE Mix) + Provenienz (material_sources) + den Zustand
+# (analysis_state="pending"). Die legacy project-Sektion bleibt v4-foermig (Mix IN
+# mic_tracks) -> der bestehende Loader/Export bleibt Pin-1-sicher (Carl-Adapter Opt. 2).
+
+def _slots_rel(slots, root):
+    return {
+        "marker": _rel(slots.marker, root) if slots.marker else None,
+        "mix": _rel(slots.mix, root) if slots.mix else None,
+        "mics": [_rel(p, root) for p in slots.mics],
+        "videos": [_rel(p, root) for p in slots.videos],
+        "transcript": _rel(slots.transcript, root) if slots.transcript else None,
+    }
+
+
+def build_pending_import_payload(root, slots, material_sources=None, *,
+                                 config=None, guest_name=None):
+    """Reines v5-Pending-Payload aus bestaetigten Rollen (testbar, kein IO)."""
+    sources = material_sources if material_sources is not None else [root]
+    # legacy project-Sektion = v4-Form: Mix steckt MIT in mic_tracks (Pin-1-sicher).
+    legacy_mics = list(slots.mics) + ([slots.mix] if slots.mix else [])
+    proj_marker = _rel(slots.marker, root) if slots.marker else None
+    proj_mics = [_rel(p, root) for p in legacy_mics]
+    proj_mix = _rel(slots.mix, root) if slots.mix else None
+    proj_transcript = _rel(slots.transcript, root) if slots.transcript else None
+    proj_videos = [_rel(p, root) for p in slots.videos]
+    external = any(_is_external(p) for p in
+                   [proj_marker, proj_mix, proj_transcript] + proj_mics + proj_videos if p)
+    cfg = config or {}
+    return {
+        "schema_version": CURRENT_SCHEMA_VERSION,
+        "app": "PeakCut",
+        "analysis_state": ANALYSIS_STATE_PENDING,
+        "config": {k: cfg.get(k) for k in _CONFIG_SNAPSHOT_KEYS if cfg.get(k) is not None},
+        "material_sources": [_rel(s, root) for s in sources],
+        "confirmed_import_slots": _slots_rel(slots, root),
+        "project": {
+            "marker_track": proj_marker,
+            "mic_tracks": proj_mics,
+            "mix_track": proj_mix,
+            "transcript_path": proj_transcript,
+            "videos": proj_videos,
+            "guest_name": guest_name,
+            "path_root_strategy": "common_parent",
+            "has_external_paths": external,
+        },
+        "analysis_results": {
+            "peaks": [], "video_offsets": [],
+            "speaker_activity_csv": None,
+            "speaker_activity_mic_assignments": [],
+        },
+        "assignments": {
+            "folgenschnitt_assignment_applied": False,
+            "folgenschnitt_mic_assignments": [],
+            "folgenschnitt_camera_assignments": [],
+            "folgenschnitt_unused_clips_mode": _normalize_clips_mode(None),
+        },
+    }
+
+
+def _assert_pending_write_allowed(archive_path):
+    """Carl-P1b: confirm darf nur schreiben, wenn es KEINE Akte gibt ODER bereits eine
+    PENDING-Akte (zweites Confirm = Update). Eine normale/analysierte Akte NIE auf leere
+    Pending-Sektionen zuruecksetzen -> ALREADY_ANALYZED."""
+    if not os.path.isfile(archive_path):
+        return
+    try:
+        with open(archive_path) as f:
+            existing = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return  # kaputte Akte -> Schreiben darf reparieren (wie _assert_archive_write_allowed)
+    if isinstance(existing, dict) and existing.get("analysis_state") == ANALYSIS_STATE_PENDING:
+        return  # Pending-Update erlaubt
+    raise ProjectArchiveError(
+        "ALREADY_ANALYZED: vorhandene Akte ist bereits analysiert/normal — Confirm wuerde "
+        "sie auf leere Pending-Sektionen zuruecksetzen")
+
+
+def save_pending_import_archive(root, slots, material_sources=None, *,
+                                config=None, guest_name=None):
+    """Schreibt die v5-Pending-Akte atomar nach root/.peakcut/project.json. Schreibt NIE
+    ueber eine Zukunfts-Akte (DATA-2) und NIE ueber eine analysierte Akte (Carl-P1b);
+    eine vorhandene Pending-Akte darf aktualisiert werden. Carl-P2: root realpath-
+    normalisiert, bevor _rel()/archive_dir gerechnet werden."""
+    root = os.path.realpath(root)
+    archive_dir = os.path.join(root, ARCHIVE_DIR)
+    os.makedirs(archive_dir, exist_ok=True)
+    archive_path = os.path.join(archive_dir, ARCHIVE_FILE)
+    _assert_archive_write_allowed(archive_path)
+    _assert_pending_write_allowed(archive_path)
+    payload = build_pending_import_payload(
+        root, slots, material_sources, config=config, guest_name=guest_name)
+    atomic_io.write_json_atomic(archive_path, payload, indent=2, ensure_ascii=False)
+    return archive_path
+
+
+def _require_str_or_none(value, label):
+    if value is not None and not isinstance(value, str):
+        raise ProjectArchiveError(f"Pending-Akte: {label} ungueltig (kein Pfad-String)")
+    return value
+
+
+def _require_str_list(value, label):
+    if not isinstance(value, list):
+        raise ProjectArchiveError(f"Pending-Akte: {label} muss eine Liste sein")
+    if any(not isinstance(p, str) for p in value):
+        raise ProjectArchiveError(f"Pending-Akte: {label} enthaelt Nicht-Strings")
+    return value
+
+
+def read_pending_import(archive_path_or_root):
+    """Liest eine v5-Pending-Import-Akte -> {slots, material_sources, analysis_state}
+    mit ABSOLUTEN Pfaden. Reiner Reader fuer den Analyse-Schnitt (iii); baut KEINE Session.
+
+    Carl-P1: Datei fehlt / analysis_state != "pending" (alt/normal/analysiert/unbekannt)
+    -> None. Aber sobald die Akte sich ALS pending deklariert, wird kaputter/Zukunfts-
+    Inhalt NIE still ignoriert (sonst faellt der Analysepfad auf die Namensheuristik
+    zurueck) -> kontrollierter ProjectArchiveError. DATA-2 bleibt damit auch hier intakt."""
+    archive_path = _resolve_archive_path(archive_path_or_root)
+    if not os.path.isfile(archive_path):
+        return None
+    try:
+        with open(archive_path) as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        raise ProjectArchiveError(f"Projektakte unlesbar: {e}") from e
+    if not isinstance(data, dict) or data.get("analysis_state") != ANALYSIS_STATE_PENDING:
+        return None
+    # Ab hier ALS pending deklariert -> strikt validieren, nie still auf None.
+    _assert_schema_readable(data)  # DATA-2: Zukunfts-Akte -> ProjectArchiveError
+    cis = data.get("confirmed_import_slots")
+    if not isinstance(cis, dict):
+        raise ProjectArchiveError(
+            "Pending-Akte ohne gueltige confirmed_import_slots")
+    marker = _require_str_or_none(cis.get("marker"), "marker")
+    mix = _require_str_or_none(cis.get("mix"), "mix")
+    transcript = _require_str_or_none(cis.get("transcript"), "transcript")
+    mics = _require_str_list(cis.get("mics", []), "mics")
+    videos = _require_str_list(cis.get("videos", []), "videos")
+    sources_raw = data.get("material_sources")
+    if sources_raw is not None:
+        _require_str_list(sources_raw, "material_sources")
+
+    root = os.path.dirname(os.path.dirname(archive_path))
+    from .import_model import ConfirmedImportSlots
+    slots = ConfirmedImportSlots(
+        marker=_abs(marker, root) if marker else None,
+        mix=_abs(mix, root) if mix else None,
+        mics=tuple(_abs(p, root) for p in mics),
+        videos=tuple(_abs(p, root) for p in videos),
+        transcript=_abs(transcript, root) if transcript else None,
+    )
+    sources = [_abs(s, root) for s in (sources_raw or [])]
+    return {"slots": slots, "material_sources": sources,
+            "analysis_state": data.get("analysis_state")}
 
 
 def _resolve_archive_path(archive_path_or_root):
