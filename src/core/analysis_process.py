@@ -60,7 +60,9 @@ def run_analysis(config_data):
     from core.detection import detect_peaks
     from core.sync import sync_videos
 
-    keyboard_track = config_data["keyboard_track"]
+    # .get statt [] — ohne Marker (Fremdproduktion ohne Fusspedal) fehlt der
+    # Schluessel ganz; das ist ein legitimer Fall, kein KeyError.
+    keyboard_track = config_data.get("keyboard_track")
     mic_tracks = config_data.get("mic_tracks", [])
     videos = config_data.get("videos", [])
     reference_track = config_data.get("reference_track")
@@ -78,6 +80,7 @@ def run_analysis(config_data):
         "speaker_activity_mic_assignments": [],
         "speaker_turns": [],
         "folgenschnitt_edit_decisions": [],
+        "marker_missing": False,
         "error": None
     }
 
@@ -124,9 +127,25 @@ def run_analysis(config_data):
         results["speaker_activity"] = []
         results["speaker_activity_csv"] = None
 
-    # Step 3: Peak detection
-    if not keyboard_track or not os.path.exists(keyboard_track):
-        error("Keine Keyboard-Datei gefunden")
+    # Step 3: Peak detection — nur wenn ueberhaupt ein Marker bestaetigt wurde.
+    #
+    # Capability-driven (core/project_capabilities.py, Max-Entscheid 2026-08-17):
+    # Der Marker schaltet NUR die Keyboardstellen frei. Fremdproduktionen haben
+    # kein Fusspedal — Video-Sync (Step 1) und Sprecher-Aktivitaet (Step 2) sind
+    # dort trotzdem die Grundlage des Folgenschnitts. Vorher warf ein frueher
+    # Return genau diese bereits berechneten Ergebnisse weg.
+    #
+    # WICHTIGE ABGRENZUNG — zwei verschiedene Dinge, bewusst getrennt:
+    #   kein Marker gesetzt      -> legitimer Fall, weiterarbeiten, Flag setzen
+    #   Marker gesetzt, Datei weg -> Materialfehler, muss LAUT bleiben, sonst
+    #                                laeuft eine HM-Folge still ohne Keyboardstellen durch
+    if not keyboard_track:
+        results["marker_missing"] = True
+        progress("Kein Marker — Keyboardstellen entfallen, Sync + Sprecher-Aktivitaet bleiben")
+        return results
+
+    if not os.path.exists(keyboard_track):
+        error(f"Marker-Datei nicht gefunden: {keyboard_track}")
         results["error"] = "No keyboard file"
         return results
 
