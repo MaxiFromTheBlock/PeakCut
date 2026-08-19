@@ -85,3 +85,64 @@ def test_v5_akte_migriert_anchor_aus_dem_peak(tmp_path):
     assert cand.origin == ORIGIN_MARKER
     assert cand.anchor_ms == 60_000
     assert cand.anchor_ms != cand.boundary.start_ms
+
+
+def test_v5_akte_mit_unbekanntem_peak_wirft_kontrolliert(tmp_path):
+    """Fix-Runde 1, Befund 1: der sicherheitskritischste Zweig der Migration
+    (kein passender Peak -> ProjectArchiveError statt Raten/Rueckfall auf
+    boundary.start_ms) war bisher ungetestet. Verweist ein v5-Kandidat auf
+    eine peak_id, die es im Peak-Satz nicht gibt (Akte/Peaks auseinander-
+    gelaufen), MUSS das Laden kontrolliert scheitern statt einen falschen
+    Anker zu erfinden."""
+    from tests.test_candidate_baseline_lock import make_session_with_peaks
+    from core.project_archive import (
+        save_project_archive, load_project_archive, ProjectArchiveError)
+
+    session = make_session_with_peaks([60_000])  # nur Peak-Index 0 existiert
+    root = tmp_path / "folge"
+    root.mkdir()
+    save_project_archive(session, str(root))
+
+    akte = root / ".peakcut" / "project.json"
+    payload = json.loads(akte.read_text())
+    payload["schema_version"] = 5
+    payload["clip_candidates"] = [{
+        "peak_id": 99, "boundary": {"start_ms": 45_000, "end_ms": 75_000},
+        "status": "proposed", "transcript_excerpt": "", "reason": "", "score": None}]
+    payload["peak_decisions"] = []
+    payload.pop("candidate_decisions", None)
+    akte.write_text(json.dumps(payload))
+
+    with pytest.raises(ProjectArchiveError):
+        load_project_archive(str(root), {})
+
+
+def test_v6_akte_mit_fehlendem_feld_scheitert_statt_still_zu_migrieren(tmp_path):
+    """Fix-Runde 1, Befund 2 (Ruling ueber den Brief hinaus): die v6-Erkennung
+    beim Hydrieren haengt jetzt NUR an "candidate_id" — eine v6-Akte mit
+    fehlendem anchor_ms darf NICHT still in die Marker-Migrationslogik
+    rutschen (das wuerde eine echte Fremdherkunft, z.B. origin=transcript,
+    stillschweigend zu origin=marker mit erfundenem Peak-Anker umdeuten).
+    Stattdessen muss ClipCandidate.from_dict kontrolliert ablehnen."""
+    from tests.test_candidate_baseline_lock import make_session_with_peaks
+    from core.project_archive import (
+        save_project_archive, load_project_archive, ProjectArchiveError)
+
+    session = make_session_with_peaks([60_000])
+    root = tmp_path / "folge"
+    root.mkdir()
+    save_project_archive(session, str(root))
+
+    akte = root / ".peakcut" / "project.json"
+    payload = json.loads(akte.read_text())
+    # v6-Kandidat mit candidate_id + origin, aber OHNE anchor_ms — muss
+    # trotz vorhandener peak_id NICHT als Marker-Migration durchrutschen.
+    payload["clip_candidates"] = [{
+        "candidate_id": "transcript:abc", "origin": "transcript",
+        "peak_id": None, "boundary": {"start_ms": 45_000, "end_ms": 75_000},
+        "status": "proposed", "transcript_excerpt": "", "reason": "", "score": None}]
+    payload["candidate_decisions"] = []
+    akte.write_text(json.dumps(payload))
+
+    with pytest.raises(ProjectArchiveError):
+        load_project_archive(str(root), {})

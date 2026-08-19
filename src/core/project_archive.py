@@ -612,8 +612,15 @@ def load_project_archive(archive_path_or_root, fallback_config):
     def _hydrate_candidate(d):
         """v6 direkt; v1-v5 hier migrieren — HIER, weil session.peaks vorliegt.
         anchor_ms == position_ms des zugehoerigen Peaks. Kein passender Peak ->
-        kontrollierter Fehler statt Raten (Carl)."""
-        if "candidate_id" in d and "origin" in d and "anchor_ms" in d:
+        kontrollierter Fehler statt Raten (Carl).
+
+        Fix-Runde 1 (Befund 2, Ruling ueber den Brief hinaus): die v6-Erkennung
+        haengt NUR an "candidate_id" — nicht mehr an der weichen Kombination
+        aus drei Schluesseln. Eine v6-Akte mit fehlendem Feld (z.B. anchor_ms)
+        soll NICHT still in die Marker-Migration rutschen (das wuerde eine
+        echte Fremdherkunft stillschweigend zu origin=marker umdeuten) —
+        sondern ueber ClipCandidate.from_dict kontrolliert scheitern."""
+        if "candidate_id" in d:
             return ClipCandidate.from_dict(d)
         peak_id = int(d["peak_id"])
         peak = next((p for p in session.peaks if p.index == peak_id), None)
