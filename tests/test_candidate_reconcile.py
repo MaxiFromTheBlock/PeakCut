@@ -18,6 +18,17 @@ SAME_ANALYSIS = {
                "out_point_ms": 75_000, "context_ms": 15_000, "ignored": False}],
     "video_offsets": [],
 }
+# Fix-Runde 1 (Pruefer-Befund 1b): zwei Peaks im Analyse-Ergebnis mit
+# demselben index -> bauen beide denselben marker:<index>-Kandidaten.
+DUPLICATE_INDEX_ANALYSIS = {
+    "peaks": [
+        {"index": 0, "position_ms": 60_000, "in_point_ms": 45_000,
+         "out_point_ms": 75_000, "context_ms": 15_000, "ignored": False},
+        {"index": 0, "position_ms": 90_000, "in_point_ms": 75_000,
+         "out_point_ms": 105_000, "context_ms": 15_000, "ignored": False},
+    ],
+    "video_offsets": [],
+}
 
 
 def _with_auto(session):
@@ -76,3 +87,41 @@ def test_doppelte_candidate_id_wird_abgelehnt():
         peak_id=None, boundary=ClipBoundary(90_000, 110_000)))
     with pytest.raises(ClipCandidateError):
         session.load_analysis_results(SAME_ANALYSIS)
+
+
+def test_fremdkandidat_mit_marker_id_kollidiert_beim_neubau():
+    """Fix-Runde 1, Pruefer-Befund 1(a): ein Fremdkandidat traegt eine
+    marker:<n>-ID, fuer die noch KEIN Marker-Kandidat existiert. Die
+    Reconciliation baut dafuer einen neuen Marker-Kandidaten -> zwei
+    Eintraege mit derselben candidate_id. Der alte Code prüfte
+    Eindeutigkeit nur gegen die EINGANGS-Liste und übersah das."""
+    session = make_session_with_peaks(PEAKS)
+    session.clip_candidates = [ClipCandidate(
+        candidate_id="marker:0", origin=ORIGIN_AUTO, anchor_ms=10_000,
+        peak_id=None, boundary=ClipBoundary(5_000, 9_000))]
+    with pytest.raises(ClipCandidateError):
+        session.load_analysis_results(SAME_ANALYSIS)
+
+
+def test_zwei_peaks_mit_gleichem_index_kollidieren_beim_neubau():
+    """Fix-Runde 1, Pruefer-Befund 1(b): zwei Peaks im Analyse-Ergebnis mit
+    demselben index bauen beide denselben marker:<index>-Kandidaten ->
+    Dublette, die erst WAEHREND der Reconciliation entsteht."""
+    session = make_session_with_peaks(PEAKS)
+    with pytest.raises(ClipCandidateError):
+        session.load_analysis_results(DUPLICATE_INDEX_ANALYSIS)
+
+
+def test_nach_fehler_bleiben_peaks_und_kandidaten_unveraendert():
+    """Fix-Runde 1, Pruefer-Befund 2: load_analysis_results muss atomar
+    sein. Fliegt die Reconciliation, darf die Session NICHT mit neuen
+    Peaks + alten (dazu nicht mehr passenden) Kandidaten stehen bleiben —
+    self.peaks und self.clip_candidates müssen exakt die Objekte von
+    vor dem Aufruf bleiben (Identitätsprüfung, nicht nur Werte)."""
+    session = make_session_with_peaks(PEAKS)
+    peaks_before = session.peaks
+    candidates_before = session.clip_candidates
+    with pytest.raises(ClipCandidateError):
+        session.load_analysis_results(DUPLICATE_INDEX_ANALYSIS)
+    assert session.peaks is peaks_before
+    assert session.clip_candidates is candidates_before

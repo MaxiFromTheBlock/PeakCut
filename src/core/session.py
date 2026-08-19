@@ -86,37 +86,40 @@ class PeakCutSession:
         mehr — die Wiedergabe steuert die ReviewPage über den Controller."""
         self.mode = next_playback_mode(self.mode)
 
-    def _reconcile_marker_candidates(self):
-        """Task 2 (Kandidaten quellenunabhaengig): gleicht NUR die Partition
+    @staticmethod
+    def _compute_reconciled_marker_candidates(existing_candidates, peaks):
+        """Reine Berechnung (keine Seiteneffekte) fuer
+        `_reconcile_marker_candidates`. Gleicht NUR die Partition
         origin == marker ab statt die gesamte Kandidatenliste zu ersetzen.
 
         Bestehende Marker-Kandidaten behalten ihren Bearbeitungszustand,
         fehlende werden ergaenzt, Nicht-Marker-Kandidaten (Fremdquellen wie
-        auto/transcript/manual) bleiben unangetastet. Das Entscheidungslog
-        wird NIE pauschal geleert — es ist die Grundlage des lernenden Scores.
+        auto/transcript/manual) bleiben unangetastet.
 
         GRENZE (Carl): gilt fuer einen UNVERAENDERTEN Marker-Satz.
         marker:<peak_id> ist ueber Analyselaeufe hinweg NICHT stabil, sobald
         Marker eingefuegt/entfernt werden — echte Reanalyse mit veraendertem
         Marker-Satz braucht ein zeitliches Event-Matching und ist ein
         eigener spaeterer Schritt.
+
+        Fix-Runde 1 (Pruefer-Befund 1): die Eindeutigkeitspruefung laeuft
+        gegen die FERTIGE Liste `keep`, nicht nur gegen `existing_candidates`
+        — sonst entgehen ihr Dubletten, die erst WAEHREND dieser Methode
+        entstehen (Fremdkandidat mit `marker:<n>`-ID fuer einen bisher
+        fehlenden Marker-Kandidaten; zwei Peaks mit demselben `index`).
+        Reine Funktion (statt Instanzmethode mit Seiteneffekt), damit
+        `load_analysis_results` sie gegen lokale, noch nicht committete
+        Peaks aufrufen kann (Fix-Runde 1, Befund 2 — Atomaritaet).
         """
         from .clip_candidates import (
             ClipBoundary, ClipCandidate, ClipCandidateError,
             ORIGIN_MARKER, PROPOSED, DISCARDED, marker_candidate_id)
 
-        seen = {}
-        for c in self.clip_candidates:
-            if c.candidate_id in seen:
-                raise ClipCandidateError(
-                    f"Doppelte candidate_id: {c.candidate_id!r}")
-            seen[c.candidate_id] = c
-
-        keep = [c for c in self.clip_candidates if c.origin != ORIGIN_MARKER]
-        by_id = {c.candidate_id: c for c in self.clip_candidates
+        keep = [c for c in existing_candidates if c.origin != ORIGIN_MARKER]
+        by_id = {c.candidate_id: c for c in existing_candidates
                  if c.origin == ORIGIN_MARKER}
 
-        for pk in self.peaks:
+        for pk in peaks:
             cid = marker_candidate_id(pk.index)
             existing = by_id.get(cid)
             if existing is not None:
@@ -131,9 +134,25 @@ class PeakCutSession:
                 boundary=ClipBoundary(lo, hi),
                 status=DISCARDED if pk.ignored else PROPOSED))
 
+        seen = set()
+        for c in keep:
+            if c.candidate_id in seen:
+                raise ClipCandidateError(
+                    f"Doppelte candidate_id: {c.candidate_id!r}")
+            seen.add(c.candidate_id)
+
         keep.sort(key=lambda c: (c.anchor_ms, c.candidate_id))
-        self.clip_candidates = keep
-        # peak_decisions bewusst NICHT angefasst.
+        return keep
+        # peak_decisions bewusst NICHT angefasst (kein Zugriff hier drin).
+
+    def _reconcile_marker_candidates(self):
+        """Instanzmethode: gleicht `self.clip_candidates` gegen
+        `self.peaks` ab (Delegation an die reine Berechnung oben).
+        Fuer den atomaren Pfad in `load_analysis_results` siehe dort —
+        die ruft die reine Berechnung direkt mit lokalen Peaks auf,
+        BEVOR `self.peaks` ueberschrieben wird."""
+        self.clip_candidates = self._compute_reconciled_marker_candidates(
+            self.clip_candidates, self.peaks)
 
     # Rueckwaertskompatibler Name: project_archive.py:314 ruft ihn per
     # hasattr(session, "_bootstrap_clip_candidates") auf (Save-Pfad, falls
@@ -195,15 +214,21 @@ class PeakCutSession:
         Args:
             results: Dict with 'peaks' (list of peak dicts) and 'video_offsets' (list of tuples)
         """
-        # Load video offsets
-        self.video_offsets = results.get("video_offsets", [])
+        # Fix-Runde 1 (Befund 2): Peaks/Offsets/Kandidaten erst LOKAL
+        # aufbauen und die Reconciliation GEGEN DIESE lokalen Peaks laufen
+        # lassen — self.peaks bleibt bis zum Erfolg unangetastet. Fliegt
+        # dabei ein ClipCandidateError, bleibt die Session unveraendert
+        # (alte Peaks + alte Kandidaten passen weiter zueinander), statt
+        # mit neuen Peaks und alten, dazu nicht mehr passenden Kandidaten
+        # stehen zu bleiben.
+        video_offsets = results.get("video_offsets", [])
         fps = self.config.get("fps", 25)
-        for video_filename, offset_str in self.video_offsets:
-            self._offset_lookup_ms[video_filename] = parse_timecode_to_ms(offset_str, fps)
+        offset_lookup_updates = {}
+        for video_filename, offset_str in video_offsets:
+            offset_lookup_updates[video_filename] = parse_timecode_to_ms(offset_str, fps)
 
-        # Load peaks
         peak_data = results.get("peaks", [])
-        self.peaks = []
+        peaks = []
         for p in peak_data:
             peak = Peak(
                 index=p["index"],
@@ -216,13 +241,22 @@ class PeakCutSession:
                 peak.set_out_point(p["out_point_ms"])
             if p.get("ignored"):
                 peak.ignored = True
-            self.peaks.append(peak)
+            peaks.append(peak)
 
         # Task 2: NUR die Marker-Partition abgleichen, nicht ersetzen.
         # Fremdquellen, Bearbeitungszustand und peak_decisions bleiben.
         # Ein späterer Archiv-Load (Projektakte v2) überschreibt das ggf.
-        # wieder (lädt die gespeicherte Wahrheit).
-        self._reconcile_marker_candidates()
+        # wieder (lädt die gespeicherte Wahrheit). Laeuft gegen die
+        # LOKALEN `peaks` (noch nicht self.peaks) — kann also raisen,
+        # ohne dass vorher schon etwas an der Session veraendert wurde.
+        new_candidates = self._compute_reconciled_marker_candidates(
+            self.clip_candidates, peaks)
+
+        # Alles durch -> jetzt erst gemeinsam auf self uebernehmen.
+        self.video_offsets = video_offsets
+        self._offset_lookup_ms.update(offset_lookup_updates)
+        self.peaks = peaks
+        self.clip_candidates = new_candidates
 
         from .folgenschnitt_models import (
             ActivityFrame,
