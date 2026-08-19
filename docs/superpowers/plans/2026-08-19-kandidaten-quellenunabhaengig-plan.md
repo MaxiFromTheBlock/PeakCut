@@ -479,7 +479,7 @@ def test_v5_akte_migriert_anchor_aus_dem_peak(tmp_path):
     payload.pop("candidate_decisions", None)
     akte.write_text(json.dumps(payload))
 
-    loaded, _ = load_project_archive(str(root), {})
+    loaded = load_project_archive(str(root), {})
     cand = loaded.clip_candidates[0]
     assert cand.candidate_id == "marker:0"
     assert cand.origin == ORIGIN_MARKER
@@ -580,9 +580,6 @@ def test_neu_analyse_erhaelt_das_entscheidungslog():
 def test_bearbeitungszustand_eines_marker_kandidaten_bleibt():
     session = make_session_with_peaks(PEAKS)
     session.clip_candidates[0] = ClipCandidate(
-        **{**session.clip_candidates[0].to_dict(),
-           "boundary": ClipBoundary(50_000, 70_000)},
-        ) if False else ClipCandidate(
         candidate_id="marker:0", origin=ORIGIN_MARKER, anchor_ms=60_000,
         peak_id=0, boundary=ClipBoundary(50_000, 70_000),
         status=SELECTED, reason="von Hand justiert", score=0.9)
@@ -764,9 +761,9 @@ def test_sicht_schlaegt_bei_doppelter_marker_zuordnung_fehl():
 
 def test_pfad_playback_spielt_nicht_das_fremdfenster():
     from core.playback_modes import PLAYBACK_MODE_SMART
-    from core.playback_windows import window_for
+    from core.playback_windows import build_playback_window
     session = _session_with_collision()
-    win = window_for(session, session.peaks[0], PLAYBACK_MODE_SMART)
+    win = build_playback_window(session, PLAYBACK_MODE_SMART, peak_index=0)
     assert (win.start_ms, win.end_ms) != (55_000, 65_000), \
         "Smart-Fenster kam vom kollidierenden auto-Kandidaten"
 
@@ -790,7 +787,7 @@ def test_pfad_ignorieren_trifft_den_marker_kandidaten():
     assert intruder.status == "proposed", "Ignorieren traf den falschen Kandidaten"
 ```
 
-> `window_for` ist der Name der öffentlichen Funktion in `playback_windows.py`. Vor dem Schreiben mit `grep -n "^def " src/core/playback_windows.py` bestätigen und den Test an den tatsächlichen Namen anpassen.
+> Verifiziert: `build_playback_window(session, mode, peak_index=None) -> PlaybackWindow(mode, start_ms, end_ms, disabled_reason="")`. Der Peak wird intern über `_resolve_peak` aufgelöst, deshalb reicht `peak_index`.
 
 - [ ] **Step 2: Laufen lassen — muss fehlschlagen**
 
@@ -874,11 +871,11 @@ __all__ = ["marker_candidates_by_peak_id", "marker_candidate_for_peak"]
 ```python
 # src/core/clip_boundary/pipeline.py — ersetzt by_id bei ~:105
     from ..candidate_view import marker_candidates_by_peak_id
-    _markers = marker_candidates_by_peak_id(session)
-    by_id = {pid: cands.index(c) for pid, c in _markers.items() if c in cands}
+    by_id = {pid: cands.index(c)
+             for pid, c in marker_candidates_by_peak_id(session).items()}
 ```
 
-> Falls `cands` an dieser Stelle eine eigene, frisch gebaute Liste ist und nicht `session.clip_candidates`: dann bleibt der Index-Aufbau über `cands` korrekt, aber die Zuordnung muss über `candidate_id` laufen: `by_id = {c.peak_id: i for i, c in enumerate(cands) if c.origin == ORIGIN_MARKER and c.peak_id is not None}`. Vor dem Ändern die Herkunft von `cands` in `pipeline.py` prüfen und die passende der beiden Varianten nehmen.
+> Verifiziert: `pipeline.py:72` setzt `cands = session.clip_candidates` — es ist dieselbe Liste, `cands.index(c)` trifft also den richtigen Eintrag. Die zentrale Sicht liefert bereits nur Marker-Kandidaten; ein zusätzlicher `origin`-Check hier wäre genau die verstreute Prüfung, die Carl vermeiden wollte.
 
 - [ ] **Step 5: Web-Serialisierer umstellen (zweites Repo)**
 
@@ -987,7 +984,7 @@ def test_auto_kandidat_kompletter_datenweg(tmp_path):
     payload = json.loads((root / ".peakcut" / "project.json").read_text())
     assert payload["schema_version"] == 6
 
-    loaded, _ = load_project_archive(str(root), {})
+    loaded = load_project_archive(str(root), {})
     back = next(c for c in loaded.clip_candidates if c.candidate_id == AUTO_ID)
     assert back.origin == ORIGIN_AUTO
     assert back.anchor_ms == 120_000
