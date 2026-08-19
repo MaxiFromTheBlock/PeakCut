@@ -1046,7 +1046,7 @@ Pin-1 und das reale Export-Paritaets-Gate gegen die Ilka-Akte gruen."
 
 - [ ] **Step 1: Briefing an Carl (über Max, als Codeblock im Chat)**
 
-Inhalt: Commits je Task, Testzahlen vorher/nachher, Ergebnis des realen Paritäts-Gates, sowie ausdrücklich die zwei Stellen, an denen ich im Plan eine Fallentscheidung treffen musste (`pipeline.py`-Variante, `window_for`-Name).
+Inhalt: Commits je Task, Testzahlen vorher/nachher, Ergebnis des realen Paritäts-Gates gegen die Ilka-Akte, sowie jede Abweichung vom Plan, die beim Bauen nötig wurde — insbesondere, ob `_reconcile_marker_candidates` als Alias unter dem alten Namen `_bootstrap_clip_candidates` bleiben muss (`project_archive.py:314` ruft ihn per `hasattr`) oder ob die Aufrufstelle sauber mitgezogen wurde.
 
 - [ ] **Step 2: Nach Carls Freigabe v6 auf alle Zweige**
 
