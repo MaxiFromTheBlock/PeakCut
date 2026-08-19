@@ -112,30 +112,38 @@ der von Max gewünschte Vergleich.
 - Klasse perspektivisch `CandidateDecision`.
 - Akten v1–v5 werden beim Laden migriert: `peak_id` → `candidate_id = marker:<peak_id>`.
 
-### Sinnabschnitt-Riegel (die eine echte Leck-Stelle)
+### Fünf blinde Joins auf `peak_id` — zentrale Marker-Sicht statt verstreuter Checks
 
-`xml_sequence_helpers.active_smart_candidates` filtert heute:
+Der Ursprungsbefund war „der Sinnabschnitt-Export liest Kandidaten". Der Gegencheck
+(Claude 2 Stellen, Carl 5) zeigt: **dasselbe Muster steht an fünf Stellen** — überall
+wird ein Kandidat blind über `peak_id` gejoint, ohne die Herkunft zu prüfen:
+
+| Ort | Muster | Schaden bei Kollision |
+|---|---|---|
+| `xml_sequence_helpers.py:69` | `peak_id in number_map` | Fremdquelle leckt in „Keyboardstellen smart" |
+| `playback_windows.py:62` | `c.peak_id == peak.index` | **falsches Audio beim Reinhören** (Smart-Fenster) |
+| `session.ignore_peak():121` | erster Treffer, dann `break` | „Ignorieren" verwirft den falschen Kandidaten |
+| `clip_boundary/pipeline.py:105` | `by_id = {c.peak_id: i …}` | Dict-Überschreibung, Grenzen landen am falschen Kandidaten |
+| **web** `engine/engine_core.py:82` | `cands[c.peak_id] = …` | **stilles Überschreiben** des Marker-Kandidaten in genau der Map, die die neue Oberfläche liest |
+
+**Keine fünf verstreuten `origin`-Prüfungen.** Stattdessen eine zentrale Marker-Sicht:
 
 ```python
-status != DISCARDED and score is not None and peak_id in number_map
+marker_candidate_for_peak(session, peak_id)
+marker_candidates_by_peak_id(session)
 ```
 
-Fremdquellen fallen also **nur zufällig** raus — weil ihre `peak_id` nicht in der aus
-`peaks` gebauten Nummernkarte steht. Bei ungünstiger Nummernvergabe kollidieren die IDs
-und Fremdquellen lecken in die Sinnabschnitt-XML. Künftig ausdrücklich:
+Beide filtern `origin == ORIGIN_MARKER` und **schlagen bei doppelter Marker-Zuordnung
+kontrolliert fehl** statt still einen Treffer zu wählen. Alle fünf Verbraucher werden
+darauf umgestellt, der Web-Serialisierer eingeschlossen.
 
-```python
-c.origin == ORIGIN_MARKER
-and c.peak_id is not None
-and c.peak_id in number_map
-and c.score is not None
-and c.status != DISCARDED
-```
+**Kollisionstests** müssen alle fünf Pfade abdecken: XML, Playback, Ignorieren,
+Grenzen-Pipeline, Web-Kompatibilitätsmap. Jeweils: einem `auto`-Kandidaten absichtlich
+dieselbe Legacy-`peak_id` wie einem aktiven Peak geben und beweisen, dass er nicht
+durchschlägt.
 
-**Kollisionstest (Pflicht):** einem `auto`-Kandidaten absichtlich dieselbe Legacy-
-`peak_id` wie einem aktiven Peak geben und beweisen, dass er **nicht** in
-„Keyboardstellen smart" landet. Der Filter schützt die Export-Bedeutung,
-`candidate_id` schützt die allgemeine Datenintegrität — beides, nicht eins davon.
+Der Filter schützt die Export-/Abspiel-Bedeutung, `candidate_id` schützt die allgemeine
+Datenintegrität — beides, nicht eins davon.
 
 ## Fehlerfälle
 
@@ -153,20 +161,59 @@ Schema **v5 → v6**, additiv. Alte Akten lesen sich unverändert (Migration sie
 `CandidateDecision`). Wandert **sofort auf alle drei Zweige** — die v4/v5-Falle vom
 17.08. darf sich nicht wiederholen.
 
-## Bau-Reihenfolge (Carl)
+## Bau-Reihenfolge (Carl, korrigiert 2026-08-19)
+
+Die erste Fassung trennte Felder (Task 1) und Schema (Task 3). Das erzeugt einen
+Zwischenstand, in dem Speichern/Laden die neuen Felder **verliert** — kein sinnvoller
+grüner Commit. Die Vertragsänderung wird deshalb **vertikal und atomar**.
 
 | Task | Inhalt |
 |---|---|
-| 0 | Pin-1, bestehende Smart-XML und v5-Roundtrip verriegeln (Netz VOR dem Umbau) |
-| 1 | `candidate_id`, `origin`, `anchor_ms`, optionales `peak_id` |
-| 2 | `CandidateDecision` + v1–v5-Migration |
-| 3 | Schema v6 + vollständiger Nicht-Marker-Roundtrip |
-| 4 | Expliziter Origin-Riegel im Smart-Exporter + Kollisionstest |
-| **Gate B** | **Vertragsfreeze** |
+| **0 — Sicherheitsnetz** | Pin-1, v5-Roundtrip, sowie ROTE Tests für Migration, Kollisionen und Kandidaten-/Decision-Erhalt. Netz VOR dem Umbau. |
+| **1 — Vollständiger v6-Vertrag** | Modelle, `CandidateDecision`, Schema 6, **strikte** Serialisierung, v1–v5-Migration mit Peak-Join, exakter v6-Roundtrip. |
+| **2 — Session-Lebenszyklus** | Marker-Reconciliation statt Replace; Nicht-Marker und Decisions bleiben erhalten; Eindeutigkeit + deterministische Sortierung (`anchor_ms`, dann `candidate_id`). |
+| **3 — Marker-Kompatibilität** | Zentrale Marker-Sicht + Umstellung **aller fünf** Verbraucher inklusive Web-Serialisierer. |
+| **4 — Integration** | Nicht-Marker-Kandidat erzeugen, entscheiden, speichern/laden; nachweislich kein Einfluss auf Keyboardstellen-/Smart-XML; alte Akte migrieren; Web-Kompatibilität. |
+| **Gate B** | **Vertragsfreeze.** Erst danach Producer. |
 
-Danach getrennt und je mit eigenem Entwurf: manueller Producer, Auto-Finder,
-transkriptweiter Finder. **Zuletzt** die Review-Navigation von Peak-Index auf
-`candidate_id` umstellen.
+### Task 2 im Detail — der destruktive Bootstrap
+
+`session._bootstrap_clip_candidates` (`session.py:104-105`) macht heute
+
+```python
+self.clip_candidates = cands
+self.peak_decisions = []
+```
+
+und wird aus `load_analysis_results` gerufen. Mit mehreren Quellen würde damit **jede
+Neu-Analyse sämtliche Nicht-Marker-Kandidaten und die komplette Entscheidungs-Historie
+vernichten** — genau die Daten, auf denen der lernende Score aufbaut.
+
+Wird zu `_reconcile_marker_candidates`:
+- ausschließlich die Partition `origin == marker` abgleichen
+- bestehende Marker-Kandidaten samt Bearbeitungszustand erhalten
+- fehlende ergänzen
+- Nicht-Marker-Kandidaten unverändert lassen
+- `CandidateDecision` **niemals** pauschal leeren
+- doppelte `candidate_id` kontrolliert ablehnen
+
+**Bewusste Grenze (Carl):** Der Test „Neu-Analyse erhält Auto-Kandidaten und Decisions"
+läuft in diesem Slice mit **unverändertem Marker-Satz**. `marker:<peak_id>` ist über
+Analyseläufe hinweg **nicht stabil**, sobald Marker eingefügt oder entfernt werden —
+eine echte Reanalyse mit verändertem Marker-Satz braucht zeitliches Event-Matching.
+Das wird hier **nicht still mitversprochen**, sondern ist ein eigener späterer Slice.
+
+### Strikt, keine großzügigen Defaults
+
+Für echte v6-Daten sind die neuen Felder **erforderlich**. Großzügige Defaults würden
+beschädigte v6-Akten als vermeintlich gültig tarnen. Migration alter Akten passiert
+beim Archiv-Hydrieren, **nachdem** `session.peaks` vorhanden ist:
+
+- `candidate_id = "marker:<peak_id>"`
+- `origin = ORIGIN_MARKER`
+- `anchor_ms = matching_peak.position_ms`
+- alte Decisions: `peak_id` → `candidate_id`
+- **kein passender Peak → kontrollierter `ProjectArchiveError`, nicht raten**
 
 ## Test-Anforderung an Gate A
 
@@ -189,5 +236,9 @@ manueller Nicht-Marker-Kandidat muss den vollständigen Datenweg durchlaufen:
 - **Review-Fenster ohne Marker** (Oberfläche) und **Reel-/Clip-Fenster**
   (`Design/redesign_handoff_2026-06-18/Reel & Overlays.dc.html`, inkl. Marken-Profil
   und editierbarem XML-Export) — eigene Teilprojekte, hängen an diesem Fundament.
+- **Transport von `skipped_steps` in die Oberfläche.** Der Web-Analysejob gibt heute
+  nur Projekt-/Archivstatus zurück. Soll die Oberfläche „Marker-Erkennung übersprungen"
+  anzeigen, muss der Job einen bereinigten `skipped_steps`-Block mitliefern. Gehört
+  spätestens in die Producer-/UI-Integration (Carl-Befund 2026-08-19).
 - **Desktop/Web öffnen.** Der Desktop stoppt bei null Stellen, die Web-Oberfläche
   blockiert im Preflight. Beides bewusst noch zu.
