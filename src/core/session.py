@@ -195,19 +195,19 @@ class PeakCutSession:
         from datetime import datetime
         from .clip_candidates import transition, DISCARDED, \
             ClipCandidateError
-        for i, c in enumerate(self.clip_candidates):
-            if c.peak_id != peak.index:
-                continue
+        from .candidate_view import marker_candidate_for_peak
+        target = marker_candidate_for_peak(self, peak.index)
+        if target is not None:
+            i = self.clip_candidates.index(target)
             try:
                 new, dec = transition(
-                    c, DISCARDED, now=datetime.now().isoformat(),
+                    target, DISCARDED, now=datetime.now().isoformat(),
                     source="ignore_peak")
             except ClipCandidateError:
-                break  # z.B. published -> bewusst nichts ändern
+                new, dec = None, None   # z.B. published (terminal) -> nichts aendern
             if dec is not None:
                 self.clip_candidates[i] = new
                 self.peak_decisions.append(dec)
-            break
 
     def set_current_peak(self, index):
         """Set current peak index (bounds-checked)."""

@@ -14,7 +14,7 @@ import types
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from gui.review_page import ReviewPage  # noqa: E402
-from core.clip_candidates import ClipBoundary, PROPOSED  # noqa: E402
+from core.clip_candidates import ClipBoundary, PROPOSED, ORIGIN_MARKER  # noqa: E402
 
 
 def _label():
@@ -58,7 +58,7 @@ def _peak(idx):
 
 def _cand(peak_id, score=None):
     return types.SimpleNamespace(
-        peak_id=peak_id, score=score, status=PROPOSED,
+        peak_id=peak_id, score=score, status=PROPOSED, origin=ORIGIN_MARKER,
         boundary=ClipBoundary(start_ms=peak_id * 1000,
                               end_ms=peak_id * 1000 + 40000))
 

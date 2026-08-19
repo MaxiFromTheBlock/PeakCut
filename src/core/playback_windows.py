@@ -59,8 +59,8 @@ def build_playback_window(session, mode, peak_index=None):
     # PLAYBACK_MODE_SMART
     if getattr(peak, "ignored", False):
         return PlaybackWindow(mode, 0, 0, _SMART_DISABLED)
-    cand = next((c for c in getattr(session, "clip_candidates", [])
-                 if c.peak_id == peak.index), None)
+    from .candidate_view import marker_candidate_for_peak
+    cand = marker_candidate_for_peak(session, peak.index)
     if (cand is None or cand.status == DISCARDED
             or cand.score is None or cand.score <= 0.0
             or cand.boundary.end_ms <= cand.boundary.start_ms):
