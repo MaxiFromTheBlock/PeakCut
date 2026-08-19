@@ -15,7 +15,7 @@ from .folgenschnitt_multitrack_layout import (
     normalize_unused_clips_mode as _normalize_clips_mode,
 )
 
-CURRENT_SCHEMA_VERSION = 5  # v5 (additiv, Carl-Gate Import Slice 3): confirmed_import_slots + material_sources + analysis_state (pending). v4-Slots bleiben; Mix bleibt in legacy mic_tracks (Pin-1).
+CURRENT_SCHEMA_VERSION = 6  # v6 (Carl-Gate A 2026-08-19): Kandidaten quellenunabhaengig — candidate_id/origin/anchor_ms/optionales peak_id; Decisions an candidate_id. v5-Slots bleiben.
 ARCHIVE_DIR = ".peakcut"
 ARCHIVE_FILE = "project.json"
 _CSV_NAME = "speaker_activity.csv"
@@ -187,7 +187,9 @@ def build_archive_payload(session, material_root, speaker_activity_csv_ref=None)
         # v2 additiv (Roadmap #2): keine Pfade -> keine Relativierung.
         "clip_candidates": _to_dict_list(
             getattr(session, "clip_candidates", [])),
-        "peak_decisions": _to_dict_list(
+        # v6: Decisions haengen an candidate_id. Alte Akten schreiben "peak_decisions";
+        # gelesen werden BEIDE (siehe Hydrieren), geschrieben nur noch der neue Name.
+        "candidate_decisions": _to_dict_list(
             getattr(session, "peak_decisions", [])),
         # Roadmap #3 additiv: NUR Referenzblock. transcript.json gehört
         # dem TranscriptWorker (früh/eigenständig); save fasst die Datei
@@ -262,7 +264,10 @@ def parse_archive_payload(payload, fallback_config):
         # v2 additiv: None = Sektion fehlt (v1-Akte -> bootstrappen);
         # Liste = exakt laden (auch leere).
         "clip_candidates": payload.get("clip_candidates"),
-        "peak_decisions": payload.get("peak_decisions"),
+        # v6: neuer Name "candidate_decisions"; alte Akten schreiben noch
+        # "peak_decisions" -> als Fallback gelesen (nie beide gleichzeitig nötig).
+        "peak_decisions": payload.get("candidate_decisions",
+                                      payload.get("peak_decisions")),
         # Roadmap #3 additiv & optional (NICHT in _REQUIRED_SECTIONS):
         # fehlt -> None -> alte Akten laden unverändert.
         "transcript": payload.get("transcript"),
@@ -601,14 +606,37 @@ def load_project_archive(archive_path_or_root, fallback_config):
     # ProjectArchiveError wrappen, damit die HC-4-Robustheit greift
     # (kaputte Akte -> kontrollierter Hinweis + Normalflow, kein Crash).
     from .clip_candidates import (
-        ClipCandidate, PeakDecision, ClipCandidateError)
+        ClipCandidate, CandidateDecision, ClipCandidateError,
+        ClipBoundary, ORIGIN_MARKER, marker_candidate_id)
+
+    def _hydrate_candidate(d):
+        """v6 direkt; v1-v5 hier migrieren — HIER, weil session.peaks vorliegt.
+        anchor_ms == position_ms des zugehoerigen Peaks. Kein passender Peak ->
+        kontrollierter Fehler statt Raten (Carl)."""
+        if "candidate_id" in d and "origin" in d and "anchor_ms" in d:
+            return ClipCandidate.from_dict(d)
+        peak_id = int(d["peak_id"])
+        peak = next((p for p in session.peaks if p.index == peak_id), None)
+        if peak is None:
+            raise ProjectArchiveError(
+                f"Alte Akte: Kandidat verweist auf Peak {peak_id}, den es nicht gibt.")
+        return ClipCandidate(
+            candidate_id=marker_candidate_id(peak_id),
+            origin=ORIGIN_MARKER,
+            anchor_ms=peak.position_ms,
+            peak_id=peak_id,
+            boundary=ClipBoundary.from_dict(d["boundary"]),
+            status=str(d.get("status", "proposed")),
+            transcript_excerpt=str(d.get("transcript_excerpt", "")),
+            reason=str(d.get("reason", "")),
+            score=d.get("score"))
+
     try:
         if cc is not None:
-            session.clip_candidates = [
-                ClipCandidate.from_dict(d) for d in cc]
+            session.clip_candidates = [_hydrate_candidate(d) for d in cc]
         if pd is not None:
             session.peak_decisions = [
-                PeakDecision.from_dict(d) for d in pd]
+                CandidateDecision.from_dict(d) for d in pd]
     except (ClipCandidateError, KeyError, TypeError, ValueError) as e:
         raise ProjectArchiveError(
             f"ClipCandidate-Daten unlesbar: {e}") from e

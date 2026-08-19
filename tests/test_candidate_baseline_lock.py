@@ -51,7 +51,6 @@ def test_baseline_boundary_kommt_aus_in_out_des_peaks():
     assert cand.boundary.end_ms == 75_000
 
 
-@pytest.mark.xfail(strict=True, reason="Task 1: Vertrag noch nicht umgestellt")
 def test_ziel_kandidat_hat_identitaet_und_herkunft():
     from core.clip_candidates import ORIGIN_MARKER
     session = make_session_with_peaks([60_000])
@@ -60,7 +59,6 @@ def test_ziel_kandidat_hat_identitaet_und_herkunft():
     assert cand.origin == ORIGIN_MARKER
 
 
-@pytest.mark.xfail(strict=True, reason="Task 1: anchor_ms noch nicht da")
 def test_ziel_anker_ist_der_tritt_nicht_der_anfang():
     session = make_session_with_peaks([60_000])
     cand = session.clip_candidates[0]

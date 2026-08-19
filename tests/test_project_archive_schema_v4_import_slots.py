@@ -80,8 +80,8 @@ def test_save_writes_schema_v4_structural_slots(tmp_path):
     data = _read_archive(str(tmp_path / "mat"))
 
     # v4-Strukturslots bleiben in v5 erhalten (additiv) — Version ist jetzt 5.
-    assert CURRENT_SCHEMA_VERSION == 5
-    assert data["schema_version"] == 5
+    assert CURRENT_SCHEMA_VERSION == 6
+    assert data["schema_version"] == 6
     proj = data["project"]
     # marker_track ist canonical, keyboard_track NICHT mehr geschrieben
     assert os.path.basename(proj["marker_track"]) == "KB.wav"

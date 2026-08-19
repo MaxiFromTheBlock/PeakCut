@@ -47,7 +47,7 @@ class _FakeSession:
 def test_constants_are_frozen():
     # Import Slice 3 (Carl-Gate): bump auf v5 (confirmed_import_slots + material_sources
     # + analysis_state). v4-Slots bleiben additiv.
-    assert CURRENT_SCHEMA_VERSION == 5
+    assert CURRENT_SCHEMA_VERSION == 6
     assert ARCHIVE_DIR == ".peakcut"
     assert ARCHIVE_FILE == "project.json"
 
@@ -347,7 +347,8 @@ def test_schema_is_current_and_archive_has_both_sections(tmp_path):
     path = save_project_archive(s)
     data = _json.loads(open(path).read())
     assert data["schema_version"] == CURRENT_SCHEMA_VERSION
-    assert "clip_candidates" in data and "peak_decisions" in data
+    # v6: Decisions heissen jetzt "candidate_decisions" (haengen an candidate_id).
+    assert "clip_candidates" in data and "candidate_decisions" in data
     assert len(data["clip_candidates"]) == len(s.peaks)  # bootstrap je Peak
 
 
@@ -358,7 +359,7 @@ def test_v1_archive_without_sections_loads_and_bootstraps(tmp_path):
     # v1 simulieren: Sektionen entfernen + Schema 1
     data["schema_version"] = 1
     del data["clip_candidates"]
-    del data["peak_decisions"]
+    del data["candidate_decisions"]  # v6-Name; v1 hatte keine Decision-Sektion
     open(path, "w").write(_json.dumps(data))
     L = load_project_archive(str(tmp_path / "Mat"), dict(_CFG))
     assert len(L.clip_candidates) == len(L.peaks)  # aus Peaks gebootstrappt

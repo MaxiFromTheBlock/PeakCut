@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from core.project import PeakCutProject  # noqa: E402
 from core.session import PeakCutSession  # noqa: E402
-from core.clip_candidates import PROPOSED, DISCARDED  # noqa: E402
+from core.clip_candidates import PROPOSED, DISCARDED, marker_candidate_id  # noqa: E402
 
 _CFG = {"fps": 25, "context_duration_ms": 15000}
 
@@ -50,7 +50,8 @@ def test_ignore_peak_writes_exactly_one_decision_idempotent():
     assert cand.status == DISCARDED
     assert len(s.peak_decisions) == 1
     d = s.peak_decisions[0]
-    assert d.peak_id == 42 and d.to_status == DISCARDED
+    # v6: Decision haengt an candidate_id, nicht mehr an peak_id.
+    assert d.candidate_id == marker_candidate_id(42) and d.to_status == DISCARDED
     assert d.source == "ignore_peak"
     # idempotent: nochmal ignorieren -> keine zweite Decision
     s.ignore_peak()
@@ -63,7 +64,8 @@ def test_ignore_couples_via_peak_index_not_position():
     s = _session([_peak(10, 60000), _peak(42, 120000)])
     s.set_current_peak(0)
     s.ignore_peak()
-    assert s.peak_decisions[0].peak_id == 10
+    # v6: Decision haengt an candidate_id, nicht mehr an peak_id.
+    assert s.peak_decisions[0].candidate_id == marker_candidate_id(10)
     assert next(c for c in s.clip_candidates
                 if c.peak_id == 10).status == DISCARDED
     assert next(c for c in s.clip_candidates

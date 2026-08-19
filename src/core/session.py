@@ -91,13 +91,16 @@ class PeakCutSession:
         proposed, ignoriert -> discarded). Kein Decision (kein echter
         redaktioneller Akt mit Timestamp). Boundary defensiv (>start)."""
         from .clip_candidates import ClipBoundary, ClipCandidate, \
-            PROPOSED, DISCARDED
+            PROPOSED, DISCARDED, ORIGIN_MARKER, marker_candidate_id
         cands = []
         for pk in self.peaks:
             lo, hi = pk.in_point_ms, pk.out_point_ms
             if hi <= lo:                       # defensiv (Clamp-Edge)
                 hi = lo + 1
             cands.append(ClipCandidate(
+                candidate_id=marker_candidate_id(pk.index),
+                origin=ORIGIN_MARKER,
+                anchor_ms=pk.position_ms,      # der Tritt, NICHT lo
                 peak_id=pk.index,
                 boundary=ClipBoundary(lo, hi),
                 status=DISCARDED if pk.ignored else PROPOSED))

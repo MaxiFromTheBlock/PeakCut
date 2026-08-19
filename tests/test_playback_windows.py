@@ -14,7 +14,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from core.playback_windows import build_playback_window  # noqa: E402
 from core.peak import Peak  # noqa: E402
-from core.clip_candidates import ClipCandidate, ClipBoundary, DISCARDED  # noqa: E402
+from core.clip_candidates import (  # noqa: E402
+    ClipCandidate, ClipBoundary, DISCARDED, ORIGIN_MARKER, marker_candidate_id)
 
 
 def _peak(index=0, pos=60000, in_ms=50000, out_ms=80000, ignored=False):
@@ -23,6 +24,12 @@ def _peak(index=0, pos=60000, in_ms=50000, out_ms=80000, ignored=False):
     p.set_out_point(out_ms)
     p.ignored = ignored
     return p
+
+
+def _mc(peak_id, anchor_ms, boundary, **kw):
+    return ClipCandidate(candidate_id=marker_candidate_id(peak_id),
+                         origin=ORIGIN_MARKER, anchor_ms=anchor_ms,
+                         peak_id=peak_id, boundary=boundary, **kw)
 
 
 def _session(peaks, candidates=None, current=0):
@@ -46,7 +53,7 @@ def test_speak_window_from_in_out():
 
 
 def test_smart_window_from_candidate():
-    cand = ClipCandidate(peak_id=0, boundary=ClipBoundary(40000, 90000), score=0.8)
+    cand = _mc(0, 60000, ClipBoundary(40000, 90000), score=0.8)
     s = _session([_peak()], [cand])
     w = build_playback_window(s, "smart")
     assert w.start_ms == 40000 and w.end_ms == 90000 and not w.disabled
@@ -59,22 +66,22 @@ def test_smart_disabled_when_no_candidate():
 
 
 def test_smart_disabled_when_ignored():
-    cand = ClipCandidate(peak_id=0, boundary=ClipBoundary(40000, 90000), score=0.8)
+    cand = _mc(0, 60000, ClipBoundary(40000, 90000), score=0.8)
     s = _session([_peak(ignored=True)], [cand])
     assert build_playback_window(s, "smart").disabled
 
 
 def test_smart_disabled_when_discarded():
-    cand = ClipCandidate(peak_id=0, boundary=ClipBoundary(40000, 90000),
-                         status=DISCARDED, score=0.8)
+    cand = _mc(0, 60000, ClipBoundary(40000, 90000),
+              status=DISCARDED, score=0.8)
     s = _session([_peak()], [cand])
     assert build_playback_window(s, "smart").disabled
 
 
 def test_smart_disabled_when_score_none_or_zero():
-    c_none = ClipCandidate(peak_id=0, boundary=ClipBoundary(40000, 90000), score=None)
+    c_none = _mc(0, 60000, ClipBoundary(40000, 90000), score=None)
     assert build_playback_window(_session([_peak()], [c_none]), "smart").disabled
-    c_zero = ClipCandidate(peak_id=0, boundary=ClipBoundary(40000, 90000), score=0.0)
+    c_zero = _mc(0, 60000, ClipBoundary(40000, 90000), score=0.0)
     assert build_playback_window(_session([_peak()], [c_zero]), "smart").disabled
 
 

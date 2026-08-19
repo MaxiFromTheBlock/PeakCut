@@ -42,7 +42,7 @@ _BASE_CFG = {"fps": 25, "context_duration_ms": 15000}
 
 def test_schema_version_current():
     # v4 (Multitrack/Import-Slots) -> v5 (Import Slice 3, additiv).
-    assert CURRENT_SCHEMA_VERSION == 5
+    assert CURRENT_SCHEMA_VERSION == 6
 
 
 # ---------------------------------------------------------------------
@@ -160,9 +160,9 @@ def test_v1_archive_without_field_loads_with_default(tmp_path):
         data = json.load(f)
     data["schema_version"] = 1
     data["assignments"].pop("folgenschnitt_unused_clips_mode", None)
-    # v1 hatte keine clip_candidates/peak_decisions — simulieren
+    # v1 hatte keine clip_candidates/candidate_decisions — simulieren
     data.pop("clip_candidates", None)
-    data.pop("peak_decisions", None)
+    data.pop("candidate_decisions", None)
     with open(archive_path, "w") as f:
         json.dump(data, f)
 
@@ -217,10 +217,11 @@ def test_null_mode_falls_back_to_default(tmp_path):
 
 
 def test_existing_v2_payload_still_has_clip_candidates_and_transcript(tmp_path):
-    """Schema-v3-Bump darf clip_candidates / peak_decisions /
-    transcript nicht beschaedigen."""
+    """Schema-Bumps duerfen clip_candidates / candidate_decisions /
+    transcript nicht beschaedigen. v6: Decision-Sektion heisst
+    "candidate_decisions" (haengt an candidate_id statt peak_id)."""
     s = _make_session(tmp_path / "s")
     payload = build_archive_payload(s, material_root=str(tmp_path / "s"))
     assert "clip_candidates" in payload
-    assert "peak_decisions" in payload
+    assert "candidate_decisions" in payload
     assert "transcript" in payload

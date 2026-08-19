@@ -13,7 +13,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from gui.review_page import ReviewPage  # noqa: E402
 from core.peak import Peak  # noqa: E402
-from core.clip_candidates import ClipCandidate, ClipBoundary  # noqa: E402
+from core.clip_candidates import (  # noqa: E402
+    ClipCandidate, ClipBoundary, ORIGIN_MARKER, marker_candidate_id)
 from core.playback_windows import build_playback_window  # noqa: E402
 
 
@@ -97,8 +98,9 @@ def test_on_play_smart_without_candidate_is_disabled_no_play():
 
 
 def test_on_play_smart_with_candidate_plays():
-    cand = ClipCandidate(peak_id=0, boundary=ClipBoundary(40000, 90000),
-                         score=0.8)
+    cand = ClipCandidate(candidate_id=marker_candidate_id(0), origin=ORIGIN_MARKER,
+                         anchor_ms=60000, peak_id=0,
+                         boundary=ClipBoundary(40000, 90000), score=0.8)
     fs = _fs(mode="smart", candidates=[cand])
     ReviewPage.on_play(fs)
     assert _played(fs) and _played(fs)[0][0] == "play"
