@@ -80,7 +80,11 @@ def run_analysis(config_data):
         "speaker_activity_mic_assignments": [],
         "speaker_turns": [],
         "folgenschnitt_edit_decisions": [],
-        "marker_missing": False,
+        # Fluechtiger Laufhinweis, welche Schritte uebersprungen wurden und warum.
+        # Bewusst allgemein (Carl-Gate A): NICHT ein Flag je Fall. Die WAHRHEIT
+        # ueber Faehigkeiten bleibt core/project_capabilities.py — das hier ist
+        # nur der Bericht dieses einen Laufs und wird NICHT in die Akte persistiert.
+        "skipped_steps": {},
         "error": None
     }
 
@@ -139,44 +143,47 @@ def run_analysis(config_data):
     #   kein Marker gesetzt      -> legitimer Fall, weiterarbeiten, Flag setzen
     #   Marker gesetzt, Datei weg -> Materialfehler, muss LAUT bleiben, sonst
     #                                laeuft eine HM-Folge still ohne Keyboardstellen durch
+    #
+    # KEIN frueher Return (Carl-Gate A): ein fehlender Marker darf NUR Step 3
+    # auslassen, nicht die Pipeline beenden — sonst wuerde ein kuenftiger
+    # markerunabhaengiger Step 4 stillschweigend mit uebersprungen.
     if not keyboard_track:
-        results["marker_missing"] = True
+        results["skipped_steps"]["peak_detection"] = "marker_missing"
         progress("Kein Marker — Keyboardstellen entfallen, Sync + Sprecher-Aktivitaet bleiben")
-        return results
 
-    if not os.path.exists(keyboard_track):
+    elif not os.path.exists(keyboard_track):
         error(f"Marker-Datei nicht gefunden: {keyboard_track}")
         results["error"] = "No keyboard file"
-        return results
 
-    progress("Analysiere Peaks...")
-    try:
-        raw_peaks = detect_peaks(
-            keyboard_track,
-            cfg.get("threshold_factor", 0.3),
-            cfg.get("min_gap_ms", 12000)
-        )
+    else:
+        progress("Analysiere Peaks...")
+        try:
+            raw_peaks = detect_peaks(
+                keyboard_track,
+                cfg.get("threshold_factor", 0.3),
+                cfg.get("min_gap_ms", 12000)
+            )
 
-        ctx = cfg.get("context_duration_ms", 15000)
+            ctx = cfg.get("context_duration_ms", 15000)
 
-        # Convert to serializable format (int() to convert numpy int64 to Python int)
-        results["peaks"] = [
-            {
-                "index": i,
-                "position_ms": int(t),
-                "in_point_ms": int(max(0, t - ctx)),
-                "out_point_ms": int(t + ctx),
-                "context_ms": int(ctx),
-                "ignored": False
-            }
-            for i, t in enumerate(raw_peaks)
-        ]
+            # Convert to serializable format (int() to convert numpy int64 to Python int)
+            results["peaks"] = [
+                {
+                    "index": i,
+                    "position_ms": int(t),
+                    "in_point_ms": int(max(0, t - ctx)),
+                    "out_point_ms": int(t + ctx),
+                    "context_ms": int(ctx),
+                    "ignored": False
+                }
+                for i, t in enumerate(raw_peaks)
+            ]
 
-        progress(f"{len(results['peaks'])} Peaks gefunden")
+            progress(f"{len(results['peaks'])} Peaks gefunden")
 
-    except Exception as e:
-        error(f"Peak-Analyse fehlgeschlagen: {e}")
-        results["error"] = str(e)
+        except Exception as e:
+            error(f"Peak-Analyse fehlgeschlagen: {e}")
+            results["error"] = str(e)
 
     return results
 
