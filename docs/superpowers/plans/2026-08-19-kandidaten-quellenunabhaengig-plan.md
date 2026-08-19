@@ -65,13 +65,21 @@ aendern darf. Sie ist gruen gegen den heutigen Code.
 """
 import pytest
 
-from core.session import PeakCutSession
 from core.clip_candidates import PROPOSED, DISCARDED
+from core.project import PeakCutProject
+from core.session import PeakCutSession
+
+# pytest.ini setzt bereits `pythonpath = src` — kein sys.path-Gefummel noetig.
+_CFG = {"fps": 25, "context_duration_ms": 15000}
 
 
 def make_session_with_peaks(peaks_ms, *, ignored=()):
-    """Session mit synthetischen Peaks; ohne Audio/Video, rein Datenweg."""
-    session = PeakCutSession()
+    """Session mit synthetischen Peaks; ohne Audio/Video, rein Datenweg.
+
+    PeakCutSession verlangt (project, config) — siehe src/core/session.py:37.
+    Muster uebernommen aus tests/test_clip_candidates_session.py:21.
+    """
+    session = PeakCutSession(PeakCutProject(), dict(_CFG))
     session.load_analysis_results({
         "peaks": [
             {"index": i, "position_ms": ms,
