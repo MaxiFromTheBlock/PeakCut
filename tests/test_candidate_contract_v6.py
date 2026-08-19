@@ -136,10 +136,15 @@ def test_v6_akte_mit_fehlendem_feld_scheitert_statt_still_zu_migrieren(tmp_path)
     akte = root / ".peakcut" / "project.json"
     payload = json.loads(akte.read_text())
     # v6-Kandidat mit candidate_id + origin, aber OHNE anchor_ms — muss
-    # trotz vorhandener peak_id NICHT als Marker-Migration durchrutschen.
+    # trotz vorhandener peak_id (0 EXISTIERT im Peak-Satz!) NICHT als
+    # Marker-Migration durchrutschen. Fix-Runde 2: peak_id=None wuerde
+    # schon bei int(d["peak_id"]) mit TypeError scheitern und damit unter
+    # ALTEM wie NEUEM Code gruen sein (der Test haette nichts bewiesen) —
+    # peak_id=0 zwingt den Code stattdessen wirklich in den Migrationszweig,
+    # den Befund 2 eigentlich zugesperrt hat.
     payload["clip_candidates"] = [{
         "candidate_id": "transcript:abc", "origin": "transcript",
-        "peak_id": None, "boundary": {"start_ms": 45_000, "end_ms": 75_000},
+        "peak_id": 0, "boundary": {"start_ms": 45_000, "end_ms": 75_000},
         "status": "proposed", "transcript_excerpt": "", "reason": "", "score": None}]
     payload["candidate_decisions"] = []
     akte.write_text(json.dumps(payload))
