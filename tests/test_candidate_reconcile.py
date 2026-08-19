@@ -112,6 +112,32 @@ def test_zwei_peaks_mit_gleichem_index_kollidieren_beim_neubau():
         session.load_analysis_results(DUPLICATE_INDEX_ANALYSIS)
 
 
+def test_zwei_marker_kandidaten_mit_gleicher_id_werden_abgelehnt():
+    """Fix-Runde 2, Pruefer-Befund: `by_id` wurde per Dict-Comprehension aus
+    `existing_candidates` gebaut — zwei ORIGIN_MARKER-Kandidaten mit
+    derselben candidate_id liessen den ERSTEN (samt Bearbeitungszustand)
+    still verschwinden, der LETZTE gewann kommentarlos, bevor die
+    spaetere `seen`-Pruefung ueber `keep` ueberhaupt etwas sehen konnte
+    (in `keep` stand dann nur noch EIN Eintrag mit dieser ID). Muss
+    stattdessen ClipCandidateError werfen, BEVOR irgendein Kandidat
+    verworfen wird — genau der Zustand, den eine beschaedigte
+    .peakcut-Akte erzeugen kann (das Archiv validiert candidate_id/origin
+    beim Laden nicht gegeneinander)."""
+    session = make_session_with_peaks(PEAKS)
+    session.clip_candidates = [
+        ClipCandidate(
+            candidate_id="marker:0", origin=ORIGIN_MARKER, anchor_ms=60_000,
+            peak_id=0, boundary=ClipBoundary(50_000, 70_000),
+            status=SELECTED, reason="von Hand justiert", score=0.9),
+        ClipCandidate(
+            candidate_id="marker:0", origin=ORIGIN_MARKER, anchor_ms=60_000,
+            peak_id=0, boundary=ClipBoundary(45_000, 75_000),
+            status=PROPOSED),
+    ]
+    with pytest.raises(ClipCandidateError):
+        session.load_analysis_results(SAME_ANALYSIS)
+
+
 def test_nach_fehler_bleiben_peaks_und_kandidaten_unveraendert():
     """Fix-Runde 1, Pruefer-Befund 2: load_analysis_results muss atomar
     sein. Fliegt die Reconciliation, darf die Session NICHT mit neuen

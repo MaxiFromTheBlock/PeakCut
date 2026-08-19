@@ -103,21 +103,42 @@ class PeakCutSession:
         eigener spaeterer Schritt.
 
         Fix-Runde 1 (Pruefer-Befund 1): die Eindeutigkeitspruefung laeuft
-        gegen die FERTIGE Liste `keep`, nicht nur gegen `existing_candidates`
-        — sonst entgehen ihr Dubletten, die erst WAEHREND dieser Methode
-        entstehen (Fremdkandidat mit `marker:<n>`-ID fuer einen bisher
-        fehlenden Marker-Kandidaten; zwei Peaks mit demselben `index`).
-        Reine Funktion (statt Instanzmethode mit Seiteneffekt), damit
-        `load_analysis_results` sie gegen lokale, noch nicht committete
-        Peaks aufrufen kann (Fix-Runde 1, Befund 2 — Atomaritaet).
+        (auch) gegen die FERTIGE Liste `keep`, nicht nur gegen
+        `existing_candidates` — sonst entgehen ihr Dubletten, die erst
+        WAEHREND dieser Methode entstehen (Fremdkandidat mit `marker:<n>`-ID
+        fuer einen bisher fehlenden Marker-Kandidaten; zwei Peaks mit
+        demselben `index`). Reine Funktion (statt Instanzmethode mit
+        Seiteneffekt), damit `load_analysis_results` sie gegen lokale, noch
+        nicht committete Peaks aufrufen kann (Fix-Runde 1, Befund 2 —
+        Atomaritaet).
+
+        Fix-Runde 2 (Pruefer-Befund): die Marker-Partition von
+        `existing_candidates` wird VOR dem Aufbau von `by_id` auf
+        Eindeutigkeit geprueft. Eine Dict-Comprehension
+        (`{c.candidate_id: c for c in ... if origin==MARKER}`) wuerde zwei
+        gleich benannte Marker-Kandidaten sonst still zusammenfallen lassen
+        (der letzte gewinnt) — GENAU BEVOR die spaetere `seen`-Pruefung
+        ueber `keep` ueberhaupt etwas sehen koennte, weil `keep` dann nur
+        noch einen Eintrag mit dieser ID enthaelt. Bearbeitungszustand
+        (Status, editierte Boundary) des verworfenen Kandidaten waere ohne
+        Fehler verschwunden. Der Fehler muss fliegen, BEVOR irgendetwas
+        verworfen wurde.
         """
         from .clip_candidates import (
             ClipBoundary, ClipCandidate, ClipCandidateError,
             ORIGIN_MARKER, PROPOSED, DISCARDED, marker_candidate_id)
 
+        by_id = {}
+        for c in existing_candidates:
+            if c.origin != ORIGIN_MARKER:
+                continue
+            if c.candidate_id in by_id:
+                raise ClipCandidateError(
+                    f"Doppelte candidate_id in der Marker-Partition: "
+                    f"{c.candidate_id!r}")
+            by_id[c.candidate_id] = c
+
         keep = [c for c in existing_candidates if c.origin != ORIGIN_MARKER]
-        by_id = {c.candidate_id: c for c in existing_candidates
-                 if c.origin == ORIGIN_MARKER}
 
         for pk in peaks:
             cid = marker_candidate_id(pk.index)
@@ -142,8 +163,8 @@ class PeakCutSession:
             seen.add(c.candidate_id)
 
         keep.sort(key=lambda c: (c.anchor_ms, c.candidate_id))
-        return keep
         # peak_decisions bewusst NICHT angefasst (kein Zugriff hier drin).
+        return keep
 
     def _reconcile_marker_candidates(self):
         """Instanzmethode: gleicht `self.clip_candidates` gegen
@@ -154,7 +175,7 @@ class PeakCutSession:
         self.clip_candidates = self._compute_reconciled_marker_candidates(
             self.clip_candidates, self.peaks)
 
-    # Rueckwaertskompatibler Name: project_archive.py:314 ruft ihn per
+    # Rueckwaertskompatibler Name: project_archive.py:319-320 ruft ihn per
     # hasattr(session, "_bootstrap_clip_candidates") auf (Save-Pfad, falls
     # eine Akte ohne Candidates gespeichert wird). Alias statt Umbenennung
     # der Aufrufstelle, damit dieser Pfad nicht still ausfaellt.
