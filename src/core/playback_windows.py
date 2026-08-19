@@ -12,9 +12,18 @@ from .playback_modes import (
     PLAYBACK_MODE_KEY, PLAYBACK_MODE_SPEAK,
     normalize_playback_mode,
 )
-from .clip_candidates import DISCARDED
+from .clip_candidates import ClipCandidateError, DISCARDED
 
 _SMART_DISABLED = "Kein Sinnabschnitt für diesen Drücker."
+# Fix-Runde 1 (Pruefer-Befund 2): marker_candidate_for_peak kann jetzt
+# ClipCandidateError werfen (doppelte Marker-Zuordnung auf denselben Peak).
+# Aufrufer sind ungeschuetzte Qt-Slots (review_page.on_play,
+# _refresh_play_availability) ohne sys.excepthook — PyQt6 killt den
+# Prozess bei einer unbehandelten Slot-Exception (SIGABRT). Dieses Modul
+# ist die einzige Stelle, die build_playback_window aufruft; der Fehler
+# wird HIER in einen disabled_reason uebersetzt statt die Qt-Grenze zu
+# erreichen (gleiches Muster wie die anderen Smart-disabled-Faelle).
+_SMART_COLLISION = "Sinnabschnitte: doppelte Marker-Zuordnung."
 
 
 @dataclass(frozen=True)
@@ -60,7 +69,10 @@ def build_playback_window(session, mode, peak_index=None):
     if getattr(peak, "ignored", False):
         return PlaybackWindow(mode, 0, 0, _SMART_DISABLED)
     from .candidate_view import marker_candidate_for_peak
-    cand = marker_candidate_for_peak(session, peak.index)
+    try:
+        cand = marker_candidate_for_peak(session, peak.index)
+    except ClipCandidateError:
+        return PlaybackWindow(mode, 0, 0, _SMART_COLLISION)
     if (cand is None or cand.status == DISCARDED
             or cand.score is None or cand.score <= 0.0
             or cand.boundary.end_ms <= cand.boundary.start_ms):

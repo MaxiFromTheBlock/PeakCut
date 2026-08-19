@@ -186,17 +186,26 @@ class PeakCutSession:
         if not (0 <= self.current_peak < len(self.peaks)):
             return
         peak = self.peaks[self.current_peak]
-        peak.ignored = True
         # Roadmap #2: Rückkanal — Candidate (via peak_id == Peak.index,
         # NICHT Listenposition) auf discarded, Decision anhängen.
         # Idempotent (transition no-op bei gleichem Status). Defensiv:
         # ist der Candidate published (terminal), bleibt er historisch
         # published — der Peak wird trotzdem ignoriert (wie bisher).
+        #
+        # Fix-Runde 1 (Pruefer-Befund 1): der Lookup steht VOR
+        # `peak.ignored = True`. marker_candidate_for_peak kann jetzt
+        # ClipCandidateError werfen (doppelte Marker-Zuordnung auf
+        # denselben Peak) — vorher wuerde der Peak dann als ignoriert
+        # stehen bleiben, obwohl kein Kandidat verworfen und keine
+        # Decision geschrieben wurde (halb-mutierter Zustand). Gleicher
+        # Grundsatz wie in _compute_reconciled_marker_candidates oben:
+        # der Fehler muss fliegen, BEVOR etwas veraendert wurde.
         from datetime import datetime
         from .clip_candidates import transition, DISCARDED, \
             ClipCandidateError
         from .candidate_view import marker_candidate_for_peak
         target = marker_candidate_for_peak(self, peak.index)
+        peak.ignored = True
         if target is not None:
             i = self.clip_candidates.index(target)
             try:

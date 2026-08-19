@@ -36,6 +36,17 @@ def _session_with_collision(*, intruder_first=False):
     return session
 
 
+def _session_with_marker_marker_collision():
+    """Zwei ECHTE Marker-Kandidaten auf demselben peak_id (nicht ein
+    auto-Eindringling) -- der Fall, der marker_candidates_by_peak_id selbst
+    zum Werfen bringt (Fix-Runde-1-Szenario fuer Befund 1+2)."""
+    session = make_session_with_peaks([60_000])
+    session.clip_candidates.append(ClipCandidate(
+        candidate_id="marker:0:dublette", origin=ORIGIN_MARKER, anchor_ms=60_000,
+        peak_id=0, boundary=ClipBoundary(45_000, 75_000)))
+    return session
+
+
 def test_sicht_liefert_nur_den_marker_kandidaten():
     session = _session_with_collision()
     cand = marker_candidate_for_peak(session, COLLIDING_PEAK_ID)
@@ -123,3 +134,43 @@ def test_pfad_grenzen_pipeline_aktualisiert_den_marker_nicht_den_eindringling():
         "Grenzen-Pipeline hat den Eindringling statt des Markers aktualisiert"
     assert intruder.boundary.start_ms == 55_000
     assert intruder.boundary.end_ms == 65_000
+
+
+def test_pfad_ignorieren_bei_kollision_laesst_peak_unveraendert():
+    """Fix-Runde 1, Pruefer-Befund 1: session.py:188 setzte peak.ignored=True
+    VOR dem Lookup ueber die Sicht. Wirft marker_candidate_for_peak
+    (doppelte Marker-Zuordnung auf denselben Peak), blieb der Peak bisher
+    trotzdem ignoriert, obwohl kein Kandidat verworfen und keine Decision
+    geschrieben wurde -- halb-mutierter Zustand. Widerspricht demselben
+    Grundsatz, den session.py:124-126 (Reconcile) schon festschreibt: der
+    Fehler muss fliegen, BEVOR etwas veraendert wurde. Im Web-Repo bleibt
+    ohne diesen Fix zusaetzlich die gecachte Sitzung (with_project_session)
+    dauerhaft halb mutiert im RAM stehen (kein Save, keine Cache-Raeumung
+    ausserhalb des Save-Fehlerzweigs)."""
+    session = _session_with_marker_marker_collision()
+    session.set_current_peak(0)
+    candidates_before = list(session.clip_candidates)
+    with pytest.raises(ClipCandidateError):
+        session.ignore_peak()
+    assert session.peaks[0].ignored is False, \
+        "Peak blieb ignoriert, obwohl ignore_peak() fehlgeschlagen ist"
+    assert session.clip_candidates == candidates_before, \
+        "Kandidatenliste wurde trotz Fehler veraendert"
+    assert session.peak_decisions == [], \
+        "Decision wurde trotz Fehler geschrieben"
+
+
+def test_pfad_playback_faengt_kollisionsfehler_ab_statt_qt_crash():
+    """Fix-Runde 1, Pruefer-Befund 2: build_playback_window kann seit Task 3
+    ClipCandidateError werfen (marker_candidate_for_peak). Die Aufrufer sind
+    ungeschuetzte Qt-Slots (review_page.on_play, _refresh_play_availability)
+    ohne sys.excepthook -- PyQt6 killt den Prozess bei einer unbehandelten
+    Slot-Exception (SIGABRT). build_playback_window muss den Fehler HIER
+    kontrolliert als disabled_reason melden statt ihn bis zur Qt-Grenze
+    durchzureichen."""
+    from core.playback_modes import PLAYBACK_MODE_SMART
+    from core.playback_windows import build_playback_window
+    session = _session_with_marker_marker_collision()
+    win = build_playback_window(session, PLAYBACK_MODE_SMART, peak_index=0)
+    assert win.disabled, "Kollisionsfehler haette abgefangen werden muessen"
+    assert win.disabled_reason, "kein verstaendlicher Grund fuer den Nutzer"
