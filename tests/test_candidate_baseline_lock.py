@@ -3,8 +3,6 @@
 Diese Datei beschreibt, was sich durch die Quellenunabhaengigkeit NICHT
 aendern darf. Sie ist gruen gegen den heutigen Code.
 """
-import pytest
-
 from core.clip_candidates import PROPOSED, DISCARDED
 from core.project import PeakCutProject
 from core.session import PeakCutSession
@@ -66,7 +64,6 @@ def test_ziel_anker_ist_der_tritt_nicht_der_anfang():
     assert cand.anchor_ms != cand.boundary.start_ms   # NICHT der Anfang
 
 
-@pytest.mark.xfail(strict=True, reason="Task 2: Reconcile noch nicht gebaut")
 def test_ziel_neu_analyse_erhaelt_fremdquellen():
     from core.clip_candidates import ClipBoundary, ClipCandidate, ORIGIN_AUTO
     session = make_session_with_peaks([60_000])

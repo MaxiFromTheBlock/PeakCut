@@ -86,26 +86,60 @@ class PeakCutSession:
         mehr — die Wiedergabe steuert die ReviewPage über den Controller."""
         self.mode = next_playback_mode(self.mode)
 
-    def _bootstrap_clip_candidates(self):
-        """Roadmap #2: pro Peak ein ClipCandidate (nicht ignoriert ->
-        proposed, ignoriert -> discarded). Kein Decision (kein echter
-        redaktioneller Akt mit Timestamp). Boundary defensiv (>start)."""
-        from .clip_candidates import ClipBoundary, ClipCandidate, \
-            PROPOSED, DISCARDED, ORIGIN_MARKER, marker_candidate_id
-        cands = []
+    def _reconcile_marker_candidates(self):
+        """Task 2 (Kandidaten quellenunabhaengig): gleicht NUR die Partition
+        origin == marker ab statt die gesamte Kandidatenliste zu ersetzen.
+
+        Bestehende Marker-Kandidaten behalten ihren Bearbeitungszustand,
+        fehlende werden ergaenzt, Nicht-Marker-Kandidaten (Fremdquellen wie
+        auto/transcript/manual) bleiben unangetastet. Das Entscheidungslog
+        wird NIE pauschal geleert — es ist die Grundlage des lernenden Scores.
+
+        GRENZE (Carl): gilt fuer einen UNVERAENDERTEN Marker-Satz.
+        marker:<peak_id> ist ueber Analyselaeufe hinweg NICHT stabil, sobald
+        Marker eingefuegt/entfernt werden — echte Reanalyse mit veraendertem
+        Marker-Satz braucht ein zeitliches Event-Matching und ist ein
+        eigener spaeterer Schritt.
+        """
+        from .clip_candidates import (
+            ClipBoundary, ClipCandidate, ClipCandidateError,
+            ORIGIN_MARKER, PROPOSED, DISCARDED, marker_candidate_id)
+
+        seen = {}
+        for c in self.clip_candidates:
+            if c.candidate_id in seen:
+                raise ClipCandidateError(
+                    f"Doppelte candidate_id: {c.candidate_id!r}")
+            seen[c.candidate_id] = c
+
+        keep = [c for c in self.clip_candidates if c.origin != ORIGIN_MARKER]
+        by_id = {c.candidate_id: c for c in self.clip_candidates
+                 if c.origin == ORIGIN_MARKER}
+
         for pk in self.peaks:
+            cid = marker_candidate_id(pk.index)
+            existing = by_id.get(cid)
+            if existing is not None:
+                keep.append(existing)       # Bearbeitungszustand bleibt
+                continue
             lo, hi = pk.in_point_ms, pk.out_point_ms
-            if hi <= lo:                       # defensiv (Clamp-Edge)
+            if hi <= lo:                    # defensiv (Clamp-Edge)
                 hi = lo + 1
-            cands.append(ClipCandidate(
-                candidate_id=marker_candidate_id(pk.index),
-                origin=ORIGIN_MARKER,
-                anchor_ms=pk.position_ms,      # der Tritt, NICHT lo
-                peak_id=pk.index,
+            keep.append(ClipCandidate(
+                candidate_id=cid, origin=ORIGIN_MARKER,
+                anchor_ms=pk.position_ms, peak_id=pk.index,
                 boundary=ClipBoundary(lo, hi),
                 status=DISCARDED if pk.ignored else PROPOSED))
-        self.clip_candidates = cands
-        self.peak_decisions = []
+
+        keep.sort(key=lambda c: (c.anchor_ms, c.candidate_id))
+        self.clip_candidates = keep
+        # peak_decisions bewusst NICHT angefasst.
+
+    # Rueckwaertskompatibler Name: project_archive.py:314 ruft ihn per
+    # hasattr(session, "_bootstrap_clip_candidates") auf (Save-Pfad, falls
+    # eine Akte ohne Candidates gespeichert wird). Alias statt Umbenennung
+    # der Aufrufstelle, damit dieser Pfad nicht still ausfaellt.
+    _bootstrap_clip_candidates = _reconcile_marker_candidates
 
     def ignore_peak(self):
         """Mark current peak as ignored."""
@@ -184,10 +218,11 @@ class PeakCutSession:
                 peak.ignored = True
             self.peaks.append(peak)
 
-        # Roadmap #2: Candidates aus Peaks bootstrappen (kein Decision —
-        # keine echte redaktionelle Aktion mit Timestamp). Ein späterer
-        # Archiv-Load (Projektakte v2) überschreibt das ggf. wieder.
-        self._bootstrap_clip_candidates()
+        # Task 2: NUR die Marker-Partition abgleichen, nicht ersetzen.
+        # Fremdquellen, Bearbeitungszustand und peak_decisions bleiben.
+        # Ein späterer Archiv-Load (Projektakte v2) überschreibt das ggf.
+        # wieder (lädt die gespeicherte Wahrheit).
+        self._reconcile_marker_candidates()
 
         from .folgenschnitt_models import (
             ActivityFrame,
