@@ -36,6 +36,24 @@
   (dort baut `analyze_runner.py:159-162` die Akte danach frisch auf). Betrifft den
   Kern, nicht nur die Oberfläche — der Gastname färbt die Sprecher-Vorbelegung **vor**
   der Analyse, ist also nicht nachreichbar. Folge sonst: Exportordner „Unknown".
+- **Sinnabschnitte-Zähler wird herkunftsblind, sobald Auto-Kandidaten existieren** `[S]` · braucht: nichts
+  **NEU 2026-08-19/20 (Kandidaten-quellenunabhängig, Abschluss-Review, deferred).**
+  `gui/review_page.py:590-591` und `:687-689` bilden zwei Aggregate über
+  `session.clip_candidates`, ohne nach `origin` zu filtern. Heute folgenlos (es gibt
+  nur Marker-Kandidaten), aber am Tag des ersten Auto-/Transkript-Kandidaten
+  unterdrückt ein einziger fremder Kandidat MIT Score den ganzen Smart-Lauf
+  (`_maybe_start_smart_worker` hält ihn fälschlich für „schon berechnet") und die
+  Statuszeile zeigt eine falsche Zahl „Sinnabschnitte bereit (N)". Fix: beide
+  Aggregate auf `origin == ORIGIN_MARKER` filtern (über `core/candidate_view.py`,
+  nicht roh über `clip_candidates` iterieren). **Wichtigster** der zurückgestellten
+  Punkte dieser Runde.
+- **`main_window.py` fängt `ClipCandidateError` an zwei Stellen nicht ab** `[S]` · braucht: nichts
+  **NEU 2026-08-19/20 (Kandidaten-quellenunabhängig, Abschluss-Review, deferred).**
+  `_load_from_archive` (`:280`) fängt nur `ProjectArchiveError`; `_on_analysis_done`
+  (`:317`, ruft `session.load_analysis_results`) fängt gar nichts. Eine kaputte Akte
+  mit doppelten Peak-Indizes/`candidate_id`s entkommt damit dem „kontrollierter
+  Hinweis statt Crash"-Vertrag, den `build_playback_window` und `review_page.on_ignore`
+  (Fix-Welle 2026-08-19/20) für denselben Fehlertyp schon einhalten.
 
 ## 🔧 Funktions-Ausbau (nächste Features)
 - **Sinnabschnitt-Grenzen auf Satzanfang/-ende einrasten** `[M]` · braucht: Carl-Plan
@@ -86,6 +104,18 @@
 - **Threading-/Lebenszyklus-Härtung + echte Thread-Tests** `[L]` · braucht: Carl-Plan
   Worker-Handle-Disziplin (Neustart ohne sauberen Abbau), echte QThread-Tests
   (TEST-1). Durch #76 teilweise entschärft, Rest offen.
+- **Akten-Laden sortiert Kandidaten nicht nach und prüft `candidate_id` nicht auf Eindeutigkeit** `[S]` · braucht: Carl-Plan
+  **NEU 2026-08-19/20 (Kandidaten-quellenunabhängig, deferred).** `core/project_archive.py`
+  (Hydrieren der `clip_candidates`-Sektion) verlässt sich beim Akten-Laden auf die
+  gespeicherte Reihenfolge statt nach `(anchor_ms, candidate_id)` nachzusortieren, und
+  prüft die Eindeutigkeit von `candidate_id` nicht. Heute faktisch korrekt (nur ein
+  Schreibpfad), aber eine von außen manipulierte/inkonsistente Akte lädt klaglos und
+  fliegt erst später an verstreuten Stellen auf.
+- **Vertragsfrage: darf `peak_id` bei `origin != marker` überhaupt gesetzt sein?** `[S]` · braucht: Carl-Plan
+  **OFFEN FÜR CARL (Abschluss-Review Kandidaten-quellenunabhängig, vor dem nächsten
+  Freeze).** Ein Verbot im `ClipCandidate.__post_init__` würde die ganze Kollisionsklasse
+  (fremder Kandidat mit kollidierender Legacy-`peak_id`) an der Wurzel schließen statt
+  sie an fünf/sechs Joins zu bewachen. Keine Altdatenquelle spricht dagegen.
 - **Letzte Klassifizierer-Insel zusammenführen** (AUD-1) `[S]` · braucht: nichts
   **Präzisiert 2026-08-17 (selbst nachgegrept, vorher zu pauschal formuliert):** Der
   ganze `core/`-Baum geht inzwischen über `import_classifier` — `audio_routing:52`,
@@ -97,6 +127,22 @@
   `core/material_scanner.py` in die PyQt-App zu erledigen (siehe Punkt darunter).
 
 ## 🧹 Hygiene & Wartung
+- **Namensdrift `peak_decisions` ↔ `candidate_decisions` ↔ `CandidateDecision`/`PeakDecision`** `[M]` · braucht: Carl-Plan
+  **OFFEN FÜR CARL (Abschluss-Review Kandidaten-quellenunabhängig, 2026-08-19/20).**
+  `session.peak_decisions` (Attribut), die Akten-Sektion `candidate_decisions` und die
+  Klasse `CandidateDecision` (Alias `PeakDecision`, bestehende Importe bleiben heil)
+  heißen an 33 Fundstellen unterschiedlich. Jetzt (kurz nach dem Umbau) ist der
+  billigste Moment zum Begradigen.
+- **Vier kosmetische Restpunkte aus der Kandidaten-quellenunabhängig-Fix-Welle** `[S]` · braucht: nichts
+  **NEU 2026-08-19/20, deferred, Sammelposten, alle rein kosmetisch, kein
+  Verhalten:** (1) `session.py:157` Kommentar nennt `project_archive.py:314`, der
+  echte `hasattr`-Aufruf liegt bei 319-320 (Zeilendrift, vorbestehend).
+  (2) `session.py:145-146` Kommentar „peak_decisions bewusst NICHT angefasst" steht
+  nach dem `return`. (3) `core/candidate_view.py:18` liest die Session defensiv per
+  `getattr`, den Kandidaten aber hart per `c.origin` — inkonsistent.
+  (4) `core/clip_boundary/pipeline.py:106` und `core/session.py:201` nutzen
+  `list.index()` über Wertgleichheit statt Identität; heute sicher, aber
+  unausgesprochene Abhängigkeit.
 - **Versions-Drift in build.sh / PeakCut.spec** (stehen auf 2.9.0, App ist 2.11) `[S]` · braucht: Max-Entscheidung
   Vor Wiederbelebung des macOS-Bundles beide aktualisieren.
 - **Sammel-Tech-Schulden** `[L]` · braucht: nichts — geparkt

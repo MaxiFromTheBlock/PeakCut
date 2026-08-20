@@ -64,12 +64,28 @@ def test_sicht_schlaegt_bei_doppelter_marker_zuordnung_fehl():
 
 
 def test_pfad_playback_spielt_nicht_das_fremdfenster():
+    """Pruefer-Befund (Mutationstest, Fix-Runde 2): die alte Fassung pruefte
+    nur "!= Eindringling-Fenster (55_000, 65_000)". Das blieb auch dann wahr,
+    wenn die Herkunfts-Pruefung in candidate_view.py:18 entfernt wird -- der
+    Fix aus Task 3 uebersetzt einen Kollisionsfehler in ein disabled-Fenster
+    (0, 0), und der Marker-Kandidat hat hier ohnehin (ohne Score) ein
+    disabled (0, 0)-Fenster -> (0, 0) != (55_000, 65_000) ist auch OHNE
+    Filter wahr, der Test war stumm. Score gesetzt macht den Marker-Pfad
+    ECHT enabled + pruefbar; die Zusicherung ist jetzt POSITIV: das Fenster
+    muss GENAU der Boundary des MARKER-Kandidaten entsprechen."""
+    from dataclasses import replace
     from core.playback_modes import PLAYBACK_MODE_SMART
     from core.playback_windows import build_playback_window
     session = _session_with_collision(intruder_first=True)
+    marker = next(c for c in session.clip_candidates
+                  if c.candidate_id == "marker:0")
+    session.clip_candidates[session.clip_candidates.index(marker)] = \
+        replace(marker, score=0.9)
     win = build_playback_window(session, PLAYBACK_MODE_SMART, peak_index=0)
-    assert (win.start_ms, win.end_ms) != (55_000, 65_000), \
-        "Smart-Fenster kam vom kollidierenden auto-Kandidaten"
+    assert (win.start_ms, win.end_ms) == \
+        (marker.boundary.start_ms, marker.boundary.end_ms), \
+        "Smart-Fenster muss die Boundary des MARKER-Kandidaten sein, " \
+        "nicht (0,0) oder die des Eindringlings"
 
 
 def test_pfad_smart_xml_nimmt_den_eindringling_nicht_auf():
@@ -174,3 +190,49 @@ def test_pfad_playback_faengt_kollisionsfehler_ab_statt_qt_crash():
     win = build_playback_window(session, PLAYBACK_MODE_SMART, peak_index=0)
     assert win.disabled, "Kollisionsfehler haette abgefangen werden muessen"
     assert win.disabled_reason, "kein verstaendlicher Grund fuer den Nutzer"
+
+
+def test_pfad_on_ignore_faengt_kollisionsfehler_ab_statt_qt_crash():
+    """Zweiter Absturzweg (Fix-Runde 2): session.ignore_peak() kann seit
+    Task 3 ClipCandidateError werfen (marker_candidate_for_peak, doppelte
+    Marker-Zuordnung auf denselben Peak) -- session.py laesst den Fehler
+    BEWUSST durchfliegen (siehe test_pfad_ignorieren_bei_kollision_
+    laesst_peak_unveraendert oben: der Fehler muss fliegen, BEVOR etwas
+    veraendert wurde). review_page.on_ignore ist aber ein ungeschuetzter
+    Qt-Slot ohne sys.excepthook -- PyQt6 killt den Prozess bei einer
+    unbehandelten Slot-Exception (SIGABRT), fuer build_playback_window
+    schon gefangen (Test oben), fuer ignore_peak bisher nicht. on_ignore
+    muss den Fehler HIER kontrolliert als Statuszeile melden statt ihn
+    bis zur Qt-Grenze durchzureichen."""
+    import types
+    from gui.review_page import ReviewPage
+
+    session = _session_with_marker_marker_collision()
+    session.set_current_peak(0)
+
+    class _Sig:
+        def __init__(self):
+            self.messages = []
+
+        def emit(self, msg):
+            self.messages.append(msg)
+
+        def connect(self, _cb):
+            pass
+
+    navigated = []
+    fake_self = types.SimpleNamespace(
+        session=session,
+        status_message=_Sig(),
+        session_changed=_Sig(),
+        navigate_to_peak=lambda idx: navigated.append(idx))
+
+    ReviewPage.on_ignore(fake_self)   # darf NICHT raisen (kein SIGABRT)
+
+    assert fake_self.status_message.messages, \
+        "kein verstaendlicher Hinweis fuer den Nutzer"
+    assert session.peaks[0].ignored is False, \
+        "Peak-Mutation trotz fehlgeschlagenem Ignorieren"
+    assert navigated == [], "Navigation trotz fehlgeschlagenem Ignorieren"
+    assert fake_self.session_changed.messages == [], \
+        "session_changed trotz fehlgeschlagenem Ignorieren"

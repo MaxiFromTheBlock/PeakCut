@@ -79,7 +79,8 @@ def test_save_writes_schema_v4_structural_slots(tmp_path):
     save_project_archive(s, root=str(tmp_path / "mat"))
     data = _read_archive(str(tmp_path / "mat"))
 
-    # v4-Strukturslots bleiben in v5 erhalten (additiv) — Version ist jetzt 5.
+    # v4-Strukturslots bleiben additiv erhalten — Version ist jetzt 6
+    # (Kandidaten quellenunabhaengig, Carl-Gate A 2026-08-19).
     assert CURRENT_SCHEMA_VERSION == 6
     assert data["schema_version"] == 6
     proj = data["project"]
@@ -180,8 +181,10 @@ def test_folder_move_relativizes_all_slots(tmp_path):
     assert str(moved) in p.marker_track
 
 
-def test_future_schema_v5_rejected(tmp_path):
-    """Zukunfts-Schema-Guard (DATA-2) bleibt: v5-Akte wird nicht geladen."""
+def test_future_schema_rejected(tmp_path):
+    """Zukunfts-Schema-Guard (DATA-2) bleibt: schema_version > CURRENT
+    wird nicht geladen (Name war stale: „v5" war nur zur v4-Zeit die
+    naechste Zukunft, CURRENT_SCHEMA_VERSION ist inzwischen 6)."""
     material = tmp_path / "mat"
     _write_v3_akte(material)
     path = material / ARCHIVE_DIR / ARCHIVE_FILE

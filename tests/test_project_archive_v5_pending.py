@@ -56,7 +56,7 @@ def _archive_json(root):
         return json.load(f)
 
 
-def test_current_schema_is_5():
+def test_current_schema_is_6():
     assert CURRENT_SCHEMA_VERSION == 6
 
 

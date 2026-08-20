@@ -38,8 +38,15 @@ def test_v6_roundtrip_ist_exakt():
 
 
 def test_v6_ohne_pflichtfelder_wird_abgelehnt():
-    """Strikt (Carl): grosszuegige Defaults wuerden kaputte v6-Akten tarnen."""
-    with pytest.raises((ClipCandidateError, KeyError)):
+    """Strikt (Carl): grosszuegige Defaults wuerden kaputte v6-Akten tarnen.
+
+    Pruefer-Befund (Mutationstest, Fix-Runde 2): das urspruengliche
+    `pytest.raises((ClipCandidateError, KeyError))` bewies nichts -- ohne
+    den `missing`-Block in ClipCandidate.from_dict waere ein blanker
+    `KeyError` (aus `d["candidate_id"]`) genauso durchgerutscht. Nur
+    `ClipCandidateError` allein belegt wirklich die kontrollierte v6-
+    Strikt-Zusage."""
+    with pytest.raises(ClipCandidateError):
         ClipCandidate.from_dict({"boundary": {"start_ms": 0, "end_ms": 10},
                                  "status": PROPOSED})
 

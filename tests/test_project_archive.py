@@ -45,8 +45,10 @@ class _FakeSession:
 
 
 def test_constants_are_frozen():
-    # Import Slice 3 (Carl-Gate): bump auf v5 (confirmed_import_slots + material_sources
-    # + analysis_state). v4-Slots bleiben additiv.
+    # Task 1 (Kandidaten quellenunabhaengig, Carl-Gate A 2026-08-19): bump
+    # auf v6 (candidate_id/origin/anchor_ms, Decisions an candidate_id).
+    # v5-Slots (confirmed_import_slots + material_sources + analysis_state)
+    # bleiben additiv.
     assert CURRENT_SCHEMA_VERSION == 6
     assert ARCHIVE_DIR == ".peakcut"
     assert ARCHIVE_FILE == "project.json"

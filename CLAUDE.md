@@ -806,6 +806,69 @@ Produkt):**
 
 ## Changelog
 
+### Kandidaten quellenunabhängig — v6-Vertrag + zentrale Sicht (feature/kandidaten-quellenunabhaengig, 2026-08-19/20)
+
+Vier-Augen mit Carl (Spec + Gate A), Claude TDD-Bau über 4 Tasks + Abschluss-Review +
+Fix-Welle. Ziel: eine „Stelle" (bisher nur vom Fußpedal) wird quellenunabhängig — künftig
+auch aus Transkript-Analyse, automatischer Clip-Findung oder von Hand.
+
+- **Task 1 — v6-Vertrag atomar (`4dbdf5e`):** `ClipCandidate` trägt jetzt eine stabile
+  Identität (`candidate_id`), ihre Herkunft (`origin` — marker/transcript/auto/manual)
+  und einen expliziten Anker (`anchor_ms`, der Sprungpunkt für die Review-Navigation,
+  NIEMALS aus `boundary.start_ms` abgeleitet). `peak_id` ist nur noch eine optionale
+  Rückreferenz für markergebundene Kandidaten, keine Identität mehr. `.peakcut`-Schema
+  v5 → **v6**. `ClipCandidate.from_dict` ist strikt (v6-Pflichtfelder müssen da sein);
+  v1–v5-Migration passiert beim Hydrieren in `project_archive.py`, wo `session.peaks`
+  vorliegt (Anker = `peak.position_ms`). Kaputte/fremd-hergeleitete Akten scheitern
+  kontrolliert statt still umgedeutet zu werden.
+- **Task 2 — Reconciliation statt Replace (`4f2289b`):** `load_analysis_results`
+  gleicht die Marker-Partition der Kandidatenliste jetzt ab statt sie zu ersetzen —
+  Fremdquellen (auto/transcript/manual) und der Bearbeitungszustand bestehender
+  Marker-Kandidaten bleiben über eine Reanalyse hinweg erhalten. Atomar: eine
+  Kollision (doppelte `candidate_id`) wirft, BEVOR irgendetwas an der Session
+  verändert wurde.
+- **Task 3 — zentrale Marker-Sicht statt fünf blinder Joins (`2df30fc`):** neues
+  Qt-freies Modul `core/candidate_view.py` (`marker_candidates_by_peak_id`,
+  `marker_candidate_for_peak`) — die EINE Stelle, die Kandidaten über `peak_id`
+  joint. Vorher taten das fünf Stellen blind (XML-Export, Smart-Playback,
+  Ignorieren, Grenzen-Pipeline, Web-Serialisierer); ein Fremdkandidat mit
+  kollidierender Legacy-`peak_id` konnte dort den Marker-Kandidaten verdrängen,
+  im Web-Serialisierer sogar still überschreiben. Schlägt bei Doppelzuordnung
+  jetzt FEHL statt einen Treffer zu raten. `build_playback_window` fängt den
+  Kollisionsfehler kontrolliert als `disabled_reason` ab (Qt-Slot-Schutz).
+- **Task 4 — auto-Kandidat kompletter Datenweg (`b353984`):** Kollisionssicherheit
+  End-to-End belegt (Reconciliation → zentrale Sicht → Export/Playback/Ignorieren),
+  reales Paritäts-Gate gegen die Ilka-Akte grün.
+- **Fix-Welle nach Abschluss-Review (diese Runde):** zweiter Absturzweg geschlossen
+  — `review_page.on_ignore` fing `ClipCandidateError` aus `session.ignore_peak()`
+  bisher nicht ab (gleicher SIGABRT-Auslöser wie der bereits gefixte Play-Pfad),
+  jetzt kontrollierte Statuszeile + Test. Web-Engine (`PeakCut-web/engine/
+  engine_core.py`): `candidate_view`-Import von Funktions- auf Modulebene gehoben
+  — vorher startete die Engine gegen einen zu alten Kern sauber durch und starb
+  erst beim ersten Projekt-Öffnen mit 500 (widersprach der README-Zusage „der
+  Bruch ist laut, nicht leise"). Web-README auf v6 nachgezogen + `core/candidate_view`
+  in die Modul-Mindestliste ergänzt. Zwei Tests geschärft (waren grün ohne wirklich
+  zu prüfen — per Mutationstest belegt): `test_pfad_playback_spielt_nicht_das_
+  fremdfenster` prüft jetzt POSITIV die Marker-Boundary statt nur „≠ Eindringling-
+  Fenster" (letzteres blieb auch ohne Herkunfts-Filter wahr, weil beide Fälle auf
+  ein disabled `(0,0)`-Fenster liefen); `test_v6_ohne_pflichtfelder_wird_abgelehnt`
+  verlangt jetzt `ClipCandidateError` allein statt eines Tupels mit `KeyError`.
+  Stale Schema-Namen in vier Testdateien korrigiert (v5→v6).
+- **Bewusst NICHT in dieser Runde (→ BACKLOG.md):** zwei herkunftsblinde Aggregate
+  in `review_page.py` (Sinnabschnitte-bereit-Zähler), fehlende Nachsortierung/
+  Eindeutigkeitsprüfung beim Akten-Laden (`project_archive.py`), Namensdrift
+  `peak_decisions`/`candidate_decisions`/`CandidateDecision` (33 Fundstellen),
+  `main_window.py:280/316` fangen `ClipCandidateError` nicht, offene
+  Vertragsfrage ob `peak_id` bei `origin != marker` erlaubt bleiben soll.
+- **Reales Risiko geprüft:** Migration an Max' echter Ilka-Akte read-only
+  nachgefahren — 31/31 Kandidaten korrekt, Anker == `peak.position_ms`, keine
+  inhaltliche Abweichung, Akte-SHA vorher==nachher. KEIN Verlust.
+- **888 Kern-Tests grün** (Web: 362 passed/10 skipped/1 deselected), Pin-1
+  byte-identisch. Merge-Auflagen aus dem Abschluss-Review: v6 gleichzeitig auf
+  `feature/redesign`+`develop`+`main` landen (kein Zweig bleibt zurück),
+  Web-Merge zusammen mit dem Kern-Merge, vor dem ersten v6-Schreiben Kopie von
+  `2026_Ilka Bessin/1_Material/.peakcut/` wegsichern.
+
 ### Core-Extraction Zuordnungs-Datenschicht (develop + feature/redesign, 2026-06-20)
 
 Vorbedingung für den **Web-Zuordnungs-Screen** (Schwester-Repo `PeakCut-web`,
@@ -1511,4 +1574,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-06-20 (develop + feature/redesign: Core-Extraction der Zuordnungs-Datenschicht nach `core/folgenschnitt_assignment.py` — Qt-freie Vorbedingung für den Web-Zuordnungs-Screen im Schwester-Repo PeakCut-web, reine Extraktion ohne Verhaltensänderung, 793 grün, Pin-1 stabil, Carl-Cross-Review offen. Davor 2026-06-18: Marker-Slice — beide XMLs Video+Ton+nummerierte Bereich-Marker, „Keyboardstellen raw"/„smart", Nummern synchron, von Max in Premiere abgenommen. OFFEN: Carl-Schluss-Review Marker-Slice; nächster Slice „Grenzen auf Satzanfang/-ende einrasten". Auf main zuletzt: #76 Wiedergabe-UX (2026-06-16). Todos in App/BACKLOG.md.)*
+*Zuletzt aktualisiert: 2026-08-19/20 (feature/kandidaten-quellenunabhaengig: Kandidaten quellenunabhängig — `.peakcut`-Schema v5→v6, `ClipCandidate` trägt jetzt `candidate_id`/`origin`/`anchor_ms` (optionales `peak_id`), Reconciliation statt Replace, zentrale Marker-Sicht `core/candidate_view.py` statt fünf blinder Joins. Fix-Welle danach: zweiter Absturzweg `review_page.on_ignore` geschlossen, Web-Engine-Import `candidate_view` auf Modulebene gehoben, Web-README auf v6 nachgezogen, zwei stumpf gewordene Tests per Mutationstest geschärft, aufgeschobene Punkte in BACKLOG.md gerettet. 888 Kern-Tests grün, Web 362 grün, Pin-1 stabil, reale Ilka-Akte read-only migrationsgeprüft (31/31 korrekt, SHA vorher==nachher). Davor 2026-06-20: Core-Extraction der Zuordnungs-Datenschicht nach `core/folgenschnitt_assignment.py`. Todos in App/BACKLOG.md.)*

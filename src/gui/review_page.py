@@ -15,6 +15,7 @@ from .video_preview_peak import PeakVideoPreview
 from .review_camera_labels import camera_display_label
 from .workers import ExportWorker, SmartBoundaryWorker
 from core.clip_boundary.decider import ClaudeBoundaryDecider
+from core.clip_candidates import ClipCandidateError
 from core.sinnabschnitt_exporter import (
     SinnabschnittTXTExporter, SinnabschnittXMLExporter)
 
@@ -409,9 +410,22 @@ class ReviewPage(QWidget):
         return audio_routing.get_mix_track(self.session.project) is not None
 
     def on_ignore(self):
+        # Fix-Runde (Pruefer-Befund): session.ignore_peak() kann seit Task 3
+        # ClipCandidateError werfen (marker_candidate_for_peak, doppelte
+        # Marker-Zuordnung auf denselben Peak). on_ignore ist ein
+        # ungeschuetzter Qt-Slot ohne sys.excepthook -- PyQt6 killt den
+        # Prozess bei einer unbehandelten Slot-Exception (SIGABRT). Gleiches
+        # Muster wie playback_windows.build_playback_window: der Fehler wird
+        # HIER kontrolliert als Statuszeile gemeldet statt die Qt-Grenze zu
+        # erreichen. session.ignore_peak() garantiert selbst schon, dass bei
+        # einem Fehler nichts mutiert wurde (Peak bleibt nicht ignoriert).
         if not self.session:
             return
-        self.session.ignore_peak()
+        try:
+            self.session.ignore_peak()
+        except ClipCandidateError as e:
+            self.status_message.emit(f"Ignorieren fehlgeschlagen: {e}")
+            return
         idx = self.session.current_peak
         self.status_message.emit(f"Peak {idx + 1} ignoriert")
         if idx < len(self.session.peaks) - 1:

@@ -1,6 +1,6 @@
 # PeakCut — Kontext
 
-> **Stand: 2026-08-17.** Davor war dieses Dokument auf dem Stand vom 18.06. eingefroren
+> **Stand: 2026-08-19/20.** Davor war dieses Dokument auf dem Stand vom 18.06. eingefroren
 > und in mehreren Punkten nachweislich falsch (Schema-Version, „Import geparkt", ein
 > bereits gelöster Bug als offen). Beim Fortschreiben: Behauptungen gegen den Code
 > prüfen, nicht gegen die Erinnerung.
@@ -133,6 +133,8 @@ Kern. Reihenfolge dort, nach dem Gesundheitscheck (Carl) + Ultracode-Sweep (Clau
 vom 12./17.08.:
 
 1. ✅ **Kern-Zweige zusammengeführt** (Merge `deb6265`) — Schema v5 jetzt überall.
+   ✅ **Kandidaten quellenunabhängig** (feature/kandidaten-quellenunabhaengig,
+   2026-08-19/20) — Schema v5 → **v6** jetzt überall, siehe unten.
 2. **Doku geradeziehen** (dieses Dokument, CLAUDE.md, PeakCut-web/README.md).
 3. **Startprüfung Web↔Kern** — Schema-/Modul-Handshake statt „nimm den Nachbarordner".
    Muss `export_parity.py` mitnehmen (eigener zweiter Draht zum Kern).
@@ -151,6 +153,26 @@ SRT (groß). (Die frühere „V3 Vision: Smart Scan / Create Mix / Hub"-Liste wa
 2026-05-18.)
 
 ## Offene Slices
+
+### Kandidaten quellenunabhängig (2026-08-19/20, feature/kandidaten-quellenunabhaengig)
+Bisher kam eine „Stelle" nur vom Fußpedal-Marker. Jetzt quellenunabhängig: künftig auch
+aus Transkript-Analyse, automatischer Clip-Findung oder von Hand gesetzt. `ClipCandidate`
+trägt eine stabile Identität (`candidate_id`), ihre Herkunft (`origin` —
+marker/transcript/auto/manual) und einen expliziten Anker (`anchor_ms`, NIE aus
+`boundary.start_ms` abgeleitet); `peak_id` ist nur noch eine optionale Rückreferenz für
+markergebundene Kandidaten. `.peakcut`-Schema **v5 → v6**. Neues Qt-freies Modul
+`core/candidate_view.py` bündelt fünf vorher blind über `peak_id` joinende Stellen
+(XML-Export, Smart-Playback, Ignorieren, Grenzen-Pipeline, Web-Serialisierer) — ein
+Fremdkandidat mit kollidierender Legacy-`peak_id` konnte dort vorher den echten
+Marker-Kandidaten verdrängen. Vier-Augen mit Carl (Spec + Gate A), TDD über 4 Tasks +
+Abschluss-Review + Fix-Welle, 888 Kern-Tests grün, Web 362 grün, Pin-1 stabil. Reale
+Ilka-Akte read-only migrationsgeprüft (31/31 korrekt, SHA vorher==nachher). Merge-
+Auflagen: v6 gleichzeitig auf `feature/redesign`+`develop`+`main`, Web-Merge zusammen
+mit dem Kern-Merge. **Offen (→ BACKLOG.md):** zwei herkunftsblinde Aggregate in
+`review_page.py`, fehlende Nachsortierung/Eindeutigkeitsprüfung beim Akten-Laden,
+Namensdrift `peak_decisions`/`candidate_decisions`, `main_window.py` fängt
+`ClipCandidateError` an zwei Stellen nicht, offene Vertragsfrage `peak_id` bei
+`origin != marker`. Details: CLAUDE.md → Changelog.
 
 ### Kern-Zweige zusammengeführt (2026-08-17, Merge `deb6265`)
 `feature/redesign` → `develop` → `main`, alle drei inhaltlich identisch, 845 Tests +
