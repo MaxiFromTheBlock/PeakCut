@@ -21,24 +21,33 @@ Origin-Filter haengt (Gegenprobe unten dokumentiert):
    Abwesenheits-Check (faengt fehlenden/kaputten Filter UND eine nur
    zufaellig leere Menge).
 2. Ein ZWEITER Fremdkandidat mit KOLLIDIERENDER peak_id (0, wie in
-   tests/test_candidate_collisions.py) durchlaeuft denselben kompletten
-   Datenweg (erzeugen/speichern/laden/reanalysieren). Erst diese echte
-   Kollision macht die Origin-Pruefung ueberhaupt beobachtbar: ohne sie gibt
-   es in der Fixture keinen peak_id-Konflikt, an dem ein entfernter
-   Origin-Filter je einen Unterschied machen koennte. test_candidate_
-   collisions.py deckt die Kollision in-memory ab, aber nicht den
-   Persistenz-Rundlauf durch Schema 6 + eine Neu-Analyse -- das prueft im
-   Repo bisher niemand.
+   tests/test_candidate_collisions.py). Erst diese echte Kollision macht die
+   Origin-Pruefung ueberhaupt beobachtbar: ohne sie gibt es in der Fixture
+   keinen peak_id-Konflikt, an dem ein entfernter Origin-Filter je einen
+   Unterschied machen koennte.
+
+Gate B / A1+A3 (2026-08-21) -- was sich an Punkt 2 geaendert hat: der
+Eindringling ist seit A3 nicht mehr regulaer baubar (origin != marker ⇒
+peak_id is None) und wird seit A1 an der Archivgrenze abgelehnt (Schema 6 =
+strikt). Der Test baut ihn deshalb absichtlich ungueltig (tests/
+malformed_candidates.py) und prueft den Persistenz-Rundlauf jetzt SCHAERFER
+statt schwaecher: eine Akte MIT ihm muss beim Laden kontrolliert scheitern
+(Schritt 5a), der echte quellenunabhaengige auto-Kandidat muss den Rundlauf
+durch Schema 6 + Neu-Analyse weiterhin exakt ueberleben (5b/6).
 """
 import json
 from dataclasses import replace
+
+import pytest
 
 from core.candidate_view import marker_candidate_for_peak
 from core.clip_candidates import (
     ClipBoundary, ClipCandidate, ORIGIN_AUTO, ORIGIN_MARKER, SELECTED,
     transition)
-from core.project_archive import load_project_archive, save_project_archive
+from core.project_archive import (
+    ProjectArchiveError, load_project_archive, save_project_archive)
 from core.xml_sequence_helpers import active_smart_candidates
+from tests.malformed_candidates import malformed_candidate
 from tests.test_candidate_baseline_lock import make_session_with_peaks
 
 AUTO_ID = "auto:integration"
@@ -55,7 +64,12 @@ def test_auto_kandidat_kompletter_datenweg(tmp_path):
         candidate_id=AUTO_ID, origin=ORIGIN_AUTO, anchor_ms=120_000,
         peak_id=None, boundary=ClipBoundary(110_000, 130_000),
         reason="starker Einstieg", score=0.77))
-    session.clip_candidates.append(ClipCandidate(
+    # Gate B / A3 (2026-08-21): INTRUDER_ID verletzt die neue Wurzel-Invariante
+    # (origin != marker ⇒ peak_id is None) und ist deshalb absichtlich am
+    # Konstruktor vorbei gebaut -- zweite Verteidigungslinie, s.
+    # tests/malformed_candidates.py. Genau so kann er nur noch von aussen
+    # kommen (beschaedigte/handeditierte Akte), nicht mehr aus PeakCut selbst.
+    session.clip_candidates.append(malformed_candidate(
         candidate_id=INTRUDER_ID, origin=ORIGIN_AUTO, anchor_ms=61_000,
         peak_id=COLLIDING_PEAK_ID, boundary=ClipBoundary(55_000, 65_000),
         score=0.99, reason="Eindringling"))
@@ -99,6 +113,22 @@ def test_auto_kandidat_kompletter_datenweg(tmp_path):
     payload = json.loads((root / ".peakcut" / "project.json").read_text())
     assert payload["schema_version"] == 6
 
+    # 5a. Gate B / A1+A3: die Archivgrenze ist der Ort, an dem so ein
+    # Eindringling gestoppt wird. Schema 6 heisst strikt -- ein Kandidat mit
+    # origin=auto UND gesetzter peak_id ist keine gueltige v6-Akte mehr und
+    # wird kontrolliert abgelehnt, statt als Kollision in die Session zu
+    # gelangen. (Vorher lud genau diese Akte klaglos durch; die
+    # Kollisionssicherheit hing danach allein an den Verbrauchern.)
+    with pytest.raises(ProjectArchiveError):
+        load_project_archive(str(root), {})
+
+    # 5b. Ab hier der normale Datenweg OHNE den (nur noch von aussen
+    # denkbaren) Eindringling: der echte quellenunabhaengige auto-Kandidat
+    # muss den Rundlauf durch Schema 6 exakt ueberleben.
+    session.clip_candidates = [c for c in session.clip_candidates
+                               if c.candidate_id != INTRUDER_ID]
+    save_project_archive(session, str(root))
+
     loaded = load_project_archive(str(root), {})
     back = next(c for c in loaded.clip_candidates if c.candidate_id == AUTO_ID)
     assert back.origin == ORIGIN_AUTO
@@ -107,12 +137,11 @@ def test_auto_kandidat_kompletter_datenweg(tmp_path):
     assert back.score == 0.77
     assert [d.candidate_id for d in loaded.peak_decisions] == [AUTO_ID]
 
-    # Kollisions-Sicherheit ueberlebt den Rundlauf durch Schema 6: die
-    # zentrale Sicht liefert nach dem Laden weiterhin den echten Marker,
-    # nicht den Eindringling mit derselben peak_id.
-    intruder_back = next(c for c in loaded.clip_candidates
-                          if c.candidate_id == INTRUDER_ID)
-    assert intruder_back.origin == ORIGIN_AUTO
+    # Kollisions-Sicherheit nach dem Rundlauf durch Schema 6: der Eindringling
+    # ist gar nicht erst in der geladenen Session (5a hat gezeigt, dass eine
+    # Akte MIT ihm abgelehnt wird), und die zentrale Sicht liefert weiterhin
+    # den echten Marker fuer Peak 0.
+    assert INTRUDER_ID not in {c.candidate_id for c in loaded.clip_candidates}
     assert marker_candidate_for_peak(loaded, COLLIDING_PEAK_ID).candidate_id \
         == "marker:0"
 
@@ -130,7 +159,6 @@ def test_auto_kandidat_kompletter_datenweg(tmp_path):
         "video_offsets": [],
     })
     assert AUTO_ID in {c.candidate_id for c in loaded.clip_candidates}
-    assert INTRUDER_ID in {c.candidate_id for c in loaded.clip_candidates}
     assert marker_candidate_for_peak(loaded, COLLIDING_PEAK_ID).candidate_id \
         == "marker:0"
     assert len(loaded.peak_decisions) == 1

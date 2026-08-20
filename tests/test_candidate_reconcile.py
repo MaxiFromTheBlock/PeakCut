@@ -10,6 +10,7 @@ import pytest
 from core.clip_candidates import (
     ClipBoundary, ClipCandidate, CandidateDecision, ClipCandidateError,
     ORIGIN_AUTO, ORIGIN_MARKER, PROPOSED, SELECTED)
+from tests.malformed_candidates import malformed_candidate
 from tests.test_candidate_baseline_lock import make_session_with_peaks
 
 PEAKS = [60_000]
@@ -81,8 +82,14 @@ def test_sortierung_ist_deterministisch_nach_anker():
 
 
 def test_doppelte_candidate_id_wird_abgelehnt():
+    """Zweite Verteidigungslinie (Gate B / A3): der Fremdkandidat traegt eine
+    marker:<n>-ID. Seit A3 verbietet `ClipCandidate.__post_init__` den
+    reservierten Namensraum fuer origin != marker, also ist dieses Objekt
+    absichtlich UNGUELTIG gebaut (s. tests/malformed_candidates.py). Die
+    Reconciliation muss trotzdem werfen — solche Daten koennen aus einer
+    beschaedigten/handeditierten Akte kommen."""
     session = make_session_with_peaks(PEAKS)
-    session.clip_candidates.append(ClipCandidate(
+    session.clip_candidates.append(malformed_candidate(
         candidate_id="marker:0", origin=ORIGIN_AUTO, anchor_ms=99_000,
         peak_id=None, boundary=ClipBoundary(90_000, 110_000)))
     with pytest.raises(ClipCandidateError):
@@ -94,9 +101,13 @@ def test_fremdkandidat_mit_marker_id_kollidiert_beim_neubau():
     marker:<n>-ID, fuer die noch KEIN Marker-Kandidat existiert. Die
     Reconciliation baut dafuer einen neuen Marker-Kandidaten -> zwei
     Eintraege mit derselben candidate_id. Der alte Code prüfte
-    Eindeutigkeit nur gegen die EINGANGS-Liste und übersah das."""
+    Eindeutigkeit nur gegen die EINGANGS-Liste und übersah das.
+
+    Gate B / A3: der Fremdkandidat mit marker:<n>-ID ist seit A3 nicht mehr
+    regulaer baubar -> absichtlich ungueltiges Objekt (zweite
+    Verteidigungslinie, s. tests/malformed_candidates.py)."""
     session = make_session_with_peaks(PEAKS)
-    session.clip_candidates = [ClipCandidate(
+    session.clip_candidates = [malformed_candidate(
         candidate_id="marker:0", origin=ORIGIN_AUTO, anchor_ms=10_000,
         peak_id=None, boundary=ClipBoundary(5_000, 9_000))]
     with pytest.raises(ClipCandidateError):

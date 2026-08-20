@@ -104,18 +104,12 @@
 - **Threading-/Lebenszyklus-Härtung + echte Thread-Tests** `[L]` · braucht: Carl-Plan
   Worker-Handle-Disziplin (Neustart ohne sauberen Abbau), echte QThread-Tests
   (TEST-1). Durch #76 teilweise entschärft, Rest offen.
-- **Akten-Laden sortiert Kandidaten nicht nach und prüft `candidate_id` nicht auf Eindeutigkeit** `[S]` · braucht: Carl-Plan
-  **NEU 2026-08-19/20 (Kandidaten-quellenunabhängig, deferred).** `core/project_archive.py`
-  (Hydrieren der `clip_candidates`-Sektion) verlässt sich beim Akten-Laden auf die
-  gespeicherte Reihenfolge statt nach `(anchor_ms, candidate_id)` nachzusortieren, und
-  prüft die Eindeutigkeit von `candidate_id` nicht. Heute faktisch korrekt (nur ein
-  Schreibpfad), aber eine von außen manipulierte/inkonsistente Akte lädt klaglos und
-  fliegt erst später an verstreuten Stellen auf.
-- **Vertragsfrage: darf `peak_id` bei `origin != marker` überhaupt gesetzt sein?** `[S]` · braucht: Carl-Plan
-  **OFFEN FÜR CARL (Abschluss-Review Kandidaten-quellenunabhängig, vor dem nächsten
-  Freeze).** Ein Verbot im `ClipCandidate.__post_init__` würde die ganze Kollisionsklasse
-  (fremder Kandidat mit kollidierender Legacy-`peak_id`) an der Wurzel schließen statt
-  sie an fünf/sechs Joins zu bewachen. Keine Altdatenquelle spricht dagegen.
+- **Historien-Frage: muss eine Decision auf einen vorhandenen Kandidaten zeigen?** `[S]` · braucht: Carl-Plan
+  **NEU 2026-08-21 (Gate B / Block A, bewusst offen gelassen).** Die Sammlungs-Prüfung
+  an der Archivgrenze (`validate_candidate_collection`) sichert nur die EINDEUTIGKEIT
+  der `candidate_id`. Ob das Entscheidungslog auch referenziell sauber sein muss (jede
+  Decision zeigt auf einen aktuell existierenden Kandidaten) ist eine eigene
+  Vertragsfrage — Decisions sind Historie und dürfen Kandidaten überleben.
 - **Letzte Klassifizierer-Insel zusammenführen** (AUD-1) `[S]` · braucht: nichts
   **Präzisiert 2026-08-17 (selbst nachgegrept, vorher zu pauschal formuliert):** Der
   ganze `core/`-Baum geht inzwischen über `import_classifier` — `audio_routing:52`,
@@ -175,6 +169,7 @@
 ---
 
 ## ✅ Erledigt (Historie, Kurzform)
+- **Gate B / Block A — v6-Strenge, Kandidaten-Identität, Wurzel-Invarianten** — drei Vertragslücken aus Carls Abschluss-Gate geschlossen (2026-08-21): (A1) die v6-Strenge hing an `if "candidate_id" in d` statt an der Schema-Version — eine beschädigte Schema-6-Akte tarnte sich als Legacy und lud still als `marker:0`; jetzt entscheidet `schema_v >= 6` (Kandidaten UND Decisions). (A2) neue zentrale Sammlungs-Prüfung `validate_candidate_collection` in BEIDE Richtungen (Laden + vor dem Schreiben): doppelte `candidate_id` → `ProjectArchiveError`, nach dem Hydrieren Sortierung nach `(anchor_ms, candidate_id)`. (A3) die peak_id-Kollisionsklasse ist an der Wurzel geschlossen (`ClipCandidate.__post_init__`): `origin != marker` erzwingt `peak_id is None`, Marker-ID muss zur `peak_id` passen, Namensraum `marker:` reserviert. Die zentrale Marker-Sicht bleibt als zweite Verteidigungslinie; die Kollisionstests arbeiten dafür mit absichtlich ungültigen Objekten (`tests/malformed_candidates.py`). 903 Tests grün, Pin-1 stabil
 - **Marker + Vergleichbarkeit Keyboardstellen ↔ Sinnabschnitte** — Carl-Plan, TDD (5 Tasks, 785 Tests). Beide XMLs: Video + Ton (smart hat jetzt dieselben Tonspuren wie raw), nummerierte Bereich-Marker „Stelle N" (synchron trotz peak_id-Versatz), Clip-Namen = Quelldateien, Sequenzen „Keyboardstellen raw"/„smart". Pin-1 bewusst neu eingefroren. Max in Premiere abgenommen (Philip Siefer). Carl-Schluss-Check offen (2026-06-18)
 - **Folgenschnitt-XML real bestätigt** — Max hat erstmals seit Langem selbst eine Postproduktion gemacht (Philip Siefer) und die Folgenschnitt-XML „funktioniert super". Erste echte Eigen-Nutzung außerhalb der Smoke-Tests (2026-06-17)
 - **Sinnabschnitt-XML in Premiere importierbar + auf Multicam gehoben** — erst fehlten FCP7-Pflichtangaben (Import scheiterte), dann auf Video+Ton+Marker gehoben (siehe Marker-Slice oben). Eigener Codepfad, Keyboardstellen/Pin-1 unberührt (2026-06-17/18)

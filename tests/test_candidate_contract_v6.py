@@ -1,11 +1,16 @@
-"""Task 1 — v6-Vertrag: Identitaet, Herkunft, Anker, Migration, Roundtrip."""
+"""Task 1 — v6-Vertrag: Identitaet, Herkunft, Anker, Migration, Roundtrip.
+
+Gate B / A3 (2026-08-21) ergaenzt am Ende die drei Wurzel-Invarianten, mit
+denen die peak_id-Kollisionsklasse geschlossen ist.
+"""
 import json
 
 import pytest
 
 from core.clip_candidates import (
     ClipBoundary, ClipCandidate, CandidateDecision, ClipCandidateError,
-    ORIGIN_MARKER, ORIGIN_AUTO, PROPOSED, SELECTED, marker_candidate_id)
+    ORIGIN_MARKER, ORIGIN_AUTO, ORIGIN_TRANSCRIPT, PROPOSED, SELECTED,
+    marker_candidate_id)
 
 
 def test_marker_candidate_id_format():
@@ -125,12 +130,17 @@ def test_v5_akte_mit_unbekanntem_peak_wirft_kontrolliert(tmp_path):
 
 
 def test_v6_akte_mit_fehlendem_feld_scheitert_statt_still_zu_migrieren(tmp_path):
-    """Fix-Runde 1, Befund 2 (Ruling ueber den Brief hinaus): die v6-Erkennung
-    beim Hydrieren haengt jetzt NUR an "candidate_id" — eine v6-Akte mit
+    """Fix-Runde 1, Befund 2 (Ruling ueber den Brief hinaus): eine v6-Akte mit
     fehlendem anchor_ms darf NICHT still in die Marker-Migrationslogik
     rutschen (das wuerde eine echte Fremdherkunft, z.B. origin=transcript,
     stillschweigend zu origin=marker mit erfundenem Peak-Anker umdeuten).
-    Stattdessen muss ClipCandidate.from_dict kontrolliert ablehnen."""
+    Stattdessen muss ClipCandidate.from_dict kontrolliert ablehnen.
+
+    Gate B / A1 (2026-08-21): die v6-Erkennung haengt inzwischen an der
+    SCHEMA-VERSION der Akte, nicht mehr an der Anwesenheit von
+    "candidate_id" (siehe tests/test_candidate_archive_guard.py). Dieser
+    Test bleibt als Beleg fuer den Fremdherkunfts-Fall unveraendert gueltig:
+    Schema 6 + fehlendes Pflichtfeld -> kontrollierter Fehler."""
     from tests.test_candidate_baseline_lock import make_session_with_peaks
     from core.project_archive import (
         save_project_archive, load_project_archive, ProjectArchiveError)
@@ -154,6 +164,87 @@ def test_v6_akte_mit_fehlendem_feld_scheitert_statt_still_zu_migrieren(tmp_path)
         "peak_id": 0, "boundary": {"start_ms": 45_000, "end_ms": 75_000},
         "status": "proposed", "transcript_excerpt": "", "reason": "", "score": None}]
     payload["candidate_decisions"] = []
+    akte.write_text(json.dumps(payload))
+
+    with pytest.raises(ProjectArchiveError):
+        load_project_archive(str(root), {})
+
+
+# --- Gate B / A3: die drei Wurzel-Invarianten -----------------------------
+# Carl-Entscheidung 2026-08-21: die Kollisionsklasse wird an der Wurzel
+# geschlossen statt an fuenf Verbraucher-Stellen bewacht. Je ein Test, der
+# die Verletzung konstruiert und den kontrollierten Fehler erwartet.
+
+
+def test_a3_fremdherkunft_darf_kein_peak_id_tragen():
+    """Invariante 1: origin != marker ERZWINGT peak_id is None.
+
+    Genau dieses Objekt war der Eindringling aus
+    tests/test_candidate_collisions.py — ein auto-Kandidat, der ueber eine
+    kollidierende Legacy-peak_id den Marker-Kandidaten verdraengen konnte.
+    Eine spaetere Naehe-/Herkunftsbeziehung bekommt ein EIGENES Feld
+    (related_candidate_id); peak_id darf nicht doppeldeutig werden."""
+    with pytest.raises(ClipCandidateError) as exc:
+        ClipCandidate(candidate_id="auto:kollision", origin=ORIGIN_AUTO,
+                      anchor_ms=61_000, peak_id=0,
+                      boundary=ClipBoundary(55_000, 65_000))
+    assert "peak_id" in str(exc.value)
+
+
+def test_a3_marker_id_muss_zur_peak_id_passen():
+    """Invariante 2: origin == marker ⇒ candidate_id == marker:<peak_id>.
+
+    Sonst zeigen Identitaet und Rueckreferenz auf verschiedene Peaks — die
+    zentrale Sicht joint ueber peak_id, alles andere ueber candidate_id."""
+    with pytest.raises(ClipCandidateError) as exc:
+        ClipCandidate(candidate_id="marker:0:dublette", origin=ORIGIN_MARKER,
+                      anchor_ms=60_000, peak_id=0,
+                      boundary=ClipBoundary(45_000, 75_000))
+    assert "marker:0" in str(exc.value)
+
+
+def test_a3_reservierter_namensraum_nur_fuer_marker():
+    """Invariante 3: 'marker:' ist reserviert. Ein transcript/auto/manual-
+    Kandidat darf die Identitaet eines Markers nicht annehmen."""
+    with pytest.raises(ClipCandidateError) as exc:
+        ClipCandidate(candidate_id="marker:7", origin=ORIGIN_TRANSCRIPT,
+                      anchor_ms=1_000, peak_id=None,
+                      boundary=ClipBoundary(0, 2_000))
+    assert "marker:" in str(exc.value)
+
+
+def test_a3_gueltige_kandidaten_bleiben_baubar():
+    """Gegenprobe zu den drei Tests oben: der Normalfall darf NICHT
+    mitgefangen werden (sonst waeren sie trivial gruen)."""
+    marker = ClipCandidate(candidate_id=marker_candidate_id(3),
+                           origin=ORIGIN_MARKER, anchor_ms=60_000, peak_id=3,
+                           boundary=ClipBoundary(45_000, 75_000))
+    fremd = ClipCandidate(candidate_id="auto:7f3", origin=ORIGIN_AUTO,
+                          anchor_ms=90_000, peak_id=None,
+                          boundary=ClipBoundary(80_000, 100_000))
+    assert marker.peak_id == 3 and fremd.peak_id is None
+
+
+def test_a3_ungueltige_akte_wird_beim_laden_abgelehnt(tmp_path):
+    """Die Invarianten wirken auch an der Archivgrenze: eine v6-Akte mit
+    origin=auto UND gesetzter peak_id ist keine gueltige Akte mehr."""
+    from tests.test_candidate_baseline_lock import make_session_with_peaks
+    from core.project_archive import (
+        save_project_archive, load_project_archive, ProjectArchiveError)
+
+    session = make_session_with_peaks([60_000])
+    root = tmp_path / "folge"
+    root.mkdir()
+    save_project_archive(session, str(root))
+
+    akte = root / ".peakcut" / "project.json"
+    payload = json.loads(akte.read_text())
+    payload["clip_candidates"].append({
+        "candidate_id": "auto:kollision", "origin": "auto",
+        "anchor_ms": 61_000, "peak_id": 0,
+        "boundary": {"start_ms": 55_000, "end_ms": 65_000},
+        "status": "proposed", "transcript_excerpt": "", "reason": "",
+        "score": 0.99})
     akte.write_text(json.dumps(payload))
 
     with pytest.raises(ProjectArchiveError):

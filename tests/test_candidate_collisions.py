@@ -1,11 +1,26 @@
 """Task 3 — ein auto-Kandidat mit kollidierender Legacy-peak_id darf NIRGENDS
-als Marker-Kandidat durchschlagen. Fuenf Pfade (Carl 2026-08-19)."""
+als Marker-Kandidat durchschlagen. Fuenf Pfade (Carl 2026-08-19).
+
+ZWEITE VERTEIDIGUNGSLINIE (Gate B / A3, 2026-08-21): seit die Invarianten im
+`__post_init__` von ClipCandidate sitzen, lassen sich die Kandidaten dieser
+Datei nicht mehr regulaer bauen — die Kollision ist an der Wurzel geschlossen.
+Diese Tests bleiben trotzdem bestehen und arbeiten ab jetzt mit ABSICHTLICH
+UNGUELTIGEN Objekten (`tests/malformed_candidates.malformed_candidate`, baut
+per object.__setattr__ am Konstruktor vorbei). Carl woertlich: „Die zentrale
+Marker-Sicht bleibt trotzdem als Defense-in-Depth bestehen. Die
+Kollisionspruefungen koennen mit absichtlich malformed Testobjekten weiter
+beweisen, dass die Verbraucher robust bleiben." Genau darum geht es hier:
+solche Daten koennen weiterhin von aussen kommen (handeditierte/beschaedigte
+.peakcut-Akte, aelterer Schreiber, Schwester-Repo) — die Verbraucher duerfen
+daran nicht zerbrechen.
+"""
 import pytest
 
 from core.candidate_view import (
     marker_candidate_for_peak, marker_candidates_by_peak_id)
 from core.clip_candidates import (
-    ClipBoundary, ClipCandidate, ClipCandidateError, ORIGIN_AUTO, ORIGIN_MARKER)
+    ClipBoundary, ClipCandidateError, ORIGIN_AUTO, ORIGIN_MARKER)
+from tests.malformed_candidates import malformed_candidate
 from tests.test_candidate_baseline_lock import make_session_with_peaks
 
 COLLIDING_PEAK_ID = 0
@@ -13,6 +28,9 @@ COLLIDING_PEAK_ID = 0
 
 def _session_with_collision(*, intruder_first=False):
     """auto-Kandidat traegt absichtlich dieselbe peak_id wie ein aktiver Peak.
+
+    UNGUELTIG per A3 (origin != marker ⇒ peak_id muss None sein) — bewusst am
+    Konstruktor vorbei gebaut, s. Modul-Docstring.
 
     intruder_first steuert die Listenposition. Die fuenf alten blinden Joins
     reagieren NICHT alle auf dieselbe Kollisions-Richtung: next()/enumerate-
@@ -25,7 +43,7 @@ def _session_with_collision(*, intruder_first=False):
     in diesem konkreten Aufbau (Marker zufaellig zuerst in der Liste) gar
     nicht ausgeloest wird."""
     session = make_session_with_peaks([60_000])
-    intruder = ClipCandidate(
+    intruder = malformed_candidate(
         candidate_id="auto:kollision", origin=ORIGIN_AUTO, anchor_ms=61_000,
         peak_id=COLLIDING_PEAK_ID, boundary=ClipBoundary(55_000, 65_000),
         score=0.99, reason="Eindringling")
@@ -39,9 +57,14 @@ def _session_with_collision(*, intruder_first=False):
 def _session_with_marker_marker_collision():
     """Zwei ECHTE Marker-Kandidaten auf demselben peak_id (nicht ein
     auto-Eindringling) -- der Fall, der marker_candidates_by_peak_id selbst
-    zum Werfen bringt (Fix-Runde-1-Szenario fuer Befund 1+2)."""
+    zum Werfen bringt (Fix-Runde-1-Szenario fuer Befund 1+2).
+
+    UNGUELTIG per A3 (origin == marker ⇒ candidate_id == marker:<peak_id>) --
+    bewusst am Konstruktor vorbei gebaut, s. Modul-Docstring. Die abweichende
+    ID ist hier notwendig: mit zwei mal exakt "marker:0" wuerde der Test nicht
+    mehr die peak_id-Doppelzuordnung pruefen, sondern die ID-Dublette."""
     session = make_session_with_peaks([60_000])
-    session.clip_candidates.append(ClipCandidate(
+    session.clip_candidates.append(malformed_candidate(
         candidate_id="marker:0:dublette", origin=ORIGIN_MARKER, anchor_ms=60_000,
         peak_id=0, boundary=ClipBoundary(45_000, 75_000)))
     return session
@@ -55,10 +78,7 @@ def test_sicht_liefert_nur_den_marker_kandidaten():
 
 
 def test_sicht_schlaegt_bei_doppelter_marker_zuordnung_fehl():
-    session = make_session_with_peaks([60_000])
-    session.clip_candidates.append(ClipCandidate(
-        candidate_id="marker:0:dublette", origin=ORIGIN_MARKER, anchor_ms=60_000,
-        peak_id=0, boundary=ClipBoundary(45_000, 75_000)))
+    session = _session_with_marker_marker_collision()
     with pytest.raises(ClipCandidateError):
         marker_candidates_by_peak_id(session)
 

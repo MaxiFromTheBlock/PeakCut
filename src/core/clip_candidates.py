@@ -41,6 +41,12 @@ ORIGIN_MANUAL = "manual"          # von Hand im Review gesetzt
 ALL_ORIGINS = (ORIGIN_MARKER, ORIGIN_TRANSCRIPT, ORIGIN_AUTO, ORIGIN_MANUAL)
 
 
+# Reservierter Namensraum: NUR markergebundene Kandidaten duerfen so heissen
+# (Gate B / A3). Sonst kann eine Fremdquelle die Identitaet eines Markers
+# annehmen, ohne dass es beim Bauen auffaellt.
+MARKER_ID_PREFIX = "marker:"
+
+
 def marker_candidate_id(peak_id: int) -> str:
     """Identitaet eines markergebundenen Kandidaten.
 
@@ -48,7 +54,7 @@ def marker_candidate_id(peak_id: int) -> str:
     eingefuegt/entfernt werden. Echte Reanalyse mit veraendertem Marker-Satz
     braucht zeitliches Event-Matching -> eigener spaeterer Slice.
     """
-    return f"marker:{peak_id}"
+    return f"{MARKER_ID_PREFIX}{peak_id}"
 
 
 class ClipCandidateError(Exception):
@@ -86,14 +92,44 @@ class ClipCandidate:
     score: float | None = None
 
     def __post_init__(self):
+        """Gate B / A3 (Carl-Entscheidung 2026-08-21): die Kollisionsklasse
+        wird an der WURZEL geschlossen statt an fuenf Verbraucher-Stellen
+        bewacht. Ein Kandidat, dessen Herkunft und dessen peak_id/Identitaet
+        nicht zusammenpassen, laesst sich gar nicht erst bauen.
+
+        Die zentrale Marker-Sicht (core/candidate_view.py) bleibt trotzdem
+        als zweite Verteidigungslinie bestehen — sie schuetzt gegen Daten,
+        die nie durch diesen Konstruktor gelaufen sind.
+        """
         if self.status not in _ALL_STATUS:
             raise ClipCandidateError(f"Unbekannter Status: {self.status!r}")
         if self.origin not in ALL_ORIGINS:
             raise ClipCandidateError(f"Unbekannte Herkunft: {self.origin!r}")
         if not self.candidate_id:
             raise ClipCandidateError("candidate_id darf nicht leer sein")
-        if self.origin == ORIGIN_MARKER and self.peak_id is None:
-            raise ClipCandidateError("Marker-Kandidat ohne peak_id")
+        if self.origin == ORIGIN_MARKER:
+            if self.peak_id is None:
+                raise ClipCandidateError("Marker-Kandidat ohne peak_id")
+            erwartet = marker_candidate_id(self.peak_id)
+            if self.candidate_id != erwartet:
+                raise ClipCandidateError(
+                    f"Marker-Kandidat {self.candidate_id!r} passt nicht zu "
+                    f"peak_id={self.peak_id} — erwartet {erwartet!r}")
+        else:
+            if self.peak_id is not None:
+                # peak_id darf NICHT doppeldeutig werden: sie bedeutet
+                # ausschliesslich "dieser Kandidat IST der Marker <peak_id>".
+                # Eine spaetere Naehe-/Herkunftsbeziehung bekommt ein eigenes
+                # Feld (related_candidate_id) — hier bewusst nicht gebaut.
+                raise ClipCandidateError(
+                    f"Kandidat {self.candidate_id!r} mit origin={self.origin!r} "
+                    f"darf kein peak_id tragen (peak_id={self.peak_id}); "
+                    f"peak_id ist allein die Marker-Rueckreferenz")
+            if self.candidate_id.startswith(MARKER_ID_PREFIX):
+                raise ClipCandidateError(
+                    f"Reservierter Namensraum {MARKER_ID_PREFIX!r}: "
+                    f"{self.candidate_id!r} mit origin={self.origin!r} "
+                    f"ist nicht erlaubt")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -155,11 +191,23 @@ class CandidateDecision:
                 "source": self.source}
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "CandidateDecision":
+    def from_dict(cls, d: dict[str, Any], *,
+                  require_candidate_id: bool = False) -> "CandidateDecision":
         """Nimmt v6 (candidate_id) UND v1-v5 (peak_id) entgegen. Anders als beim
-        Kandidaten ist das hier eine reine String-Abbildung — kein Peak noetig."""
+        Kandidaten ist das hier eine reine String-Abbildung — kein Peak noetig.
+
+        Gate B / A1: `require_candidate_id=True` schaltet die v6-Strenge ein.
+        Der Aufrufer entscheidet das an der SCHEMA-VERSION der Akte, nicht an
+        der Anwesenheit eines Feldes — sonst tarnt sich eine beschaedigte
+        v6-Decision (candidate_id fehlt, altes peak_id noch da) als Legacy und
+        rutscht still als `marker:<peak_id>` durch.
+        """
         cid = d.get("candidate_id")
         if cid is None:
+            if require_candidate_id:
+                raise ClipCandidateError(
+                    "v6-Decision ohne candidate_id — ein altes peak_id wird "
+                    "in einer Schema-6-Akte NICHT mehr als Ersatz akzeptiert")
             if "peak_id" not in d:
                 raise ClipCandidateError("Decision ohne candidate_id/peak_id")
             cid = marker_candidate_id(int(d["peak_id"]))
