@@ -110,7 +110,7 @@ def test_a1_v5_akte_migriert_weiterhin(tmp_path):
     loaded = load_project_archive(str(root), {})
     assert [c.candidate_id for c in loaded.clip_candidates] == ["marker:0"]
     assert loaded.clip_candidates[0].anchor_ms == 60_000
-    assert [d.candidate_id for d in loaded.peak_decisions] == ["marker:0"]
+    assert [d.candidate_id for d in loaded.candidate_decisions] == ["marker:0"]
 
 
 def test_a1_gesunde_v6_akte_laedt_unveraendert(tmp_path):
@@ -119,7 +119,7 @@ def test_a1_gesunde_v6_akte_laedt_unveraendert(tmp_path):
     root = _akte(tmp_path, decisions=[_V6_DECISION])
     loaded = load_project_archive(str(root), {})
     assert [c.candidate_id for c in loaded.clip_candidates] == ["marker:0"]
-    assert [d.candidate_id for d in loaded.peak_decisions] == ["marker:0"]
+    assert [d.candidate_id for d in loaded.candidate_decisions] == ["marker:0"]
 
 
 # --- A2: Identitaet der Sammlung, beim Laden UND vor dem Schreiben --------

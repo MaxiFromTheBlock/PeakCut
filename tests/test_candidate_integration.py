@@ -92,7 +92,7 @@ def test_auto_kandidat_kompletter_datenweg(tmp_path):
     new, dec = transition(session.clip_candidates[i], SELECTED,
                           now="2026-08-19T12:00:00")
     session.clip_candidates[i] = new
-    session.peak_decisions.append(dec)
+    session.candidate_decisions.append(dec)
     assert dec.candidate_id == AUTO_ID
 
     # 4. Origin-Filter: NUR die beiden echten Marker in der Smart-XML.
@@ -135,7 +135,7 @@ def test_auto_kandidat_kompletter_datenweg(tmp_path):
     assert back.anchor_ms == 120_000
     assert back.status == SELECTED
     assert back.score == 0.77
-    assert [d.candidate_id for d in loaded.peak_decisions] == [AUTO_ID]
+    assert [d.candidate_id for d in loaded.candidate_decisions] == [AUTO_ID]
 
     # Kollisions-Sicherheit nach dem Rundlauf durch Schema 6: der Eindringling
     # ist gar nicht erst in der geladenen Session (5a hat gezeigt, dass eine
@@ -161,4 +161,4 @@ def test_auto_kandidat_kompletter_datenweg(tmp_path):
     assert AUTO_ID in {c.candidate_id for c in loaded.clip_candidates}
     assert marker_candidate_for_peak(loaded, COLLIDING_PEAK_ID).candidate_id \
         == "marker:0"
-    assert len(loaded.peak_decisions) == 1
+    assert len(loaded.candidate_decisions) == 1

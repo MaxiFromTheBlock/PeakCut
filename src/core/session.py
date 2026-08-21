@@ -63,7 +63,11 @@ class PeakCutSession:
         self.folgenschnitt_mic_assignments = []
         self.folgenschnitt_camera_assignments = []
         self.clip_candidates = []   # Roadmap #2: ClipCandidate je Peak
-        self.peak_decisions = []    # Roadmap #2: redaktioneller Rückkanal
+        # Gate B / B3 (Carl 2026-08-21): kanonischer Name ist
+        # candidate_decisions (frueher peak_decisions — Namensdrift zur
+        # Akten-Sektion/Klasse CandidateDecision begradigt). peak_decisions
+        # lebt nur noch als Legacy-Eingabename in project_archive.py weiter.
+        self.candidate_decisions = []    # Roadmap #2: redaktioneller Rückkanal
         # Roadmap #3 Stufe A: Transkript-Zustand formalisiert (nicht
         # mehr ad-hoc). transcript bleibt None — Stufe B liest das
         # gespeicherte Sidecar; ref = Referenzblock; error = Hinweis
@@ -163,7 +167,7 @@ class PeakCutSession:
             seen.add(c.candidate_id)
 
         keep.sort(key=lambda c: (c.anchor_ms, c.candidate_id))
-        # peak_decisions bewusst NICHT angefasst (kein Zugriff hier drin).
+        # candidate_decisions bewusst NICHT angefasst (kein Zugriff hier drin).
         return keep
 
     def _reconcile_marker_candidates(self):
@@ -216,7 +220,7 @@ class PeakCutSession:
                 new, dec = None, None   # z.B. published (terminal) -> nichts aendern
             if dec is not None:
                 self.clip_candidates[i] = new
-                self.peak_decisions.append(dec)
+                self.candidate_decisions.append(dec)
 
     def set_current_peak(self, index):
         """Set current peak index (bounds-checked)."""
@@ -274,7 +278,7 @@ class PeakCutSession:
             peaks.append(peak)
 
         # Task 2: NUR die Marker-Partition abgleichen, nicht ersetzen.
-        # Fremdquellen, Bearbeitungszustand und peak_decisions bleiben.
+        # Fremdquellen, Bearbeitungszustand und candidate_decisions bleiben.
         # Ein späterer Archiv-Load (Projektakte v2) überschreibt das ggf.
         # wieder (lädt die gespeicherte Wahrheit). Laeuft gegen die
         # LOKALEN `peaks` (noch nicht self.peaks) — kann also raisen,

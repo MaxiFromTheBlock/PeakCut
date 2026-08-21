@@ -344,7 +344,7 @@ from core.clip_candidates import SELECTED
 
 def test_schema_is_current_and_archive_has_both_sections(tmp_path):
     # Slice B 2026-06-03: bump auf v3. v2-Vertraege (clip_candidates,
-    # peak_decisions) bleiben drin.
+    # candidate_decisions) bleiben drin.
     s, *_ = _session(tmp_path, "Mat")
     path = save_project_archive(s)
     data = _json.loads(open(path).read())
@@ -365,7 +365,7 @@ def test_v1_archive_without_sections_loads_and_bootstraps(tmp_path):
     open(path, "w").write(_json.dumps(data))
     L = load_project_archive(str(tmp_path / "Mat"), dict(_CFG))
     assert len(L.clip_candidates) == len(L.peaks)  # aus Peaks gebootstrappt
-    assert L.peak_decisions == []
+    assert L.candidate_decisions == []
 
 
 def test_v2_clip_candidates_decisions_roundtrip_bitexact(tmp_path):
@@ -377,13 +377,13 @@ def test_v2_clip_candidates_decisions_roundtrip_bitexact(tmp_path):
     c0 = L1.clip_candidates[0]
     new, dec = transition(c0, SELECTED, now="2026-05-18T10:00:00")
     L1.clip_candidates[0] = new
-    L1.peak_decisions.append(dec)
+    L1.candidate_decisions.append(dec)
     save_project_archive(L1)
     L2 = load_project_archive(str(tmp_path / "Mat"), dict(_CFG))
     assert [c.to_dict() for c in L2.clip_candidates] == \
         [c.to_dict() for c in L1.clip_candidates]
-    assert [d.to_dict() for d in L2.peak_decisions] == \
-        [d.to_dict() for d in L1.peak_decisions]
+    assert [d.to_dict() for d in L2.candidate_decisions] == \
+        [d.to_dict() for d in L1.candidate_decisions]
     assert L2.clip_candidates[0].status == SELECTED
 
 

@@ -80,7 +80,7 @@ def prepare_smart_boundaries(session, decider, *, config,
 
     # KI-2 (R2, 2026-06-15): zeitlich fehlausgerichtetes Transkript darf
     # KEINE Kandidaten erzeugen — sonst landen plausible, aber zeitlich
-    # falsche Sinnabschnitte mit Score in peak_decisions (G5-Burggraben,
+    # falsche Sinnabschnitte mit Score in candidate_decisions (G5-Burggraben,
     # nicht reparierbar). Die Drift ist im transcript_ref bereits messbar
     # (audio_duration_ms vom TranscriptWorker). Fehlt die Dauer -> nicht
     # blockieren (kein Fehlalarm; der Worker meldet das separat).

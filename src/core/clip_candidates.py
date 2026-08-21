@@ -216,7 +216,12 @@ class CandidateDecision:
                    source=str(d.get("source", "manual")))
 
 
-PeakDecision = CandidateDecision   # Alias: bestehende Importe im Repo bleiben heil
+# BEFRISTETER Alias (Gate B / B3, Carl 2026-08-21): Carl erlaubt hoechstens
+# einen klar markierten, befristeten Klassenalias -- geprueft, wird noch
+# aktiv benutzt (tests/test_clip_candidates.py testet den Alias selbst).
+# Kanonischer Name ist CandidateDecision. Wenn tests/test_clip_candidates.py
+# nicht mehr auf PeakDecision zeigt, ersatzlos raus.
+PeakDecision = CandidateDecision
 
 
 def transition(candidate: ClipCandidate, to_status: str, *, now: str,

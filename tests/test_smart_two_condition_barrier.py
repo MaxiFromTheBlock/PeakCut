@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from gui.review_page import ReviewPage  # noqa: E402
 from core.clip_boundary.models import (  # noqa: E402
     BoundaryOutcome, SmartBoundaryRunResult)
+from core.clip_candidates import ORIGIN_MARKER  # noqa: E402
 
 
 class _Sig:
@@ -175,10 +176,13 @@ def test_persisted_smart_results_open_barrier_without_new_worker():
     fs.session.peaks = [1, 2]
     fs.session.transcript = "T"
     fs.session.transcript_error = None
-    # Bereits berechneter Stand (z. B. aus geladener Akte).
+    # Bereits berechneter Stand (z. B. aus geladener Akte). Gate B / B2:
+    # _maybe_start_smart_worker laeuft jetzt ueber die zentrale Marker-
+    # Sicht -> origin/peak_id noetig, damit diese echten Marker-
+    # Kandidaten dort auftauchen (nicht als Fremdkandidat verschwinden).
     fs.session.clip_candidates = [
-        types.SimpleNamespace(score=0.8),
-        types.SimpleNamespace(score=None)]
+        types.SimpleNamespace(score=0.8, origin=ORIGIN_MARKER, peak_id=1),
+        types.SimpleNamespace(score=None, origin=ORIGIN_MARKER, peak_id=2)]
 
     class _FakeSmart:
         def __init__(self, *_a):

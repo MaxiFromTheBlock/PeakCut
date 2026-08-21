@@ -33,7 +33,7 @@ def test_bootstrap_one_candidate_per_peak_correct_status():
     assert len(s.clip_candidates) == 2
     assert s.clip_candidates[0].status == PROPOSED
     assert s.clip_candidates[1].status == DISCARDED  # ignoriert
-    assert s.peak_decisions == []                      # kein Decision
+    assert s.candidate_decisions == []                      # kein Decision
 
 
 def test_peak_id_is_peak_index_not_list_position():
@@ -48,14 +48,14 @@ def test_ignore_peak_writes_exactly_one_decision_idempotent():
     assert s.peaks[1].ignored is True
     cand = next(c for c in s.clip_candidates if c.peak_id == 42)
     assert cand.status == DISCARDED
-    assert len(s.peak_decisions) == 1
-    d = s.peak_decisions[0]
+    assert len(s.candidate_decisions) == 1
+    d = s.candidate_decisions[0]
     # v6: Decision haengt an candidate_id, nicht mehr an peak_id.
     assert d.candidate_id == marker_candidate_id(42) and d.to_status == DISCARDED
     assert d.source == "ignore_peak"
     # idempotent: nochmal ignorieren -> keine zweite Decision
     s.ignore_peak()
-    assert len(s.peak_decisions) == 1
+    assert len(s.candidate_decisions) == 1
 
 
 def test_ignore_couples_via_peak_index_not_position():
@@ -65,7 +65,7 @@ def test_ignore_couples_via_peak_index_not_position():
     s.set_current_peak(0)
     s.ignore_peak()
     # v6: Decision haengt an candidate_id, nicht mehr an peak_id.
-    assert s.peak_decisions[0].candidate_id == marker_candidate_id(10)
+    assert s.candidate_decisions[0].candidate_id == marker_candidate_id(10)
     assert next(c for c in s.clip_candidates
                 if c.peak_id == 10).status == DISCARDED
     assert next(c for c in s.clip_candidates

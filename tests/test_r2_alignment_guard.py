@@ -3,7 +3,7 @@
 Ein zeitlich fehlausgerichtetes Transkript (Text-Spanne weicht stark von
 der Audiodauer ab) darf KEINE Sinnabschnitt-Kandidaten erzeugen — sonst
 landen plausible, aber zeitlich falsche Abschnitte mit Score in der
-peak_decisions-Sammlung (G5-Burggraben, nicht reparierbar). Der Riegel
+candidate_decisions-Sammlung (G5-Burggraben, nicht reparierbar). Der Riegel
 sitzt zentral in prepare_smart_boundaries (nicht nur im Worker) und nutzt
 die bestehende INFRA_FEHLT-Semantik (kein neuer Contract).
 """

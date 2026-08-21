@@ -237,7 +237,7 @@ def build_archive_payload(session, material_root, speaker_activity_csv_ref=None)
         # v6: Decisions haengen an candidate_id. Alte Akten schreiben "peak_decisions";
         # gelesen werden BEIDE (siehe Hydrieren), geschrieben nur noch der neue Name.
         "candidate_decisions": _to_dict_list(
-            getattr(session, "peak_decisions", [])),
+            getattr(session, "candidate_decisions", [])),
         # Roadmap #3 additiv: NUR Referenzblock. transcript.json gehört
         # dem TranscriptWorker (früh/eigenständig); save fasst die Datei
         # NIE an. None = kein Transkript -> alte Akten tolerant.
@@ -313,8 +313,11 @@ def parse_archive_payload(payload, fallback_config):
         "clip_candidates": payload.get("clip_candidates"),
         # v6: neuer Name "candidate_decisions"; alte Akten schreiben noch
         # "peak_decisions" -> als Fallback gelesen (nie beide gleichzeitig nötig).
-        "peak_decisions": payload.get("candidate_decisions",
-                                      payload.get("peak_decisions")),
+        # Gate B / B3: dieser Rueckgabe-Schluessel heisst jetzt ebenfalls
+        # candidate_decisions (rein intern, keine JSON-Datei traegt ihn) —
+        # "peak_decisions" bleibt NUR als Legacy-Eingabename oben im payload.get().
+        "candidate_decisions": payload.get("candidate_decisions",
+                                           payload.get("peak_decisions")),
         # Roadmap #3 additiv & optional (NICHT in _REQUIRED_SECTIONS):
         # fehlt -> None -> alte Akten laden unverändert.
         "transcript": payload.get("transcript"),
@@ -643,11 +646,11 @@ def load_project_archive(archive_path_or_root, fallback_config):
     session.folgenschnitt_unused_clips_mode = _normalize_clips_mode(
         asg.get("folgenschnitt_unused_clips_mode"))
 
-    # v2: clip_candidates/peak_decisions — fehlt (v1-Akte/None) ->
+    # v2: clip_candidates/candidate_decisions — fehlt (v1-Akte/None) ->
     # load_analysis_results hat schon aus Peaks gebootstrappt, bleibt.
     # Vorhanden (auch leere Liste) -> exakt aus JSON laden.
     cc = parsed.get("clip_candidates")
-    pd = parsed.get("peak_decisions")
+    pd = parsed.get("candidate_decisions")
     # P2 (Carl): semantisch kaputte v2-Daten (unbekannter Status /
     # illegaler Übergang) werfen ClipCandidateError — als
     # ProjectArchiveError wrappen, damit die HC-4-Robustheit greift
@@ -708,7 +711,7 @@ def load_project_archive(archive_path_or_root, fallback_config):
         validate_candidate_collection(hydrated)
         session.clip_candidates = sort_candidate_collection(hydrated)
     if pd is not None:
-        session.peak_decisions = decisions
+        session.candidate_decisions = decisions
 
     # Roadmap #3: Transkript-Referenz tolerant hydratisieren. transcript
     # .json gehört dem Worker; hier NUR lesen, nie schreiben. Fehlt/

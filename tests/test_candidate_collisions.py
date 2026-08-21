@@ -192,7 +192,7 @@ def test_pfad_ignorieren_bei_kollision_laesst_peak_unveraendert():
         "Peak blieb ignoriert, obwohl ignore_peak() fehlgeschlagen ist"
     assert session.clip_candidates == candidates_before, \
         "Kandidatenliste wurde trotz Fehler veraendert"
-    assert session.peak_decisions == [], \
+    assert session.candidate_decisions == [], \
         "Decision wurde trotz Fehler geschrieben"
 
 

@@ -47,11 +47,11 @@ def test_neu_analyse_erhaelt_auto_kandidaten():
 
 def test_neu_analyse_erhaelt_das_entscheidungslog():
     session = _with_auto(make_session_with_peaks(PEAKS))
-    session.peak_decisions.append(CandidateDecision(
+    session.candidate_decisions.append(CandidateDecision(
         candidate_id="auto:abc", from_status=PROPOSED, to_status=SELECTED,
         decided_at="2026-08-19T10:00:00"))
     session.load_analysis_results(SAME_ANALYSIS)
-    assert len(session.peak_decisions) == 1
+    assert len(session.candidate_decisions) == 1
 
 
 def test_bearbeitungszustand_eines_marker_kandidaten_bleibt():
