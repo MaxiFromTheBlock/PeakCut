@@ -14,7 +14,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from core.clip_candidates import (  # noqa: E402
-    ClipBoundary, ClipCandidate, PeakDecision, CandidateDecision,
+    ClipBoundary, ClipCandidate, CandidateDecision,
     PROPOSED, SELECTED, PRODUCED, PUBLISHED, DISCARDED,
     transition, ClipCandidateError, ORIGIN_MARKER, ORIGIN_AUTO,
     marker_candidate_id,
@@ -71,26 +71,30 @@ def test_roundtrip_all_models():
                           to_status=SELECTED, decided_at="2026-05-18T10:00:00",
                           source="manual")
     assert CandidateDecision.from_dict(d.to_dict()) == d
-    assert PeakDecision is CandidateDecision  # Alias: bestehende Importe bleiben heil
 
 
-def test_peak_decision_validates_contract():
+def test_candidate_decision_validates_contract():
+    """War test_peak_decision_validates_contract: pruefte denselben Vertrag
+    ueber den befristeten Alias PeakDecision statt ueber den kanonischen
+    Namen. Gate B Restpunkt P2: der Alias ist ersatzlos raus (kein Verbraucher
+    mehr ausser diesem Test), die Vertrags-Assertions selbst bleiben --
+    umgehaengt auf CandidateDecision."""
     # legaler Roundtrip bleibt grün
-    d = PeakDecision(candidate_id="auto:x7", from_status=PROPOSED,
-                     to_status=SELECTED, decided_at="2026-05-18T10:00:00")
-    assert PeakDecision.from_dict(d.to_dict()) == d
+    d = CandidateDecision(candidate_id="auto:x7", from_status=PROPOSED,
+                          to_status=SELECTED, decided_at="2026-05-18T10:00:00")
+    assert CandidateDecision.from_dict(d.to_dict()) == d
     # unbekannter Status (auch via from_dict) -> Fehler
     for bad in ({"candidate_id": "auto:x7", "from_status": "bogus",
                  "to_status": SELECTED, "decided_at": "t", "source": "manual"},):
         try:
-            PeakDecision.from_dict(bad)
+            CandidateDecision.from_dict(bad)
             assert False, "unbekannter Status muss abgelehnt werden"
         except ClipCandidateError:
             pass
     # illegaler Übergang im Log -> Fehler
     try:
-        PeakDecision(candidate_id="auto:x7", from_status=PROPOSED,
-                    to_status=PRODUCED, decided_at="t")
+        CandidateDecision(candidate_id="auto:x7", from_status=PROPOSED,
+                          to_status=PRODUCED, decided_at="t")
         assert False, "proposed->produced muss abgelehnt werden"
     except ClipCandidateError:
         pass

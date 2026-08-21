@@ -63,6 +63,17 @@ def test_decision_haengt_an_candidate_id():
     assert "peak_id" not in d.to_dict()
 
 
+def test_decision_mit_leerer_candidate_id_wird_abgelehnt():
+    """Gate B Restpunkt P1: bei ClipCandidate war eine leere candidate_id
+    schon abgelehnt (__post_init__ oben); bei CandidateDecision fehlte die
+    Entsprechung -- ClipCandidateDecision(candidate_id="", ...) liess sich
+    bisher klaglos bauen. In einem identitaetszentrierten Vertrag ist eine
+    Entscheidung ohne Kennung keine gueltige Entscheidung."""
+    with pytest.raises(ClipCandidateError):
+        CandidateDecision(candidate_id="", from_status=PROPOSED,
+                          to_status=SELECTED, decided_at="2026-08-21T10:00:00")
+
+
 def test_alte_decision_mit_peak_id_wird_gelesen():
     """v1-v5-Decisions sind eine reine String-Abbildung — kein Peak noetig."""
     d = CandidateDecision.from_dict({

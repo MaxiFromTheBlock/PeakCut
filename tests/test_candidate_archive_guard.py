@@ -91,6 +91,20 @@ def test_a1_v6_decision_ohne_candidate_id_wird_abgelehnt(tmp_path):
         load_project_archive(str(root), {})
 
 
+def test_a1_v6_decision_mit_leerer_candidate_id_wird_abgelehnt(tmp_path):
+    """Gate B Restpunkt P1: eine FEHLENDE candidate_id wird oben schon
+    abgelehnt (test_a1_v6_decision_ohne_candidate_id_wird_abgelehnt) -- eine
+    LEERE candidate_id ("") ist derselbe Integritaetsbruch (die Decision
+    haengt an gar keiner Kennung) und darf nicht als gueltig durchrutschen,
+    nur weil das Feld formal vorhanden ist."""
+    root = _akte(tmp_path, decisions=[{
+        "candidate_id": "", "from_status": PROPOSED, "to_status": SELECTED,
+        "decided_at": "2026-08-21T10:00:00", "source": "manual"}])
+
+    with pytest.raises(ProjectArchiveError):
+        load_project_archive(str(root), {})
+
+
 def test_a1_v5_akte_migriert_weiterhin(tmp_path):
     """Gegenprobe, damit A1 nicht einfach alles ablehnt: dieselben Daten in
     einer Schema-5-Akte sind echtes Legacy und muessen weiterhin ueber den

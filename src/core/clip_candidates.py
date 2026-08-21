@@ -184,6 +184,13 @@ class CandidateDecision:
             raise ClipCandidateError(
                 f"Illegaler Uebergang im Log: "
                 f"{self.from_status} -> {self.to_status}")
+        # Gate B Restpunkt P1: dieselbe Identitaets-Pruefung wie bei
+        # ClipCandidate (siehe dort) -- eine leere candidate_id wurde dort
+        # schon abgelehnt, hier fehlte die Entsprechung. Ohne Kennung ist
+        # eine Decision in einem identitaetszentrierten Vertrag keine
+        # gueltige Decision.
+        if not self.candidate_id:
+            raise ClipCandidateError("candidate_id darf nicht leer sein")
 
     def to_dict(self) -> dict[str, Any]:
         return {"candidate_id": self.candidate_id, "from_status": self.from_status,
@@ -214,14 +221,6 @@ class CandidateDecision:
         return cls(candidate_id=str(cid), from_status=str(d["from_status"]),
                    to_status=str(d["to_status"]), decided_at=str(d["decided_at"]),
                    source=str(d.get("source", "manual")))
-
-
-# BEFRISTETER Alias (Gate B / B3, Carl 2026-08-21): Carl erlaubt hoechstens
-# einen klar markierten, befristeten Klassenalias -- geprueft, wird noch
-# aktiv benutzt (tests/test_clip_candidates.py testet den Alias selbst).
-# Kanonischer Name ist CandidateDecision. Wenn tests/test_clip_candidates.py
-# nicht mehr auf PeakDecision zeigt, ersatzlos raus.
-PeakDecision = CandidateDecision
 
 
 def transition(candidate: ClipCandidate, to_status: str, *, now: str,
