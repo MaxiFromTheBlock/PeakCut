@@ -121,22 +121,17 @@
   `core/material_scanner.py` in die PyQt-App zu erledigen (siehe Punkt darunter).
 
 ## 🧹 Hygiene & Wartung
-- **Namensdrift `peak_decisions` ↔ `candidate_decisions` ↔ `CandidateDecision`/`PeakDecision`** `[M]` · braucht: Carl-Plan
-  **OFFEN FÜR CARL (Abschluss-Review Kandidaten-quellenunabhängig, 2026-08-19/20).**
-  `session.peak_decisions` (Attribut), die Akten-Sektion `candidate_decisions` und die
-  Klasse `CandidateDecision` (Alias `PeakDecision`, bestehende Importe bleiben heil)
-  heißen an 33 Fundstellen unterschiedlich. Jetzt (kurz nach dem Umbau) ist der
-  billigste Moment zum Begradigen.
-- **Vier kosmetische Restpunkte aus der Kandidaten-quellenunabhängig-Fix-Welle** `[S]` · braucht: nichts
-  **NEU 2026-08-19/20, deferred, Sammelposten, alle rein kosmetisch, kein
-  Verhalten:** (1) `session.py:157` Kommentar nennt `project_archive.py:314`, der
-  echte `hasattr`-Aufruf liegt bei 319-320 (Zeilendrift, vorbestehend).
-  (2) `session.py:145-146` Kommentar „peak_decisions bewusst NICHT angefasst" steht
-  nach dem `return`. (3) `core/candidate_view.py:18` liest die Session defensiv per
-  `getattr`, den Kandidaten aber hart per `c.origin` — inkonsistent.
-  (4) `core/clip_boundary/pipeline.py:106` und `core/session.py:201` nutzen
-  `list.index()` über Wertgleichheit statt Identität; heute sicher, aber
-  unausgesprochene Abhängigkeit.
+- **Zwei kosmetische Restpunkte aus dem Kandidaten-Umbau** `[S]` · braucht: nichts
+  **Präzisiert 2026-08-23 beim Merge — Zeilen am Code nachgeprüft.** Der frühere
+  Sammelposten nannte vier Punkte; zwei davon waren zu dem Zeitpunkt bereits behoben
+  (der Kommentar-Zeilendrift in `session.py` und die Stellung des
+  „bewusst NICHT angefasst"-Kommentars) und sind gestrichen. Übrig:
+  (1) `core/candidate_view.py:17` liest die Session defensiv per `getattr`, den
+  Kandidaten aber hart per `c.origin` — inkonsistent.
+  (2) `core/clip_boundary/pipeline.py:106` und `core/session.py:214` nutzen
+  `list.index()` über Wertgleichheit statt Identität; heute sicher, weil zwei
+  wertgleiche Kandidaten dieselbe `candidate_id` hätten und die zentrale Sicht
+  vorher wirft — aber eine unausgesprochene Abhängigkeit.
 - **Versions-Drift in build.sh / PeakCut.spec** (stehen auf 2.9.0, App ist 2.11) `[S]` · braucht: Max-Entscheidung
   Vor Wiederbelebung des macOS-Bundles beide aktualisieren.
 - **Sammel-Tech-Schulden** `[L]` · braucht: nichts — geparkt
@@ -169,6 +164,7 @@
 ---
 
 ## ✅ Erledigt (Historie, Kurzform)
+- **Stellen quellenunabhängig + Namensdrift begradigt** (2026-08-23, Carl-Gate B grün) — `ClipCandidate` trägt `candidate_id`/`origin`/`anchor_ms` (optionales `peak_id`), Akten-Schema v5→v6 mit Migration beim Hydrieren, Reconciliation statt Replace (Neu-Analyse vernichtet keine Fremdquellen und kein Entscheidungslog mehr), zentrale Marker-Sicht statt fünf blinder `peak_id`-Joins, Invarianten an der Wurzel (`origin != marker` ⇒ `peak_id is None`, reservierter Namensraum `marker:`), Identitäts-Validierung an der Archivgrenze. Kanonisch: `session.candidate_decisions` / Akten-Sektion `candidate_decisions` / Klasse `CandidateDecision`; `peak_decisions` nur noch als Legacy-JSON-Schlüssel, `PeakDecision`-Alias entfernt. 909 Kern-Tests, Pin-1 byte-identisch, reales Ilka-Paritäts-Gate 6/6.
 - **Gate B / Block A — v6-Strenge, Kandidaten-Identität, Wurzel-Invarianten** — drei Vertragslücken aus Carls Abschluss-Gate geschlossen (2026-08-21): (A1) die v6-Strenge hing an `if "candidate_id" in d` statt an der Schema-Version — eine beschädigte Schema-6-Akte tarnte sich als Legacy und lud still als `marker:0`; jetzt entscheidet `schema_v >= 6` (Kandidaten UND Decisions). (A2) neue zentrale Sammlungs-Prüfung `validate_candidate_collection` in BEIDE Richtungen (Laden + vor dem Schreiben): doppelte `candidate_id` → `ProjectArchiveError`, nach dem Hydrieren Sortierung nach `(anchor_ms, candidate_id)`. (A3) die peak_id-Kollisionsklasse ist an der Wurzel geschlossen (`ClipCandidate.__post_init__`): `origin != marker` erzwingt `peak_id is None`, Marker-ID muss zur `peak_id` passen, Namensraum `marker:` reserviert. Die zentrale Marker-Sicht bleibt als zweite Verteidigungslinie; die Kollisionstests arbeiten dafür mit absichtlich ungültigen Objekten (`tests/malformed_candidates.py`). 903 Tests grün, Pin-1 stabil
 - **Marker + Vergleichbarkeit Keyboardstellen ↔ Sinnabschnitte** — Carl-Plan, TDD (5 Tasks, 785 Tests). Beide XMLs: Video + Ton (smart hat jetzt dieselben Tonspuren wie raw), nummerierte Bereich-Marker „Stelle N" (synchron trotz peak_id-Versatz), Clip-Namen = Quelldateien, Sequenzen „Keyboardstellen raw"/„smart". Pin-1 bewusst neu eingefroren. Max in Premiere abgenommen (Philip Siefer). Carl-Schluss-Check offen (2026-06-18)
 - **Folgenschnitt-XML real bestätigt** — Max hat erstmals seit Langem selbst eine Postproduktion gemacht (Philip Siefer) und die Folgenschnitt-XML „funktioniert super". Erste echte Eigen-Nutzung außerhalb der Smoke-Tests (2026-06-17)

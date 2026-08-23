@@ -863,7 +863,7 @@ auch aus Transkript-Analyse, automatischer Clip-Findung oder von Hand.
 - **Reales Risiko geprüft:** Migration an Max' echter Ilka-Akte read-only
   nachgefahren — 31/31 Kandidaten korrekt, Anker == `peak.position_ms`, keine
   inhaltliche Abweichung, Akte-SHA vorher==nachher. KEIN Verlust.
-- **888 Kern-Tests grün** (Web: 362 passed/10 skipped/1 deselected), Pin-1
+- **909 Kern-Tests grün** (Web: 362 passed/10 skipped/1 deselected), Pin-1
   byte-identisch. Merge-Auflagen aus dem Abschluss-Review: v6 gleichzeitig auf
   `feature/redesign`+`develop`+`main` landen (kein Zweig bleibt zurück),
   Web-Merge zusammen mit dem Kern-Merge, vor dem ersten v6-Schreiben Kopie von
@@ -1147,6 +1147,10 @@ siehe Commit-Autoren).
 
 Erstes Produktobjekt im `.peakcut`-Gedächtnis. `core/clip_candidates.py`:
 `ClipBoundary`/`ClipCandidate`/`PeakDecision` (frozen, roundtrip-exakt),
+> **Nachtrag 2026-08-23:** `PeakDecision` heißt seit dem Kandidaten-Umbau
+> `CandidateDecision` und hängt an `candidate_id` statt an `peak_id`; der
+> Übergangs-Alias ist mit Gate B ersatzlos entfernt. Der Rest dieses
+> Eintrags bleibt als Historie stehen.
 Statusmaschine `proposed→selected→produced→published→discarded`
 (published terminal v1), `PeakDecision` selbst-validierend.
 Bootstrap je Peak in `load_analysis_results` (ignoriert→discarded);
@@ -1574,4 +1578,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-08-19/20 (feature/kandidaten-quellenunabhaengig: Kandidaten quellenunabhängig — `.peakcut`-Schema v5→v6, `ClipCandidate` trägt jetzt `candidate_id`/`origin`/`anchor_ms` (optionales `peak_id`), Reconciliation statt Replace, zentrale Marker-Sicht `core/candidate_view.py` statt fünf blinder Joins. Fix-Welle danach: zweiter Absturzweg `review_page.on_ignore` geschlossen, Web-Engine-Import `candidate_view` auf Modulebene gehoben, Web-README auf v6 nachgezogen, zwei stumpf gewordene Tests per Mutationstest geschärft, aufgeschobene Punkte in BACKLOG.md gerettet. 888 Kern-Tests grün, Web 362 grün, Pin-1 stabil, reale Ilka-Akte read-only migrationsgeprüft (31/31 korrekt, SHA vorher==nachher). Davor 2026-06-20: Core-Extraction der Zuordnungs-Datenschicht nach `core/folgenschnitt_assignment.py`. Todos in App/BACKLOG.md.)*
+*Zuletzt aktualisiert: 2026-08-23 (Carl-Gate B gruen, Vertrag eingefroren, gemeinsamer Merge Kern+Web freigegeben; Bau 2026-08-19/21 auf feature/kandidaten-quellenunabhaengig: Kandidaten quellenunabhängig — `.peakcut`-Schema v5→v6, `ClipCandidate` trägt jetzt `candidate_id`/`origin`/`anchor_ms` (optionales `peak_id`), Reconciliation statt Replace, zentrale Marker-Sicht `core/candidate_view.py` statt fünf blinder Joins. Fix-Welle danach: zweiter Absturzweg `review_page.on_ignore` geschlossen, Web-Engine-Import `candidate_view` auf Modulebene gehoben, Web-README auf v6 nachgezogen, zwei stumpf gewordene Tests per Mutationstest geschärft, aufgeschobene Punkte in BACKLOG.md gerettet. 909 Kern-Tests grün, Web 362 grün, Pin-1 stabil, reale Ilka-Akte read-only migrationsgeprüft (31/31 korrekt, SHA vorher==nachher). Davor 2026-06-20: Core-Extraction der Zuordnungs-Datenschicht nach `core/folgenschnitt_assignment.py`. Todos in App/BACKLOG.md.)*
