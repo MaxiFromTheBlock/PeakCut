@@ -63,7 +63,11 @@ class PeakCutSession:
         self.folgenschnitt_mic_assignments = []
         self.folgenschnitt_camera_assignments = []
         self.clip_candidates = []   # Roadmap #2: ClipCandidate je Peak
-        self.peak_decisions = []    # Roadmap #2: redaktioneller Rückkanal
+        # Gate B / B3 (Carl 2026-08-21): kanonischer Name ist
+        # candidate_decisions (frueher peak_decisions — Namensdrift zur
+        # Akten-Sektion/Klasse CandidateDecision begradigt). peak_decisions
+        # lebt nur noch als Legacy-Eingabename in project_archive.py weiter.
+        self.candidate_decisions = []    # Roadmap #2: redaktioneller Rückkanal
         # Roadmap #3 Stufe A: Transkript-Zustand formalisiert (nicht
         # mehr ad-hoc). transcript bleibt None — Stufe B liest das
         # gespeicherte Sidecar; ref = Referenzblock; error = Hinweis
@@ -86,51 +90,137 @@ class PeakCutSession:
         mehr — die Wiedergabe steuert die ReviewPage über den Controller."""
         self.mode = next_playback_mode(self.mode)
 
-    def _bootstrap_clip_candidates(self):
-        """Roadmap #2: pro Peak ein ClipCandidate (nicht ignoriert ->
-        proposed, ignoriert -> discarded). Kein Decision (kein echter
-        redaktioneller Akt mit Timestamp). Boundary defensiv (>start)."""
-        from .clip_candidates import ClipBoundary, ClipCandidate, \
-            PROPOSED, DISCARDED
-        cands = []
-        for pk in self.peaks:
+    @staticmethod
+    def _compute_reconciled_marker_candidates(existing_candidates, peaks):
+        """Reine Berechnung (keine Seiteneffekte) fuer
+        `_reconcile_marker_candidates`. Gleicht NUR die Partition
+        origin == marker ab statt die gesamte Kandidatenliste zu ersetzen.
+
+        Bestehende Marker-Kandidaten behalten ihren Bearbeitungszustand,
+        fehlende werden ergaenzt, Nicht-Marker-Kandidaten (Fremdquellen wie
+        auto/transcript/manual) bleiben unangetastet.
+
+        GRENZE (Carl): gilt fuer einen UNVERAENDERTEN Marker-Satz.
+        marker:<peak_id> ist ueber Analyselaeufe hinweg NICHT stabil, sobald
+        Marker eingefuegt/entfernt werden — echte Reanalyse mit veraendertem
+        Marker-Satz braucht ein zeitliches Event-Matching und ist ein
+        eigener spaeterer Schritt.
+
+        Fix-Runde 1 (Pruefer-Befund 1): die Eindeutigkeitspruefung laeuft
+        (auch) gegen die FERTIGE Liste `keep`, nicht nur gegen
+        `existing_candidates` — sonst entgehen ihr Dubletten, die erst
+        WAEHREND dieser Methode entstehen (Fremdkandidat mit `marker:<n>`-ID
+        fuer einen bisher fehlenden Marker-Kandidaten; zwei Peaks mit
+        demselben `index`). Reine Funktion (statt Instanzmethode mit
+        Seiteneffekt), damit `load_analysis_results` sie gegen lokale, noch
+        nicht committete Peaks aufrufen kann (Fix-Runde 1, Befund 2 —
+        Atomaritaet).
+
+        Fix-Runde 2 (Pruefer-Befund): die Marker-Partition von
+        `existing_candidates` wird VOR dem Aufbau von `by_id` auf
+        Eindeutigkeit geprueft. Eine Dict-Comprehension
+        (`{c.candidate_id: c for c in ... if origin==MARKER}`) wuerde zwei
+        gleich benannte Marker-Kandidaten sonst still zusammenfallen lassen
+        (der letzte gewinnt) — GENAU BEVOR die spaetere `seen`-Pruefung
+        ueber `keep` ueberhaupt etwas sehen koennte, weil `keep` dann nur
+        noch einen Eintrag mit dieser ID enthaelt. Bearbeitungszustand
+        (Status, editierte Boundary) des verworfenen Kandidaten waere ohne
+        Fehler verschwunden. Der Fehler muss fliegen, BEVOR irgendetwas
+        verworfen wurde.
+        """
+        from .clip_candidates import (
+            ClipBoundary, ClipCandidate, ClipCandidateError,
+            ORIGIN_MARKER, PROPOSED, DISCARDED, marker_candidate_id)
+
+        by_id = {}
+        for c in existing_candidates:
+            if c.origin != ORIGIN_MARKER:
+                continue
+            if c.candidate_id in by_id:
+                raise ClipCandidateError(
+                    f"Doppelte candidate_id in der Marker-Partition: "
+                    f"{c.candidate_id!r}")
+            by_id[c.candidate_id] = c
+
+        keep = [c for c in existing_candidates if c.origin != ORIGIN_MARKER]
+
+        for pk in peaks:
+            cid = marker_candidate_id(pk.index)
+            existing = by_id.get(cid)
+            if existing is not None:
+                keep.append(existing)       # Bearbeitungszustand bleibt
+                continue
             lo, hi = pk.in_point_ms, pk.out_point_ms
-            if hi <= lo:                       # defensiv (Clamp-Edge)
+            if hi <= lo:                    # defensiv (Clamp-Edge)
                 hi = lo + 1
-            cands.append(ClipCandidate(
-                peak_id=pk.index,
+            keep.append(ClipCandidate(
+                candidate_id=cid, origin=ORIGIN_MARKER,
+                anchor_ms=pk.position_ms, peak_id=pk.index,
                 boundary=ClipBoundary(lo, hi),
                 status=DISCARDED if pk.ignored else PROPOSED))
-        self.clip_candidates = cands
-        self.peak_decisions = []
+
+        seen = set()
+        for c in keep:
+            if c.candidate_id in seen:
+                raise ClipCandidateError(
+                    f"Doppelte candidate_id: {c.candidate_id!r}")
+            seen.add(c.candidate_id)
+
+        keep.sort(key=lambda c: (c.anchor_ms, c.candidate_id))
+        # candidate_decisions bewusst NICHT angefasst (kein Zugriff hier drin).
+        return keep
+
+    def _reconcile_marker_candidates(self):
+        """Instanzmethode: gleicht `self.clip_candidates` gegen
+        `self.peaks` ab (Delegation an die reine Berechnung oben).
+        Fuer den atomaren Pfad in `load_analysis_results` siehe dort —
+        die ruft die reine Berechnung direkt mit lokalen Peaks auf,
+        BEVOR `self.peaks` ueberschrieben wird."""
+        self.clip_candidates = self._compute_reconciled_marker_candidates(
+            self.clip_candidates, self.peaks)
+
+    # Rueckwaertskompatibler Name: project_archive.py:319-320 ruft ihn per
+    # hasattr(session, "_bootstrap_clip_candidates") auf (Save-Pfad, falls
+    # eine Akte ohne Candidates gespeichert wird). Alias statt Umbenennung
+    # der Aufrufstelle, damit dieser Pfad nicht still ausfaellt.
+    _bootstrap_clip_candidates = _reconcile_marker_candidates
 
     def ignore_peak(self):
         """Mark current peak as ignored."""
         if not (0 <= self.current_peak < len(self.peaks)):
             return
         peak = self.peaks[self.current_peak]
-        peak.ignored = True
         # Roadmap #2: Rückkanal — Candidate (via peak_id == Peak.index,
         # NICHT Listenposition) auf discarded, Decision anhängen.
         # Idempotent (transition no-op bei gleichem Status). Defensiv:
         # ist der Candidate published (terminal), bleibt er historisch
         # published — der Peak wird trotzdem ignoriert (wie bisher).
+        #
+        # Fix-Runde 1 (Pruefer-Befund 1): der Lookup steht VOR
+        # `peak.ignored = True`. marker_candidate_for_peak kann jetzt
+        # ClipCandidateError werfen (doppelte Marker-Zuordnung auf
+        # denselben Peak) — vorher wuerde der Peak dann als ignoriert
+        # stehen bleiben, obwohl kein Kandidat verworfen und keine
+        # Decision geschrieben wurde (halb-mutierter Zustand). Gleicher
+        # Grundsatz wie in _compute_reconciled_marker_candidates oben:
+        # der Fehler muss fliegen, BEVOR etwas veraendert wurde.
         from datetime import datetime
         from .clip_candidates import transition, DISCARDED, \
             ClipCandidateError
-        for i, c in enumerate(self.clip_candidates):
-            if c.peak_id != peak.index:
-                continue
+        from .candidate_view import marker_candidate_for_peak
+        target = marker_candidate_for_peak(self, peak.index)
+        peak.ignored = True
+        if target is not None:
+            i = self.clip_candidates.index(target)
             try:
                 new, dec = transition(
-                    c, DISCARDED, now=datetime.now().isoformat(),
+                    target, DISCARDED, now=datetime.now().isoformat(),
                     source="ignore_peak")
             except ClipCandidateError:
-                break  # z.B. published -> bewusst nichts ändern
+                new, dec = None, None   # z.B. published (terminal) -> nichts aendern
             if dec is not None:
                 self.clip_candidates[i] = new
-                self.peak_decisions.append(dec)
-            break
+                self.candidate_decisions.append(dec)
 
     def set_current_peak(self, index):
         """Set current peak index (bounds-checked)."""
@@ -158,15 +248,21 @@ class PeakCutSession:
         Args:
             results: Dict with 'peaks' (list of peak dicts) and 'video_offsets' (list of tuples)
         """
-        # Load video offsets
-        self.video_offsets = results.get("video_offsets", [])
+        # Fix-Runde 1 (Befund 2): Peaks/Offsets/Kandidaten erst LOKAL
+        # aufbauen und die Reconciliation GEGEN DIESE lokalen Peaks laufen
+        # lassen — self.peaks bleibt bis zum Erfolg unangetastet. Fliegt
+        # dabei ein ClipCandidateError, bleibt die Session unveraendert
+        # (alte Peaks + alte Kandidaten passen weiter zueinander), statt
+        # mit neuen Peaks und alten, dazu nicht mehr passenden Kandidaten
+        # stehen zu bleiben.
+        video_offsets = results.get("video_offsets", [])
         fps = self.config.get("fps", 25)
-        for video_filename, offset_str in self.video_offsets:
-            self._offset_lookup_ms[video_filename] = parse_timecode_to_ms(offset_str, fps)
+        offset_lookup_updates = {}
+        for video_filename, offset_str in video_offsets:
+            offset_lookup_updates[video_filename] = parse_timecode_to_ms(offset_str, fps)
 
-        # Load peaks
         peak_data = results.get("peaks", [])
-        self.peaks = []
+        peaks = []
         for p in peak_data:
             peak = Peak(
                 index=p["index"],
@@ -179,12 +275,22 @@ class PeakCutSession:
                 peak.set_out_point(p["out_point_ms"])
             if p.get("ignored"):
                 peak.ignored = True
-            self.peaks.append(peak)
+            peaks.append(peak)
 
-        # Roadmap #2: Candidates aus Peaks bootstrappen (kein Decision —
-        # keine echte redaktionelle Aktion mit Timestamp). Ein späterer
-        # Archiv-Load (Projektakte v2) überschreibt das ggf. wieder.
-        self._bootstrap_clip_candidates()
+        # Task 2: NUR die Marker-Partition abgleichen, nicht ersetzen.
+        # Fremdquellen, Bearbeitungszustand und candidate_decisions bleiben.
+        # Ein späterer Archiv-Load (Projektakte v2) überschreibt das ggf.
+        # wieder (lädt die gespeicherte Wahrheit). Laeuft gegen die
+        # LOKALEN `peaks` (noch nicht self.peaks) — kann also raisen,
+        # ohne dass vorher schon etwas an der Session veraendert wurde.
+        new_candidates = self._compute_reconciled_marker_candidates(
+            self.clip_candidates, peaks)
+
+        # Alles durch -> jetzt erst gemeinsam auf self uebernehmen.
+        self.video_offsets = video_offsets
+        self._offset_lookup_ms.update(offset_lookup_updates)
+        self.peaks = peaks
+        self.clip_candidates = new_candidates
 
         from .folgenschnitt_models import (
             ActivityFrame,

@@ -15,6 +15,8 @@ from .video_preview_peak import PeakVideoPreview
 from .review_camera_labels import camera_display_label
 from .workers import ExportWorker, SmartBoundaryWorker
 from core.clip_boundary.decider import ClaudeBoundaryDecider
+from core.clip_candidates import ClipCandidateError
+from core.candidate_view import marker_candidates_by_peak_id
 from core.sinnabschnitt_exporter import (
     SinnabschnittTXTExporter, SinnabschnittXMLExporter)
 
@@ -26,6 +28,44 @@ from core.playback_audio_source import resolve_playback_audio_source
 from .review_playback_controller import ReviewPlaybackController
 
 _log = get_logger("peakcut.review")
+
+# Gate B / B2 (Carl 2026-08-21): Text fuer eine doppelte Marker-Zuordnung
+# (zwei Marker-Kandidaten auf demselben Peak) -- dieselbe Semantik wie
+# playback_windows._SMART_COLLISION, hier lokal gehalten statt an das
+# andere Modul gekoppelt.
+_MARKER_COLLISION_STATUS = "Sinnabschnitte: doppelte Marker-Zuordnung."
+
+
+def _safe_marker_candidates(session):
+    """Kollisionssichere zentrale Marker-Sicht fuer die Qt-Slots unten
+    (Gate B / B2): vorher zaehlten `_maybe_start_smart_worker` und
+    `_refresh_smart_status` blind ueber ALLE `session.clip_candidates` --
+    ein Fremdkandidat (auto/transcript/manual) mit gesetztem `score` liess
+    die Marker-Sinnabschnitte faelschlich als "fertig" gelten (Smart-Worker
+    wurde uebersprungen, der Artefakt-Riegel oeffnete sich zu frueh, die
+    Statuszeile zeigte eine falsche Zahl). Jetzt laeuft beides ueber
+    `candidate_view.marker_candidates_by_peak_id` -- die EINE Wahrheit fuer
+    "was ist ein Marker-Kandidat".
+
+    `marker_candidates_by_peak_id` kann `ClipCandidateError` werfen
+    (doppelte Marker-Zuordnung auf denselben Peak -- malformed/hand-
+    editierte Akte, aelterer Schreiber). review_page ist voller
+    ungeschuetzter Qt-Slots ohne sys.excepthook -- PyQt6 killt den Prozess
+    bei einer unbehandelten Slot-Exception (SIGABRT). Gleiches Muster wie
+    `build_playback_window` (core/playback_windows.py) und `on_ignore`
+    unten: der Fehler wird HIER kontrolliert in einen Status uebersetzt
+    statt die Qt-Grenze zu erreichen.
+
+    Returns (candidates, collision_status): bei einer Kollision ist
+    `candidates` leer und `collision_status` ein verstaendlicher Text;
+    sonst sind `candidates` die Marker-Kandidaten und `collision_status`
+    None.
+    """
+    try:
+        return list(marker_candidates_by_peak_id(session).values()), None
+    except ClipCandidateError as e:
+        _log.warning("Marker-Kollision in candidate_view: %s", e)
+        return [], _MARKER_COLLISION_STATUS
 
 
 class ResettableBrightnessSlider(QSlider):
@@ -409,9 +449,22 @@ class ReviewPage(QWidget):
         return audio_routing.get_mix_track(self.session.project) is not None
 
     def on_ignore(self):
+        # Fix-Runde (Pruefer-Befund): session.ignore_peak() kann seit Task 3
+        # ClipCandidateError werfen (marker_candidate_for_peak, doppelte
+        # Marker-Zuordnung auf denselben Peak). on_ignore ist ein
+        # ungeschuetzter Qt-Slot ohne sys.excepthook -- PyQt6 killt den
+        # Prozess bei einer unbehandelten Slot-Exception (SIGABRT). Gleiches
+        # Muster wie playback_windows.build_playback_window: der Fehler wird
+        # HIER kontrolliert als Statuszeile gemeldet statt die Qt-Grenze zu
+        # erreichen. session.ignore_peak() garantiert selbst schon, dass bei
+        # einem Fehler nichts mutiert wurde (Peak bleibt nicht ignoriert).
         if not self.session:
             return
-        self.session.ignore_peak()
+        try:
+            self.session.ignore_peak()
+        except ClipCandidateError as e:
+            self.status_message.emit(f"Ignorieren fehlgeschlagen: {e}")
+            return
         idx = self.session.current_peak
         self.status_message.emit(f"Peak {idx + 1} ignoriert")
         if idx < len(self.session.peaks) - 1:
@@ -587,7 +640,17 @@ class ReviewPage(QWidget):
                     return
             except Exception:  # noqa: BLE001
                 return
-        cands = getattr(session, "clip_candidates", []) or []
+        # Gate B / B2: nur die MARKER-Kandidaten zaehlen (zentrale Sicht,
+        # s. _safe_marker_candidates oben) -- ein score-tragender Fremd-
+        # kandidat (auto/transcript/manual) darf den Marker-Smart-Lauf
+        # nicht mehr unterdruecken. Kollision -> Zustand unklar, deshalb
+        # sicherheitshalber KEIN neuer teurer Lauf; Status wird unten
+        # kontrolliert gemeldet.
+        cands, collision_status = _safe_marker_candidates(session)
+        if collision_status:
+            self._refresh_smart_status()
+            self._refresh_play_availability()
+            return
         if any(getattr(c, "score", None) is not None for c in cands):
             # Carl-Gegenreview Task 7 [P2]: schon berechneter Stand aus
             # einer geladenen Akte — kein teurer Doppellauf, aber den
@@ -683,8 +746,17 @@ class ReviewPage(QWidget):
         if span is not None and dur is not None:
             from core.transcript_archive import alignment_drift
             drift = alignment_drift(span, dur, tol)
+        # Gate B / B2: nur die MARKER-Kandidaten zaehlen (zentrale Sicht,
+        # s. _safe_marker_candidates oben) -- vorher zaehlte "bereit (N)"
+        # ueber ALLE Herkuenfte, ein score-tragender Fremdkandidat verzerrte
+        # die angezeigte Zahl. Kollision (doppelte Marker-Zuordnung) hat
+        # Vorrang vor jeder anderen Statuszeile -- kontrollierter Status
+        # statt Absturz (gleiches Muster wie build_playback_window/on_ignore).
+        cands, collision_status = _safe_marker_candidates(session)
+        if collision_status:
+            self.smart_status_label.setText(collision_status)
+            return
         # 1) Bereits Ergebnisse da -> "bereit (N)" (+ Drift kombinieren).
-        cands = getattr(session, "clip_candidates", []) or []
         ready_count = sum(1 for c in cands
                           if getattr(c, "score", None) is not None)
         if getattr(self, "_smart_ready", False) or ready_count > 0:

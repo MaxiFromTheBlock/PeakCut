@@ -24,7 +24,7 @@ from core.peak import Peak  # noqa: E402
 from core.project import PeakCutProject  # noqa: E402
 from core.session import PeakCutSession  # noqa: E402
 from core.clip_candidates import (  # noqa: E402
-    ClipCandidate, ClipBoundary, PROPOSED)
+    ClipCandidate, ClipBoundary, PROPOSED, ORIGIN_MARKER, marker_candidate_id)
 
 
 def _marker_numbers(xml):
@@ -51,9 +51,13 @@ def _full_session(tmp_path):
                Peak(index=3, position_ms=240000)]
     # Smart-Kandidaten nur für Peak 0 (Stelle 1) und Peak 3 (Stelle 3).
     s.clip_candidates = [
-        ClipCandidate(peak_id=0, boundary=ClipBoundary(50000, 70000),
+        ClipCandidate(candidate_id=marker_candidate_id(0), origin=ORIGIN_MARKER,
+                      anchor_ms=60000, peak_id=0,
+                      boundary=ClipBoundary(50000, 70000),
                       status=PROPOSED, score=0.8),
-        ClipCandidate(peak_id=3, boundary=ClipBoundary(230000, 250000),
+        ClipCandidate(candidate_id=marker_candidate_id(3), origin=ORIGIN_MARKER,
+                      anchor_ms=240000, peak_id=3,
+                      boundary=ClipBoundary(230000, 250000),
                       status=PROPOSED, score=0.7)]
     return s
 

@@ -80,7 +80,7 @@ def prepare_smart_boundaries(session, decider, *, config,
 
     # KI-2 (R2, 2026-06-15): zeitlich fehlausgerichtetes Transkript darf
     # KEINE Kandidaten erzeugen — sonst landen plausible, aber zeitlich
-    # falsche Sinnabschnitte mit Score in peak_decisions (G5-Burggraben,
+    # falsche Sinnabschnitte mit Score in candidate_decisions (G5-Burggraben,
     # nicht reparierbar). Die Drift ist im transcript_ref bereits messbar
     # (audio_duration_ms vom TranscriptWorker). Fehlt die Dauer -> nicht
     # blockieren (kein Fehlalarm; der Worker meldet das separat).
@@ -102,7 +102,9 @@ def prepare_smart_boundaries(session, decider, *, config,
     after = _cfg(config, "smart_boundary_search_after_ms", 60000)
     total = max(p.position_ms for p in peaks) + after + 1000
     activity = getattr(session, "speaker_activity", []) or []
-    by_id = {c.peak_id: i for i, c in enumerate(cands)}
+    from ..candidate_view import marker_candidates_by_peak_id
+    by_id = {pid: cands.index(c)
+             for pid, c in marker_candidates_by_peak_id(session).items()}
 
     # Carl-Gegenreview [P2] (Task 5): all-or-nothing — Updates erst
     # nach erfolgreichem Lauf in session.clip_candidates spiegeln; bei

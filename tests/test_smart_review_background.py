@@ -16,6 +16,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from gui.review_page import ReviewPage  # noqa: E402
+from core.clip_candidates import ORIGIN_MARKER, ORIGIN_AUTO  # noqa: E402
 
 
 # --- Test-Harness wie test_smart_boundary_handoff.py -------------------
@@ -51,8 +52,19 @@ class _FakeSmart:
 
 
 class _Cand:
-    def __init__(self, score=None):
+    # Gate B / B2: _maybe_start_smart_worker laeuft jetzt ueber die
+    # zentrale Marker-Sicht (candidate_view.marker_candidates_by_peak_id),
+    # die origin/peak_id braucht. Default = echter Marker-Kandidat, damit
+    # die bestehenden Tests weiter "schon berechneter Marker-Stand"
+    # meinen (nicht ploetzlich ein Fremdkandidat).
+    def __init__(self, score=None, peak_id=1, origin=ORIGIN_MARKER,
+                 candidate_id=None):
         self.score = score
+        self.peak_id = peak_id
+        self.origin = origin
+        # nur fuer die Kollisions-Fehlermeldung in candidate_view.py noetig
+        # (marker_candidates_by_peak_id baut sie aus candidate_id).
+        self.candidate_id = candidate_id
 
 
 def _fake_self(events, *, enabled=True, peaks=True, transcript=True,
@@ -66,8 +78,8 @@ def _fake_self(events, *, enabled=True, peaks=True, transcript=True,
         peaks=([1, 2] if peaks else []),
         transcript=("Transcript" if transcript else None),
         transcript_ref=({"path": "x"} if transcript else None),
-        clip_candidates=([_Cand(0.7)] if scores_present else
-                          [_Cand(None), _Cand(None)]))
+        clip_candidates=([_Cand(0.7, peak_id=1)] if scores_present else
+                          [_Cand(None, peak_id=1), _Cand(None, peak_id=2)]))
     ns.status_message = _Sig("status", events)
     ns.session_changed = _Sig("session_changed", events)
     ns._smart_worker = _FakeSmart(ns.session, None) if running else None
@@ -154,6 +166,44 @@ def test_blocked_when_smart_scores_already_present():
     events = []
     _try_start(_fake_self(events, scores_present=True), events)
     assert "smart_start" not in events
+
+
+def test_foreign_candidate_with_score_does_not_block_smart_run():
+    # Gate B / B2(a): ein Fremdkandidat (z. B. automatische Clip-Findung,
+    # origin=auto) mit gesetztem Score darf den Marker-Smart-Lauf NICHT
+    # mehr unterdruecken -- vorher zaehlte die Pruefung blind ueber ALLE
+    # Herkuenfte in session.clip_candidates.
+    events = []
+    fs = _fake_self(events)   # Default: Marker-Kandidaten ohne Score
+    fs.session.clip_candidates.append(
+        _Cand(0.95, peak_id=None, origin=ORIGIN_AUTO,
+              candidate_id="auto:1"))
+    _try_start(fs, events)
+    assert "smart_start" in events, \
+        "Fremdkandidat mit Score haette den Smart-Lauf nicht blockieren duerfen"
+
+
+def test_collision_at_maybe_start_smart_worker_does_not_escape():
+    # Gate B / B2 Gegenprobe: doppelte Marker-Zuordnung auf denselben Peak
+    # (marker_candidates_by_peak_id wirft ClipCandidateError) darf
+    # _maybe_start_smart_worker NICHT verlassen -- ungeschuetzter Qt-Slot,
+    # PyQt6 killt den Prozess bei einer unbehandelten Slot-Exception
+    # (SIGABRT). Gleiches Muster wie build_playback_window/on_ignore.
+    # Zusatz-Beleg: vorher haette die blinde "any(score)"-Pruefung die
+    # Kollision faelschlich als "schon berechnet" gelesen und
+    # `_smart_ready` faelschlich auf True gesetzt (Artefakt-Riegel zu
+    # frueh offen) -- jetzt bleibt er False, weil der Fehler zuerst greift.
+    events = []
+    fs = _fake_self(events)
+    fs.session.clip_candidates = [
+        _Cand(0.8, peak_id=1, candidate_id="marker:1"),
+        _Cand(0.5, peak_id=1, candidate_id="marker:1:dublette")]
+    fs._refresh_smart_status = lambda: events.append("status_refreshed")
+    _try_start(fs, events)   # darf NICHT raisen
+    assert "smart_start" not in events
+    assert "status_refreshed" in events
+    assert fs._smart_ready is False, \
+        "Kollision haette den Artefakt-Riegel nicht oeffnen duerfen"
 
 
 # --- set_session ruft _maybe_start_smart_worker ------------------------

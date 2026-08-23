@@ -14,7 +14,8 @@ import types
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from gui.review_page import ReviewPage  # noqa: E402
-from core.clip_candidates import ClipBoundary, PROPOSED  # noqa: E402
+from core.clip_candidates import (  # noqa: E402
+    ClipBoundary, PROPOSED, ORIGIN_MARKER, ORIGIN_AUTO)
 
 
 def _label():
@@ -56,11 +57,25 @@ def _peak(idx):
                                  ignored=False)
 
 
-def _cand(peak_id, score=None):
+def _cand(peak_id, score=None, candidate_id=None):
+    # Gate B / B2: candidate_id noetig, sobald zwei Marker-Kandidaten auf
+    # demselben peak_id kollidieren -- candidate_view baut die Fehler-
+    # meldung daraus (marker_candidates_by_peak_id in core/candidate_view.py).
     return types.SimpleNamespace(
-        peak_id=peak_id, score=score, status=PROPOSED,
+        candidate_id=candidate_id or f"marker:{peak_id}",
+        peak_id=peak_id, score=score, status=PROPOSED, origin=ORIGIN_MARKER,
         boundary=ClipBoundary(start_ms=peak_id * 1000,
                               end_ms=peak_id * 1000 + 40000))
+
+
+def _foreign_cand(score=None, candidate_id="auto:1"):
+    """Score-tragender Fremdkandidat (z. B. automatische Clip-Findung,
+    origin=auto, KEIN peak_id -- nach Block A die einzig gueltige Form).
+    Fuer B2(b): darf "Sinnabschnitte bereit (N)" nicht mitzaehlen."""
+    return types.SimpleNamespace(
+        candidate_id=candidate_id, peak_id=None, score=score,
+        status=PROPOSED, origin=ORIGIN_AUTO,
+        boundary=ClipBoundary(start_ms=500_000, end_ms=520_000))
 
 
 # --- Statuszeile: 5 Zustände aus Carls Plan (unverändert) --------------
@@ -83,6 +98,38 @@ def test_status_sinnabschnitte_bereit_with_count():
                                _cand(3, None)])
     ReviewPage._refresh_smart_status(fs)
     assert "Sinnabschnitte bereit (2)" in cap["text"]
+
+
+def test_status_bereit_count_ignores_foreign_candidate_with_score():
+    # Gate B / B2(b): "Sinnabschnitte bereit (N)" zaehlt nur ueber die
+    # zentrale Marker-Sicht (candidate_view.marker_candidates_by_peak_id).
+    # Vorher zaehlte ready_count blind ueber ALLE session.clip_candidates
+    # -- ein score-tragender Fremdkandidat (hier: automatische Clip-
+    # Findung) verzerrte die angezeigte Zahl nach oben (waere hier faelsch-
+    # lich "bereit (2)" statt "bereit (1)").
+    fs, cap = _fs(transcript="T",
+                   candidates=[_cand(1, 0.8), _foreign_cand(0.9)])
+    ReviewPage._refresh_smart_status(fs)
+    assert "Sinnabschnitte bereit (1)" in cap["text"], \
+        f"Fremdkandidat haette nicht mitgezaehlt werden duerfen: {cap['text']!r}"
+
+
+def test_collision_at_refresh_smart_status_does_not_escape():
+    # Gate B / B2 Gegenprobe: doppelte Marker-Zuordnung auf denselben Peak
+    # (marker_candidates_by_peak_id wirft ClipCandidateError) darf
+    # _refresh_smart_status NICHT verlassen -- ungeschuetzter Qt-Slot,
+    # PyQt6 killt den Prozess bei einer unbehandelten Slot-Exception
+    # (SIGABRT). Gleiches Muster wie build_playback_window/on_ignore.
+    fs, cap = _fs(transcript="T",
+                   candidates=[_cand(1, 0.8, candidate_id="marker:1"),
+                               _cand(1, 0.5,
+                                     candidate_id="marker:1:dublette")])
+    ReviewPage._refresh_smart_status(fs)   # darf NICHT raisen
+    assert cap["text"], "kein verstaendlicher Hinweis fuer den Nutzer"
+    assert "bereit" not in cap["text"].lower(), \
+        "Kollision haette nicht faelschlich als 'bereit' gemeldet werden duerfen"
+    assert "kollision" in cap["text"].lower() \
+        or "doppelte" in cap["text"].lower()
 
 
 def test_status_infra_message_visible():

@@ -2,6 +2,10 @@
 
 Gate A STOPP: Datenmodell + Statusmaschine einfrieren, danach nicht
 mehr dran drehen.
+
+Task 1 (Kandidaten quellenunabhängig, 2026-08-19): Konstruktionsaufrufe
+auf den v6-Vertrag (candidate_id/origin/anchor_ms/peak_id) gehoben —
+die Statusmaschine selbst (transition/_ALLOWED) ist unverändert.
 """
 
 import os
@@ -10,14 +14,16 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from core.clip_candidates import (  # noqa: E402
-    ClipBoundary, ClipCandidate, PeakDecision,
+    ClipBoundary, ClipCandidate, CandidateDecision,
     PROPOSED, SELECTED, PRODUCED, PUBLISHED, DISCARDED,
-    transition, ClipCandidateError,
+    transition, ClipCandidateError, ORIGIN_MARKER, ORIGIN_AUTO,
+    marker_candidate_id,
 )
 
 
 def _cand(status=PROPOSED):
-    return ClipCandidate(peak_id=42,
+    return ClipCandidate(candidate_id=marker_candidate_id(42),
+                         origin=ORIGIN_MARKER, anchor_ms=2500, peak_id=42,
                          boundary=ClipBoundary(1000, 4000), status=status)
 
 
@@ -37,9 +43,19 @@ def test_boundary_validation():
 
 def test_unknown_status_rejected():
     try:
-        ClipCandidate(peak_id=1, boundary=ClipBoundary(0, 10),
+        ClipCandidate(candidate_id=marker_candidate_id(1), origin=ORIGIN_MARKER,
+                      anchor_ms=5, peak_id=1, boundary=ClipBoundary(0, 10),
                       status="bogus")
         assert False, "unbekannter Status muss abgelehnt werden"
+    except ClipCandidateError:
+        pass
+
+
+def test_unknown_origin_rejected():
+    try:
+        ClipCandidate(candidate_id="x", origin="bogus", anchor_ms=5,
+                      peak_id=None, boundary=ClipBoundary(0, 10))
+        assert False, "unbekannte Herkunft muss abgelehnt werden"
     except ClipCandidateError:
         pass
 
@@ -47,29 +63,38 @@ def test_unknown_status_rejected():
 def test_roundtrip_all_models():
     b = ClipBoundary(1000, 4000)
     assert ClipBoundary.from_dict(b.to_dict()) == b
-    c = ClipCandidate(7, b, status=SELECTED, transcript_excerpt="hi",
-                      reason="hook", score=0.8)
+    c = ClipCandidate(candidate_id="auto:x7", origin=ORIGIN_AUTO, anchor_ms=2500,
+                      peak_id=None, boundary=b, status=SELECTED,
+                      transcript_excerpt="hi", reason="hook", score=0.8)
     assert ClipCandidate.from_dict(c.to_dict()) == c
-    d = PeakDecision(7, PROPOSED, SELECTED, "2026-05-18T10:00:00",
-                     source="manual")
-    assert PeakDecision.from_dict(d.to_dict()) == d
+    d = CandidateDecision(candidate_id="auto:x7", from_status=PROPOSED,
+                          to_status=SELECTED, decided_at="2026-05-18T10:00:00",
+                          source="manual")
+    assert CandidateDecision.from_dict(d.to_dict()) == d
 
 
-def test_peak_decision_validates_contract():
+def test_candidate_decision_validates_contract():
+    """War test_peak_decision_validates_contract: pruefte denselben Vertrag
+    ueber den befristeten Alias PeakDecision statt ueber den kanonischen
+    Namen. Gate B Restpunkt P2: der Alias ist ersatzlos raus (kein Verbraucher
+    mehr ausser diesem Test), die Vertrags-Assertions selbst bleiben --
+    umgehaengt auf CandidateDecision."""
     # legaler Roundtrip bleibt grün
-    d = PeakDecision(7, PROPOSED, SELECTED, "2026-05-18T10:00:00")
-    assert PeakDecision.from_dict(d.to_dict()) == d
+    d = CandidateDecision(candidate_id="auto:x7", from_status=PROPOSED,
+                          to_status=SELECTED, decided_at="2026-05-18T10:00:00")
+    assert CandidateDecision.from_dict(d.to_dict()) == d
     # unbekannter Status (auch via from_dict) -> Fehler
-    for bad in ({"peak_id": 1, "from_status": "bogus", "to_status": SELECTED,
-                 "decided_at": "t", "source": "manual"},):
+    for bad in ({"candidate_id": "auto:x7", "from_status": "bogus",
+                 "to_status": SELECTED, "decided_at": "t", "source": "manual"},):
         try:
-            PeakDecision.from_dict(bad)
+            CandidateDecision.from_dict(bad)
             assert False, "unbekannter Status muss abgelehnt werden"
         except ClipCandidateError:
             pass
     # illegaler Übergang im Log -> Fehler
     try:
-        PeakDecision(1, PROPOSED, PRODUCED, "t")
+        CandidateDecision(candidate_id="auto:x7", from_status=PROPOSED,
+                          to_status=PRODUCED, decided_at="t")
         assert False, "proposed->produced muss abgelehnt werden"
     except ClipCandidateError:
         pass
@@ -80,8 +105,10 @@ def test_legal_transition_new_instance_and_decision():
     new, dec = transition(c, SELECTED, now="2026-05-18T12:00:00")
     assert new is not c                       # neue frozen Instanz
     assert new.status == SELECTED and c.status == PROPOSED  # original unberührt
-    assert dec == PeakDecision(42, PROPOSED, SELECTED,
-                               "2026-05-18T12:00:00", source="manual")
+    assert dec == CandidateDecision(candidate_id=marker_candidate_id(42),
+                                    from_status=PROPOSED, to_status=SELECTED,
+                                    decided_at="2026-05-18T12:00:00",
+                                    source="manual")
 
 
 def test_noop_same_status_no_decision():

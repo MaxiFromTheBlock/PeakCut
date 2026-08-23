@@ -66,10 +66,11 @@ def active_smart_candidates(session) -> list:
     kein Mapping — sonst keine Vergleichbarkeit). Die Nummer kommt aus der
     Keyboard-Nummernkarte, NICHT direkt aus candidate.peak_id.
     """
+    from .candidate_view import marker_candidates_by_peak_id
     number_map = build_peak_number_map(session)
-    active = [c for c in (getattr(session, "clip_candidates", []) or [])
-              if c.status != DISCARDED and c.score is not None
-              and c.peak_id in number_map]
+    by_peak = marker_candidates_by_peak_id(session)
+    active = [c for pid, c in by_peak.items()
+              if pid in number_map and c.status != DISCARDED and c.score is not None]
     active.sort(key=lambda c: number_map[c.peak_id])
     return [(number_map[c.peak_id], c) for c in active]
 

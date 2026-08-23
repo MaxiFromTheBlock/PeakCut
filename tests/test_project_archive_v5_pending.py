@@ -56,8 +56,8 @@ def _archive_json(root):
         return json.load(f)
 
 
-def test_current_schema_is_5():
-    assert CURRENT_SCHEMA_VERSION == 5
+def test_current_schema_is_6():
+    assert CURRENT_SCHEMA_VERSION == 6
 
 
 def test_pending_roundtrip(tmp_path):
@@ -67,7 +67,7 @@ def test_pending_roundtrip(tmp_path):
     assert path.endswith(os.path.join(ARCHIVE_DIR, ARCHIVE_FILE))
 
     data = _archive_json(root)
-    assert data["schema_version"] == 5
+    assert data["schema_version"] == 6
     assert data["analysis_state"] == ANALYSIS_STATE_PENDING
     # Pflichtsektionen vorhanden (leer/default) -> re-entrant + alter Loader vertraegt es.
     for sec in ("project", "analysis_results", "assignments"):

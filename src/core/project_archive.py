@@ -15,7 +15,7 @@ from .folgenschnitt_multitrack_layout import (
     normalize_unused_clips_mode as _normalize_clips_mode,
 )
 
-CURRENT_SCHEMA_VERSION = 5  # v5 (additiv, Carl-Gate Import Slice 3): confirmed_import_slots + material_sources + analysis_state (pending). v4-Slots bleiben; Mix bleibt in legacy mic_tracks (Pin-1).
+CURRENT_SCHEMA_VERSION = 6  # v6 (Carl-Gate A 2026-08-19): Kandidaten quellenunabhaengig — candidate_id/origin/anchor_ms/optionales peak_id; Decisions an candidate_id. v5-Slots bleiben.
 ARCHIVE_DIR = ".peakcut"
 ARCHIVE_FILE = "project.json"
 _CSV_NAME = "speaker_activity.csv"
@@ -30,8 +30,50 @@ _CONFIG_SNAPSHOT_KEYS = ("fps", "context_duration_ms")
 _REQUIRED_SECTIONS = ("project", "analysis_results", "assignments")
 
 
+# Gate B / A1: ab dieser Schema-Version ist der Kandidaten-/Decision-Vertrag
+# STRIKT. Die Entscheidung "strikt oder Legacy-Migration" haengt allein an der
+# Schema-Version der Akte — NICHT daran, ob ein einzelnes Feld zufaellig da ist.
+STRICT_CANDIDATES_SINCE_SCHEMA = 6
+
+
 class ProjectArchiveError(Exception):
     """Kontrollierter Fehler beim Lesen/Schreiben der Projektakte."""
+
+
+# --- Gate B / A2: Kandidaten-Sammlung an der Archivgrenze -----------------
+
+def validate_candidate_collection(candidates):
+    """Die EINE Sammlungs-Pruefung fuer Kandidaten an der Archivgrenze.
+
+    Einzelne Kandidaten pruefen sich selbst (ClipCandidate.__post_init__).
+    Was ein Einzelobjekt NICHT sehen kann, ist die Sammlung: zwei Kandidaten
+    mit derselben candidate_id machen jede CandidateDecision mehrdeutig — und
+    genau dieses Entscheidungslog ist der Rueckkanal, fuer den der ganze
+    v6-Umbau gemacht wurde.
+
+    Laeuft in BEIDE Richtungen (Carl-Gate B): beim Laden (eine fremde/kaputte
+    Akte darf nicht mehrdeutig hereinkommen) UND vor dem Schreiben (PeakCut
+    selbst darf keine kaputte v6-Akte erzeugen).
+
+    AUSDRUECKLICH NICHT geprueft: ob eine Decision auf einen aktuell
+    vorhandenen Kandidaten zeigt. Das Entscheidungslog ist Historie und darf
+    Kandidaten ueberleben — eine eigene Vertragsfrage, hier offen gelassen.
+    """
+    seen = set()
+    for c in candidates or []:
+        cid = getattr(c, "candidate_id", None)
+        if cid in seen:
+            raise ProjectArchiveError(
+                f"Projektakte: candidate_id {cid!r} kommt mehrfach vor — "
+                f"Entscheidungen waeren nicht mehr eindeutig zuzuordnen.")
+        seen.add(cid)
+
+
+def sort_candidate_collection(candidates):
+    """Kanonische Reihenfolge: (anchor_ms, candidate_id) — dieselbe Ordnung,
+    die die Reconciliation in session.py herstellt. Damit haengt die
+    Kandidaten-Reihenfolge nicht daran, wie eine Akte auf Platte sortiert war."""
+    return sorted(candidates, key=lambda c: (c.anchor_ms, c.candidate_id))
 
 
 # --- Task 1: Materialwurzel-Strategie -------------------------------------
@@ -128,6 +170,12 @@ def build_archive_payload(session, material_root, speaker_activity_csv_ref=None)
     project = session.project
     cfg = session.config
 
+    # Gate B / A2: dieselbe Sammlungs-Pruefung wie beim Laden, nur VORHER —
+    # PeakCut darf keine Akte schreiben, die es selbst nicht mehr eindeutig
+    # lesen koennte. Kontrollierter Fehler statt stiller Mehrdeutigkeit.
+    candidates = list(getattr(session, "clip_candidates", None) or [])
+    validate_candidate_collection(candidates)
+
     def _cfg(key):
         getter = getattr(cfg, "get", None)
         return getter(key, None) if getter else None
@@ -185,10 +233,11 @@ def build_archive_payload(session, material_root, speaker_activity_csv_ref=None)
                 getattr(session, "folgenschnitt_unused_clips_mode", None)),
         },
         # v2 additiv (Roadmap #2): keine Pfade -> keine Relativierung.
-        "clip_candidates": _to_dict_list(
-            getattr(session, "clip_candidates", [])),
-        "peak_decisions": _to_dict_list(
-            getattr(session, "peak_decisions", [])),
+        "clip_candidates": _to_dict_list(candidates),
+        # v6: Decisions haengen an candidate_id. Alte Akten schreiben "peak_decisions";
+        # gelesen werden BEIDE (siehe Hydrieren), geschrieben nur noch der neue Name.
+        "candidate_decisions": _to_dict_list(
+            getattr(session, "candidate_decisions", [])),
         # Roadmap #3 additiv: NUR Referenzblock. transcript.json gehört
         # dem TranscriptWorker (früh/eigenständig); save fasst die Datei
         # NIE an. None = kein Transkript -> alte Akten tolerant.
@@ -262,7 +311,13 @@ def parse_archive_payload(payload, fallback_config):
         # v2 additiv: None = Sektion fehlt (v1-Akte -> bootstrappen);
         # Liste = exakt laden (auch leere).
         "clip_candidates": payload.get("clip_candidates"),
-        "peak_decisions": payload.get("peak_decisions"),
+        # v6: neuer Name "candidate_decisions"; alte Akten schreiben noch
+        # "peak_decisions" -> als Fallback gelesen (nie beide gleichzeitig nötig).
+        # Gate B / B3: dieser Rueckgabe-Schluessel heisst jetzt ebenfalls
+        # candidate_decisions (rein intern, keine JSON-Datei traegt ihn) —
+        # "peak_decisions" bleibt NUR als Legacy-Eingabename oben im payload.get().
+        "candidate_decisions": payload.get("candidate_decisions",
+                                           payload.get("peak_decisions")),
         # Roadmap #3 additiv & optional (NICHT in _REQUIRED_SECTIONS):
         # fehlt -> None -> alte Akten laden unverändert.
         "transcript": payload.get("transcript"),
@@ -591,27 +646,72 @@ def load_project_archive(archive_path_or_root, fallback_config):
     session.folgenschnitt_unused_clips_mode = _normalize_clips_mode(
         asg.get("folgenschnitt_unused_clips_mode"))
 
-    # v2: clip_candidates/peak_decisions — fehlt (v1-Akte/None) ->
+    # v2: clip_candidates/candidate_decisions — fehlt (v1-Akte/None) ->
     # load_analysis_results hat schon aus Peaks gebootstrappt, bleibt.
     # Vorhanden (auch leere Liste) -> exakt aus JSON laden.
     cc = parsed.get("clip_candidates")
-    pd = parsed.get("peak_decisions")
+    pd = parsed.get("candidate_decisions")
     # P2 (Carl): semantisch kaputte v2-Daten (unbekannter Status /
     # illegaler Übergang) werfen ClipCandidateError — als
     # ProjectArchiveError wrappen, damit die HC-4-Robustheit greift
     # (kaputte Akte -> kontrollierter Hinweis + Normalflow, kein Crash).
     from .clip_candidates import (
-        ClipCandidate, PeakDecision, ClipCandidateError)
+        ClipCandidate, CandidateDecision, ClipCandidateError,
+        ClipBoundary, ORIGIN_MARKER, marker_candidate_id)
+
+    def _hydrate_candidate(d):
+        """v6 strikt; v1-v5 hier migrieren — HIER, weil session.peaks vorliegt.
+        anchor_ms == position_ms des zugehoerigen Peaks. Kein passender Peak ->
+        kontrollierter Fehler statt Raten (Carl).
+
+        Gate B / A1 (Carl, reproduziert): die Entscheidung "strikt oder
+        Legacy-Migration" haengt an der SCHEMA-VERSION der Akte, nicht an der
+        Anwesenheit eines Feldes. Vorher entschied `if "candidate_id" in d`
+        — damit tarnte sich eine beschaedigte Schema-6-Akte (candidate_id
+        fehlt, altes peak_id noch da) als Legacy und wurde still zu
+        `marker:<peak_id>` migriert: eine echte Fremdherkunft
+        (origin=transcript/auto) waere stillschweigend zu origin=marker
+        umgedeutet worden. Ab Schema 6 gibt es keine Migration mehr, nur
+        noch den strikten Vertrag (ClipCandidate.from_dict wirft bei
+        fehlenden Pflichtfeldern)."""
+        if schema_v >= STRICT_CANDIDATES_SINCE_SCHEMA:
+            return ClipCandidate.from_dict(d)
+        peak_id = int(d["peak_id"])
+        peak = next((p for p in session.peaks if p.index == peak_id), None)
+        if peak is None:
+            raise ProjectArchiveError(
+                f"Alte Akte: Kandidat verweist auf Peak {peak_id}, den es nicht gibt.")
+        return ClipCandidate(
+            candidate_id=marker_candidate_id(peak_id),
+            origin=ORIGIN_MARKER,
+            anchor_ms=peak.position_ms,
+            peak_id=peak_id,
+            boundary=ClipBoundary.from_dict(d["boundary"]),
+            status=str(d.get("status", "proposed")),
+            transcript_excerpt=str(d.get("transcript_excerpt", "")),
+            reason=str(d.get("reason", "")),
+            score=d.get("score"))
+
+    strikt = schema_v >= STRICT_CANDIDATES_SINCE_SCHEMA
     try:
         if cc is not None:
-            session.clip_candidates = [
-                ClipCandidate.from_dict(d) for d in cc]
+            hydrated = [_hydrate_candidate(d) for d in cc]
         if pd is not None:
-            session.peak_decisions = [
-                PeakDecision.from_dict(d) for d in pd]
+            decisions = [
+                CandidateDecision.from_dict(d, require_candidate_id=strikt)
+                for d in pd]
     except (ClipCandidateError, KeyError, TypeError, ValueError) as e:
         raise ProjectArchiveError(
             f"ClipCandidate-Daten unlesbar: {e}") from e
+
+    # Gate B / A2: Identitaet an der Archivgrenze schuetzen. Erst pruefen
+    # (doppelte candidate_id -> kontrollierter Fehler), dann in die kanonische
+    # Reihenfolge bringen — beides BEVOR etwas an der Session haengt.
+    if cc is not None:
+        validate_candidate_collection(hydrated)
+        session.clip_candidates = sort_candidate_collection(hydrated)
+    if pd is not None:
+        session.candidate_decisions = decisions
 
     # Roadmap #3: Transkript-Referenz tolerant hydratisieren. transcript
     # .json gehört dem Worker; hier NUR lesen, nie schreiben. Fehlt/

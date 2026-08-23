@@ -83,7 +83,7 @@ def test_clip_candidates_do_not_affect_keyboardstellen_xml(tmp_path):
     # Candidates mutieren + Decision -> erneut speichern/laden
     loaded.clip_candidates[0], dec = transition(
         loaded.clip_candidates[0], SELECTED, now="2026-05-18T10:00:00")
-    loaded.peak_decisions.append(dec)
+    loaded.candidate_decisions.append(dec)
     save_project_archive(loaded)
     reloaded = load_project_archive(str(mat_root), dict(_CFG))
     after = _export_xml_bytes(reloaded, tmp_path / "exp_loaded")

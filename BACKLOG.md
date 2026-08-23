@@ -6,16 +6,54 @@
 >
 > **„#76", „#77", „G1", „ARCH-1" usw. sind nur Namen/Label — KEINE Aufgabenzahl.**
 >
-> Stand: 2026-06-18 · ~21 offene Punkte · Quelle: ultracode-Sweep (Repo-Docs,
-> Code-Kommentare, GitHub-Issues=0, Memory, Notion=0), dedupliziert.
-> (Putzfirma-Hygiene-Pass 2026-06-16: Doku-Entrümpelung erledigt — siehe unten.)
+> Stand: **2026-08-17** (davor 2026-06-18) · Quelle: Carl-Gesundheitscheck 12.08. +
+> Ultracode-Sweep 17.08., Befunde am Code gegengeprüft.
 >
 > Je Punkt: **[Aufwand S/M/L/XL]** · **braucht:** Carl-Plan / Max-Entscheidung / Max-Material / nichts.
+>
+> ### ⚠️ Wo die Arbeit gerade wirklich liegt
+> Seit Juli läuft die Hauptarbeit an der **neuen Oberfläche** im Schwester-Repo
+> `PeakCut-web`, nicht an diesem Kern. **Max-Entscheid 2026-08-17: Sie soll die
+> PyQt-App ersetzen** — Paketierung, Selbst-Start der Engine und CheckIn-Anbindung
+> sind damit echte Aufgaben. Die dortige Reihenfolge steht in
+> `PeakCut/App/docs/CONTEXT.md` → „Aktuelle Prioritaeten". Todos, die **nur** die
+> neue Oberfläche betreffen, gehören nicht in diese Liste; alles was den **Kern**
+> anfasst, schon.
 
 ---
 
 ## 🐛 Bugs
-- _(aktuell keine offenen)_
+- **Desktop-Export und Web-Export liefern unterschiedliche Dateisätze** `[M]` · braucht: Carl-Plan
+  **NEU 2026-08-17 (Ultracode-Sweep).** Der Export-Knopf der PyQt-App schreibt **keine**
+  Sinnabschnitt-Dateien (`gui/workers.py:295-298` — bedingter Pfad), die Web-Engine
+  schreibt sie **immer** (`PeakCut-web/engine/engine_core.py:290-292`). Der Byte-
+  Paritäts-Vergleich kann das strukturell **nicht** sehen, weil sein Desktop-Teil die
+  Bedingung umgeht — er meldet grün, obwohl die Ergebnisse sich unterscheiden.
+  Fällt sauber mit ARCH-1 (eine Export-Steuerung) weg; bis dahin ist es eine Falle.
+- **Gastname kommt nicht aus dem Kern zurück** `[S]` · braucht: nichts
+  **NEU 2026-08-17.** `core/project_archive.py:478-479` gibt den gespeicherten
+  Gastnamen beim Analyse-Abschluss nicht heraus, deshalb verpufft er im Web-Pfad
+  (dort baut `analyze_runner.py:159-162` die Akte danach frisch auf). Betrifft den
+  Kern, nicht nur die Oberfläche — der Gastname färbt die Sprecher-Vorbelegung **vor**
+  der Analyse, ist also nicht nachreichbar. Folge sonst: Exportordner „Unknown".
+- **Sinnabschnitte-Zähler wird herkunftsblind, sobald Auto-Kandidaten existieren** `[S]` · braucht: nichts
+  **NEU 2026-08-19/20 (Kandidaten-quellenunabhängig, Abschluss-Review, deferred).**
+  `gui/review_page.py:590-591` und `:687-689` bilden zwei Aggregate über
+  `session.clip_candidates`, ohne nach `origin` zu filtern. Heute folgenlos (es gibt
+  nur Marker-Kandidaten), aber am Tag des ersten Auto-/Transkript-Kandidaten
+  unterdrückt ein einziger fremder Kandidat MIT Score den ganzen Smart-Lauf
+  (`_maybe_start_smart_worker` hält ihn fälschlich für „schon berechnet") und die
+  Statuszeile zeigt eine falsche Zahl „Sinnabschnitte bereit (N)". Fix: beide
+  Aggregate auf `origin == ORIGIN_MARKER` filtern (über `core/candidate_view.py`,
+  nicht roh über `clip_candidates` iterieren). **Wichtigster** der zurückgestellten
+  Punkte dieser Runde.
+- **`main_window.py` fängt `ClipCandidateError` an zwei Stellen nicht ab** `[S]` · braucht: nichts
+  **NEU 2026-08-19/20 (Kandidaten-quellenunabhängig, Abschluss-Review, deferred).**
+  `_load_from_archive` (`:280`) fängt nur `ProjectArchiveError`; `_on_analysis_done`
+  (`:317`, ruft `session.load_analysis_results`) fängt gar nichts. Eine kaputte Akte
+  mit doppelten Peak-Indizes/`candidate_id`s entkommt damit dem „kontrollierter
+  Hinweis statt Crash"-Vertrag, den `build_playback_window` und `review_page.on_ignore`
+  (Fix-Welle 2026-08-19/20) für denselben Fehlertyp schon einhalten.
 
 ## 🔧 Funktions-Ausbau (nächste Features)
 - **Sinnabschnitt-Grenzen auf Satzanfang/-ende einrasten** `[M]` · braucht: Carl-Plan
@@ -29,15 +67,17 @@
   „an fertiger Aussage enden", an echtem Material gegenchecken; **(b) sauber** — echtes
   Satz-Signal besorgen (besseres Transkript/Descript oder KI-Satzgrenzen-Schritt).
   Erst (a), dann ggf. (b). **NICHT** die Aufhänger-Wahl (bester Einstiegssatz) → #70.
-- **Import-Umbau: feste Slots statt Namensraten** (#37/#77) `[XL]` · braucht: Carl-Plan — **STRUKTURTEIL ERLEDIGT, ruht**
-  Eigenes Mix-Feld statt Mix-in-mic_tracks, Schema v4 rückwärtskompatibel, ein
-  zentraler Klassifizierer (letzte Insel eingesammelt). Strukturteil fertig +
-  Carl-Review grün: Task 0/1/2/3/4/6 (756 Tests, Pin-1 stabil). **Task 5 „Mix aus
-  mic_tracks strippen" geparkt** (Pin-1-riskant + kosmetisch, weil XMLExporter die
-  Audiospuren noch direkt aus mic_tracks baut), **Import-UI (Task 7) + Transcript
-  (Task 8) pausiert** bis die Produkt-/Kunden-Richtung klar ist (Marker-Pflicht?
-  Erkennung per Audio-Inhalt? für wen?). Scope-Entscheidung 2026-06-16 im Plan.
-  Nächste Energie → Produkt-Validierung (#70 + Cutter-Sign-off).
+- **Import-Umbau: feste Slots statt Namensraten** (#37/#77) `[XL]` · braucht: nichts — **IM KERN GEBAUT, in der PyQt-App NICHT VERDRAHTET**
+  **Korrigiert 2026-08-17.** Die alte Notiz („Strukturteil erledigt, Rest geparkt")
+  ist überholt: Der capability-driven Import ist im Kern **fertig** —
+  `core/material_scanner.py` (Rollen-Vorschlag inkl. Marker-Erkennung am Signal),
+  `core/project_capabilities.py` (7 verriegelte Tests), `core/import_model.py`,
+  `core/import_project.py`, Schema **v5** mit PENDING-Zwischenzustand
+  (`project_archive.read_pending_import`). Alles auf allen drei Zweigen (Merge `deb6265`).
+  **Was fehlt:** `material_scanner` hat in `App/src` **keinen einzigen Aufrufer**. Die
+  PyQt-App rät weiter per Dateiname (`gui/main_window.py:219-236`). Genutzt wird der
+  Pivot bisher nur von der neuen Oberfläche. → Verdrahten + AUD-1 in einem Rutsch.
+  Weiter geparkt: Task 5 „Mix aus `mic_tracks` strippen" (Pin-1-riskant + kosmetisch).
 - **Prompt-Tuning für die KI-Clip-Grenzen** (#70) `[L]` · braucht: Max-Material
   Few-Shot-Beispiele + Anti-Muster + HM-Stilprofil, messbar über A/B-Vergleich.
   Beinhaltet die **Aufhänger-Wahl** (welcher Satz ist der beste Einstieg — z. B.
@@ -64,11 +104,34 @@
 - **Threading-/Lebenszyklus-Härtung + echte Thread-Tests** `[L]` · braucht: Carl-Plan
   Worker-Handle-Disziplin (Neustart ohne sauberen Abbau), echte QThread-Tests
   (TEST-1). Durch #76 teilweise entschärft, Rest offen.
+- **Historien-Frage: muss eine Decision auf einen vorhandenen Kandidaten zeigen?** `[S]` · braucht: Carl-Plan
+  **NEU 2026-08-21 (Gate B / Block A, bewusst offen gelassen).** Die Sammlungs-Prüfung
+  an der Archivgrenze (`validate_candidate_collection`) sichert nur die EINDEUTIGKEIT
+  der `candidate_id`. Ob das Entscheidungslog auch referenziell sauber sein muss (jede
+  Decision zeigt auf einen aktuell existierenden Kandidaten) ist eine eigene
+  Vertragsfrage — Decisions sind Historie und dürfen Kandidaten überleben.
 - **Letzte Klassifizierer-Insel zusammenführen** (AUD-1) `[S]` · braucht: nichts
-  „Ist das Mix/Keyboard/Mic?" wird noch an mehreren Stellen unterschiedlich
-  beantwortet. *Kann im Import-Umbau (#77) aufgehen.*
+  **Präzisiert 2026-08-17 (selbst nachgegrept, vorher zu pauschal formuliert):** Der
+  ganze `core/`-Baum geht inzwischen über `import_classifier` — `audio_routing:52`,
+  `speaker_activity:52-57`, `guest_name:18`, `material_scanner:16`, `import_model:13`,
+  `project:43`. **Übrig ist GENAU EINE Insel:** `gui/main_window.py:231`
+  (`_categorize_files`) prüft weiter inline `any(kw in filename for kw in
+  ["keyboard","keys","klavier"])` und kennt weder das Mix-Gerätemuster (P8Mix) noch
+  die Inhalts-Erkennung. Sinnvoll zusammen mit dem Verdrahten von
+  `core/material_scanner.py` in die PyQt-App zu erledigen (siehe Punkt darunter).
 
 ## 🧹 Hygiene & Wartung
+- **Zwei kosmetische Restpunkte aus dem Kandidaten-Umbau** `[S]` · braucht: nichts
+  **Präzisiert 2026-08-23 beim Merge — Zeilen am Code nachgeprüft.** Der frühere
+  Sammelposten nannte vier Punkte; zwei davon waren zu dem Zeitpunkt bereits behoben
+  (der Kommentar-Zeilendrift in `session.py` und die Stellung des
+  „bewusst NICHT angefasst"-Kommentars) und sind gestrichen. Übrig:
+  (1) `core/candidate_view.py:17` liest die Session defensiv per `getattr`, den
+  Kandidaten aber hart per `c.origin` — inkonsistent.
+  (2) `core/clip_boundary/pipeline.py:106` und `core/session.py:214` nutzen
+  `list.index()` über Wertgleichheit statt Identität; heute sicher, weil zwei
+  wertgleiche Kandidaten dieselbe `candidate_id` hätten und die zentrale Sicht
+  vorher wirft — aber eine unausgesprochene Abhängigkeit.
 - **Versions-Drift in build.sh / PeakCut.spec** (stehen auf 2.9.0, App ist 2.11) `[S]` · braucht: Max-Entscheidung
   Vor Wiederbelebung des macOS-Bundles beide aktualisieren.
 - **Sammel-Tech-Schulden** `[L]` · braucht: nichts — geparkt
@@ -101,6 +164,8 @@
 ---
 
 ## ✅ Erledigt (Historie, Kurzform)
+- **Stellen quellenunabhängig + Namensdrift begradigt** (2026-08-23, Carl-Gate B grün) — `ClipCandidate` trägt `candidate_id`/`origin`/`anchor_ms` (optionales `peak_id`), Akten-Schema v5→v6 mit Migration beim Hydrieren, Reconciliation statt Replace (Neu-Analyse vernichtet keine Fremdquellen und kein Entscheidungslog mehr), zentrale Marker-Sicht statt fünf blinder `peak_id`-Joins, Invarianten an der Wurzel (`origin != marker` ⇒ `peak_id is None`, reservierter Namensraum `marker:`), Identitäts-Validierung an der Archivgrenze. Kanonisch: `session.candidate_decisions` / Akten-Sektion `candidate_decisions` / Klasse `CandidateDecision`; `peak_decisions` nur noch als Legacy-JSON-Schlüssel, `PeakDecision`-Alias entfernt. 909 Kern-Tests, Pin-1 byte-identisch, reales Ilka-Paritäts-Gate 6/6.
+- **Gate B / Block A — v6-Strenge, Kandidaten-Identität, Wurzel-Invarianten** — drei Vertragslücken aus Carls Abschluss-Gate geschlossen (2026-08-21): (A1) die v6-Strenge hing an `if "candidate_id" in d` statt an der Schema-Version — eine beschädigte Schema-6-Akte tarnte sich als Legacy und lud still als `marker:0`; jetzt entscheidet `schema_v >= 6` (Kandidaten UND Decisions). (A2) neue zentrale Sammlungs-Prüfung `validate_candidate_collection` in BEIDE Richtungen (Laden + vor dem Schreiben): doppelte `candidate_id` → `ProjectArchiveError`, nach dem Hydrieren Sortierung nach `(anchor_ms, candidate_id)`. (A3) die peak_id-Kollisionsklasse ist an der Wurzel geschlossen (`ClipCandidate.__post_init__`): `origin != marker` erzwingt `peak_id is None`, Marker-ID muss zur `peak_id` passen, Namensraum `marker:` reserviert. Die zentrale Marker-Sicht bleibt als zweite Verteidigungslinie; die Kollisionstests arbeiten dafür mit absichtlich ungültigen Objekten (`tests/malformed_candidates.py`). 903 Tests grün, Pin-1 stabil
 - **Marker + Vergleichbarkeit Keyboardstellen ↔ Sinnabschnitte** — Carl-Plan, TDD (5 Tasks, 785 Tests). Beide XMLs: Video + Ton (smart hat jetzt dieselben Tonspuren wie raw), nummerierte Bereich-Marker „Stelle N" (synchron trotz peak_id-Versatz), Clip-Namen = Quelldateien, Sequenzen „Keyboardstellen raw"/„smart". Pin-1 bewusst neu eingefroren. Max in Premiere abgenommen (Philip Siefer). Carl-Schluss-Check offen (2026-06-18)
 - **Folgenschnitt-XML real bestätigt** — Max hat erstmals seit Langem selbst eine Postproduktion gemacht (Philip Siefer) und die Folgenschnitt-XML „funktioniert super". Erste echte Eigen-Nutzung außerhalb der Smoke-Tests (2026-06-17)
 - **Sinnabschnitt-XML in Premiere importierbar + auf Multicam gehoben** — erst fehlten FCP7-Pflichtangaben (Import scheiterte), dann auf Video+Ton+Marker gehoben (siehe Marker-Slice oben). Eigener Codepfad, Keyboardstellen/Pin-1 unberührt (2026-06-17/18)

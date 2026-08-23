@@ -14,12 +14,24 @@ from core.sinnabschnitt_exporter import (  # noqa: E402
     SinnabschnittTXTExporter, SinnabschnittXMLExporter,
     _select_audio_reference)
 from core.clip_candidates import (  # noqa: E402
-    ClipCandidate, ClipBoundary, PROPOSED, DISCARDED)
+    ClipCandidate, ClipBoundary, PROPOSED, DISCARDED,
+    ORIGIN_MARKER, marker_candidate_id)
 from core.peak import Peak  # noqa: E402
 from core.project import PeakCutProject  # noqa: E402
 from core.session import PeakCutSession  # noqa: E402
 
 _CFG = {"fps": 25, "context_duration_ms": 15000}
+
+
+def _mc(peak_id, boundary, anchor_ms=None, **kw):
+    """Testhelfer: markergebundener v6-Kandidat. anchor_ms default = Position
+    des Default-Peaks aus _session() ((peak_id+1)*100000), wenn nicht
+    explizit uebergeben (dann steht ein echter Peak an anderer Stelle)."""
+    if anchor_ms is None:
+        anchor_ms = (peak_id + 1) * 100000
+    return ClipCandidate(candidate_id=marker_candidate_id(peak_id),
+                         origin=ORIGIN_MARKER, anchor_ms=anchor_ms,
+                         peak_id=peak_id, boundary=boundary, **kw)
 
 
 def _session(tmp_path, cands, peaks=None):
@@ -44,12 +56,12 @@ def _session(tmp_path, cands, peaks=None):
 
 def _cands():
     return [
-        ClipCandidate(peak_id=0, boundary=ClipBoundary(100000, 160000),
-                      status=PROPOSED,
-                      transcript_excerpt="… Frage … [PEAK] … Pointe …",
-                      reason="Frage bis Pointe", score=0.82),
-        ClipCandidate(peak_id=1, boundary=ClipBoundary(300000, 330000),
-                      status=DISCARDED, reason="ignoriert"),
+        _mc(0, ClipBoundary(100000, 160000),
+           status=PROPOSED,
+           transcript_excerpt="… Frage … [PEAK] … Pointe …",
+           reason="Frage bis Pointe", score=0.82),
+        _mc(1, ClipBoundary(300000, 330000),
+           status=DISCARDED, reason="ignoriert"),
     ]
 
 
@@ -96,9 +108,9 @@ def test_txt_uses_keyboard_number_not_peak_id(tmp_path):
     p0 = Peak(index=0, position_ms=60000)
     p0.ignored = True
     peaks = [p0, Peak(index=1, position_ms=120000)]
-    cands = [ClipCandidate(peak_id=1, boundary=ClipBoundary(110000, 130000),
-                           status=PROPOSED, score=0.8, reason="x",
-                           transcript_excerpt="y")]
+    cands = [_mc(1, ClipBoundary(110000, 130000), anchor_ms=120000,
+                status=PROPOSED, score=0.8, reason="x",
+                transcript_excerpt="y")]
     s = _session(tmp_path, cands, peaks=peaks)
     txt = open(SinnabschnittTXTExporter().export(s), encoding="utf-8").read()
     assert "[PEAK 1]" in txt
@@ -143,10 +155,10 @@ def test_xml_audio_clips_are_premiere_importable(tmp_path):
     import xml.dom.minidom as minidom
 
     cands = [
-        ClipCandidate(peak_id=0, boundary=ClipBoundary(100000, 160000),
-                      status=PROPOSED, reason="a", score=0.8),
-        ClipCandidate(peak_id=1, boundary=ClipBoundary(200000, 240000),
-                      status=PROPOSED, reason="b", score=0.7),
+        _mc(0, ClipBoundary(100000, 160000),
+           status=PROPOSED, reason="a", score=0.8),
+        _mc(1, ClipBoundary(200000, 240000),
+           status=PROPOSED, reason="b", score=0.7),
     ]
     s = _session(tmp_path, cands)
     xml = open(SinnabschnittXMLExporter().export(s), encoding="utf-8").read()
@@ -197,10 +209,10 @@ def test_marker_numbers_match_keyboardstellen_despite_peak_id_offset(tmp_path):
     peaks = [p0, Peak(index=1, position_ms=120000),
              Peak(index=2, position_ms=180000)]
     cands = [
-        ClipCandidate(peak_id=1, boundary=ClipBoundary(110000, 130000),
-                      status=PROPOSED, score=0.8),
-        ClipCandidate(peak_id=2, boundary=ClipBoundary(170000, 190000),
-                      status=PROPOSED, score=0.7)]
+        _mc(1, ClipBoundary(110000, 130000), anchor_ms=120000,
+           status=PROPOSED, score=0.8),
+        _mc(2, ClipBoundary(170000, 190000), anchor_ms=180000,
+           status=PROPOSED, score=0.7)]
     s = _session(tmp_path, cands, peaks=peaks)
     xml = open(SinnabschnittXMLExporter().export(s), encoding="utf-8").read()
     assert "<name>Stelle 1</name>" in xml
@@ -225,10 +237,8 @@ def test_bootstrap_only_no_smart_writes_nothing(tmp_path):
     # leeres Nebenprodukt (Carl-Checkliste). Konsistent zur Gate-G-
     # Vorschau-Semantik: score is not None == smarter Abschnitt.
     s = _session(tmp_path, [
-        ClipCandidate(peak_id=0, boundary=ClipBoundary(105000, 135000),
-                      status=PROPOSED, score=None),
-        ClipCandidate(peak_id=1, boundary=ClipBoundary(285000, 315000),
-                      status=PROPOSED, score=None)])
+        _mc(0, ClipBoundary(105000, 135000), status=PROPOSED, score=None),
+        _mc(1, ClipBoundary(285000, 315000), status=PROPOSED, score=None)])
     assert SinnabschnittTXTExporter().export(s) == ""
     assert SinnabschnittXMLExporter().export(s) == ""
     assert not os.path.isdir(s.project.export_dir) or \
@@ -237,15 +247,15 @@ def test_bootstrap_only_no_smart_writes_nothing(tmp_path):
 
 def test_fallback_score_zero_still_exported(tmp_path):
     # Fallback (score=0.0) ist ECHTES Smart-Ergebnis -> sichtbar.
-    s = _session(tmp_path, [ClipCandidate(
-        peak_id=0, boundary=ClipBoundary(100000, 160000), status=PROPOSED,
+    s = _session(tmp_path, [_mc(
+        0, ClipBoundary(100000, 160000), status=PROPOSED,
         reason="Rückfall", score=0.0)])
     assert SinnabschnittTXTExporter().export(s).endswith(".txt")
 
 
 def test_empty_or_all_discarded_writes_nothing(tmp_path):
-    s = _session(tmp_path, [ClipCandidate(
-        peak_id=0, boundary=ClipBoundary(1, 2), status=DISCARDED)])
+    s = _session(tmp_path, [_mc(
+        0, ClipBoundary(1, 2), status=DISCARDED)])
     assert SinnabschnittTXTExporter().export(s) == ""
     assert SinnabschnittXMLExporter().export(s) == ""
     assert not os.path.isdir(s.project.export_dir) or \
