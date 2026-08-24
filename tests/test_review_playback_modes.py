@@ -49,7 +49,7 @@ def _fs(mode="key", candidates=None, playing=False):
         clip_candidates=candidates or [],
         config={"preview_duration_ms": 1000},
         project=types.SimpleNamespace(
-            keyboard_track="/k.wav",
+            marker_track="/k.wav",
             mic_tracks=["/MIC1.wav", "/Folge - Mix.wav"], videos=[]))
     ns._controller = FakeController(playing)
     ns._events = []

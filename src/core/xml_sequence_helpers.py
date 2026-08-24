@@ -1,10 +1,10 @@
 """Gemeinsame Bausteine für die kompakten Clip-an-Clip-XMLs
-(Keyboardstellen raw + Keyboardstellen smart).
+(Markerstellen raw + Markerstellen smart).
 
 EINE Wahrheit für (a) die Stellennummer (peak.index -> Stelle 1..N über
-die aktiven, nicht-ignorierten Peaks — exakt die Keyboardstellen-
+die aktiven, nicht-ignorierten Peaks — exakt die Markerstellen-
 Nummerierung) und (b) die kumulativen Record-Positionen in der kompakten
-Premiere-Timeline. So tragen Keyboardstellen- und Sinnabschnitt-XML
+Premiere-Timeline. So tragen Markerstellen- und Sinnabschnitt-XML
 dieselben Marker-Nummern, obwohl die eine über Peaks und die andere über
 Smart-Kandidaten läuft (deren candidate.peak_id == peak.index, aber NICHT
 == Stellennummer, sobald früh ein Peak ignoriert wurde).
@@ -20,7 +20,7 @@ from utils import ms_to_frames
 from .clip_candidates import DISCARDED
 
 # Eine Spanne in der kompakten exportierten Timeline.
-#   number       = Stellennummer (= Keyboardstellen-Nummer, 1..N)
+#   number       = Stellennummer (= Markerstellen-Nummer, 1..N)
 #   source_in_f  / source_out_f = Quell-In/Out in Frames (ohne Video-Offset)
 #   rec_start_f  / rec_end_f    = Position in der kompakten Sequenz (Frames)
 SequenceSpan = namedtuple(
@@ -36,13 +36,13 @@ def build_peak_number_map(session) -> dict:
     """peak.index -> Stellennummer (1..N über die aktiven Peaks).
 
     get_active_peaks zählt nur nicht-ignorierte Peaks hoch -> identisch zur
-    Keyboardstellen-Nummerierung.
+    Markerstellen-Nummerierung.
     """
     return {peak.index: num for num, peak in session.get_active_peaks()}
 
 
-def build_keyboard_spans(session) -> list:
-    """Keyboardstellen-Spannen: aktive Peaks, Quelle = peak.in/out, Record
+def build_peak_spans(session) -> list:
+    """Markerstellen-Spannen: aktive Peaks, Quelle = peak.in/out, Record
     kumulativ (kompakte Clip-an-Clip-Timeline)."""
     fps = _fps(session)
     spans = []
@@ -60,11 +60,11 @@ def active_smart_candidates(session) -> list:
     """(Stellennummer, candidate) für die exportierbaren Smart-Kandidaten,
     sortiert nach Stellennummer.
 
-    EINE Quelle für Filter + Sortierung + Nummer (Keyboardstellen-XML und
+    EINE Quelle für Filter + Sortierung + Nummer (Markerstellen-XML und
     Sinnabschnitt-XML hängen sich beide hier an). Raus fallen: verworfene,
     Bootstrap (score=None) und Kandidaten ohne aktiven Peak (ignoriert /
     kein Mapping — sonst keine Vergleichbarkeit). Die Nummer kommt aus der
-    Keyboard-Nummernkarte, NICHT direkt aus candidate.peak_id.
+    Marker-Nummernkarte, NICHT direkt aus candidate.peak_id.
     """
     from .candidate_view import marker_candidates_by_peak_id
     number_map = build_peak_number_map(session)

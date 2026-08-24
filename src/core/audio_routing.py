@@ -4,7 +4,8 @@ Hintergrund (#71a Carl-Plan B-prime, 2026-05-21):
 
 Beim Import landet die Mix-Datei aktuell in derselben Liste wie die
 Einzel-Mic-Spuren (``project.mic_tracks``), weil der Importer alles
-außer 'keyboard/keys/klavier' als Mic einsortiert. Sowohl
+außer der Marker-Spur (Namens-Token 'keyboard/keys/klavier') als Mic
+einsortiert. Sowohl
 ``MP3Exporter`` als auch ``session.play_current()`` Mic-Mode haben
 historisch ``mic_audios[0]`` + Overlay über ``mic_audios[1:]``
 genutzt — wodurch der bereits gemischte ProTools-Mix on-top zu den

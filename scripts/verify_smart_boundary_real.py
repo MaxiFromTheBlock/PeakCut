@@ -146,9 +146,9 @@ def format_handoff_summary(rows, run_result):
 def classify_media_files(files):
     """Carl-Gegenreview [P2]: Endungs-Klassifikation case-insensitiv —
     .WAV/.MOV (Recorder-Default) fielen sonst aus mics/vids."""
+    from core.import_classifier import is_marker_track
     lower = [(f, os.path.basename(f).lower()) for f in files]
-    kb = next((f for f, n in lower
-               if "keyboard" in n or "keys" in n or "klavier" in n), None)
+    kb = next((f for f, n in lower if is_marker_track(f)), None)
     if kb is None and lower:
         kb = lower[0][0]
     mics = [f for f, n in lower
@@ -231,7 +231,7 @@ def main():  # pragma: no cover — Hand-Werkzeug, echte Engines
     reference = project.get_reference_track() or (mics[0] if mics else kb)
 
     # --- Mess-Gate: Analyse-Wanduhr ohne vs. mit parallelem Whisper ---
-    base = {"keyboard_track": kb, "mic_tracks": mics, "videos": vids,
+    base = {"marker_track": kb, "mic_tracks": mics, "videos": vids,
             "reference_track": reference, "temp_dir": "/tmp",
             "export_dir": project.export_dir, "default_people": [],
             "config": cfg}

@@ -4,14 +4,14 @@ Strikt getrennter Zusatz: eigene Dateien `Sinnabschnitte - {Gast}.{txt,
 xml}`, EIGENER Codepfad (importiert core/exporters.py NICHT), nutzt
 ClipCandidate.boundary statt Peak.in/out. Gehört NICHT in
 _build_exporters/exported und läuft erst NACH dem Export-Handoff
-(Task 8). Berührt den Keyboardstellen-Pfad nie.
+(Task 8). Berührt den Markerstellen-Pfad nie.
 
 Marker-Slice 2026-06-17: die XML ist jetzt eine kompakte Multicam-Liste
 (Video + Ton) mit nummerierten Markern ("Stelle N"), strukturgleich zur
-Keyboardstellen-XML, damit Max beide in Premiere direkt vergleichen kann.
-Die Stellennummern kommen aus der gemeinsamen Keyboard-Nummernkarte
+Markerstellen-XML, damit Max beide in Premiere direkt vergleichen kann.
+Die Stellennummern kommen aus der gemeinsamen Marker-Nummernkarte
 (xml_sequence_helpers), NICHT aus candidate.peak_id. Sequenz heißt
-"Keyboardstellen smart". Der Keyboardstellen-Exporter bleibt ein eigener,
+"Keyboardstellen smart". Der Markerstellen-Exporter bleibt ein eigener,
 unabhängiger Codepfad.
 """
 
@@ -20,7 +20,7 @@ from xml.sax.saxutils import escape
 
 from utils import ms_to_timecode, ms_to_frames, parse_timecode_to_ms
 # Geteilte Helfer (Carl Gate-E P2): import ist ok — "eigener Codepfad" =
-# nicht in _build_exporters / Keyboardstellen-Exporter unangetastet, NICHT
+# nicht in _build_exporters / Markerstellen-Exporter unangetastet, NICHT
 # "keine gemeinsame Util".
 from .exporters import _file_url, _probe_audio_info, _probe_video_info
 from .audio_routing import get_mix_track, get_source_mic_tracks
@@ -56,7 +56,7 @@ def _select_audio_reference(session) -> str:
 
 class SinnabschnittTXTExporter:
     """Lesbare Cutter-Fassung: pro Sinnabschnitt Stellennummer, Start/Ende,
-    Dauer, Confidence, Grund, Transkript-Auszug. Nummerierung = Keyboard-
+    Dauer, Confidence, Grund, Transkript-Auszug. Nummerierung = Marker-
     Stelle (wie XML), nicht candidate.peak_id."""
 
     def export(self, session) -> str:
@@ -87,13 +87,13 @@ class SinnabschnittTXTExporter:
 class SinnabschnittXMLExporter:
     """Kompakte FCP7-xmeml Multicam-Liste (Video + Ton) der smarten
     Sinnabschnitte mit nummerierten Markern ("Stelle N"). Strukturgleich
-    zur Keyboardstellen-XML, damit beide in Premiere vergleichbar sind.
-    Eigener Codepfad. Nummern aus der gemeinsamen Keyboard-Nummernkarte."""
+    zur Markerstellen-XML, damit beide in Premiere vergleichbar sind.
+    Eigener Codepfad. Nummern aus der gemeinsamen Marker-Nummernkarte."""
 
     def export(self, session) -> str:
         # (Stellennummer, candidate) — gefiltert (kein discarded/score=None/
         # ohne aktiven Peak) und nach Stelle sortiert. Gleiche Quelle wie die
-        # Marker, damit Nummern & Reihenfolge mit Keyboardstellen matchen.
+        # Marker, damit Nummern & Reihenfolge mit Markerstellen matchen.
         smart = active_smart_candidates(session)
         if not smart:
             return ""
@@ -139,7 +139,7 @@ class SinnabschnittXMLExporter:
             f.write(f'        {rate}\n')
             f.write('      </samplecharacteristics>\n')
             f.write('    </format>\n')
-            # Nummerierte Sequenz-Marker — gleiche Nummern wie Keyboardstellen.
+            # Nummerierte Sequenz-Marker — gleiche Nummern wie Markerstellen.
             f.write(markers)
             f.write('    <media>\n')
 

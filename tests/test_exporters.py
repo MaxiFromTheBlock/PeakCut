@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 from core.exporters import TXTExporter, XMLExporter
 from core.xml_sequence_helpers import (
-    build_keyboard_spans, sequence_markers_xml)
+    build_peak_spans, sequence_markers_xml)
 
 
 class TestTXTExporter:
@@ -131,7 +131,7 @@ class TestXMLExporter:
         session.video_offsets = []
         session.get_active_peaks.return_value = [(1, sample_peaks[0]),
                                                  (2, sample_peaks[2])]
-        spans = build_keyboard_spans(session)
+        spans = build_peak_spans(session)
 
         content = open(XMLExporter().export(session)).read()
 

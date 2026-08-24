@@ -59,7 +59,7 @@ def _resolve_transcript(session):
         from ..transcript_archive import read_transcript_sidecar
         from ..project_archive import material_root, _media_paths
         root = material_root(_media_paths(session.project),
-                              session.project.keyboard_track)
+                              session.project.marker_track)
         return read_transcript_sidecar(root, ref)
     except Exception:  # noqa: BLE001
         return None

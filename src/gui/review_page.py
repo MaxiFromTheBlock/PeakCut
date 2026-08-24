@@ -612,7 +612,7 @@ class ReviewPage(QWidget):
         sobald die Vorbedingungen stimmen. Gate-Bedingungen (Carl):
         Notbremse an, Peaks da, Transkript lesbar, kein Worker läuft
         bereits, KEINE fertigen Smart-Scores (kein teures Doppel-
-        Berechnen). Bricht den Keyboardstellen-Weg NIE."""
+        Berechnen). Bricht den Markerstellen-Weg NIE."""
         session = getattr(self, "session", None)
         if session is None:
             return

@@ -62,7 +62,7 @@ def _config(tmp_path, keyboard_track, *, with_video=False):
                    "context_duration_ms": 15_000, "fps": 25},
     }
     if keyboard_track is not None:
-        cfg["keyboard_track"] = keyboard_track
+        cfg["marker_track"] = keyboard_track
     if with_video:
         # Step 1 laeuft nur bei videos UND reference_track. Die Datei muss nicht
         # echt sein — sync_videos wird gemockt; hier zaehlt der Datenweg.

@@ -36,7 +36,7 @@ def _session(tmp, with_mix=True):
         mics.append(_touch(tmp / "ep" / "Folge - Mix.wav"))
     proj.set_files(kb, mics, [_touch(tmp / "ep" / "cam.mp4")])
     s = PeakCutSession(proj, {"preview_duration_ms": 1000})
-    s.keyboard_audio = AudioSegment.silent(1000)  # load_audio_lazy überspringen
+    s.marker_audio = AudioSegment.silent(1000)  # load_audio_lazy überspringen
     return s
 
 

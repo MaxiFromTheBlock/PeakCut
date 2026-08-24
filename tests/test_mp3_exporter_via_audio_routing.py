@@ -74,7 +74,7 @@ def _session_with_files(tmp_path, with_mix: bool):
         }
     )
     # Audio direkt einsetzen, ohne ffmpeg-Loading-Pfad anzustoßen.
-    s.keyboard_audio = _silent_segment()
+    s.marker_audio = _silent_segment()
     s.mic_audios = [_silent_segment() for _ in mics]
     s.load_audio_lazy = lambda: None  # No-Op, bleibt bei unseren Stubs
     return s
@@ -158,7 +158,7 @@ def test_mp3_exporter_calls_get_speech_audio_segment_per_active_peak(tmp_path):
         }
     )
     # Re-stub audio nach load_analysis_results (resetet alles)
-    s.keyboard_audio = _silent_segment()
+    s.marker_audio = _silent_segment()
     s.mic_audios = [_silent_segment() for _ in s.project.mic_tracks]
     s.load_audio_lazy = lambda: None
 

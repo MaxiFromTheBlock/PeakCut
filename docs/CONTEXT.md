@@ -147,6 +147,12 @@ vom 12./17.08.:
 7. **Kalter Handdurchlauf** (Max) → Export-Vergleich → `develop` → `main`.
 8. Danach: Sicherheits-Kleinkram, CI im Web-Repo, Electron-Aktualisierung, ARCH-1.
 
+Nicht in dieser Reihenfolge verankert, aber offen (→ BACKLOG.md): **Keyboard→Marker-
+Umbenennung Teil 2** (Max-Entscheid 2026-06-20). Oberflächentexte/interne Bezeichner/
+Doku sind umbenannt; der Byte-ändernde Teil (Export-Dateinamen, XML-Sequenznamen,
+Pin-1-Prüfwert, Mitziehen in `export_parity.py` + CheckIn) wartet auf Max' Namens-
+entscheidung + ein Carl-Gate.
+
 Am Kern selbst weiter offen: Produkt-Validierung (#70 Prompt-Tuning + Cutter-Sign-off),
 Slice A (Dialog-Totale Cross-Talk), Export-Steuerung in den Kern (ARCH-1, vor NAS),
 SRT (groß). (Die frühere „V3 Vision: Smart Scan / Create Mix / Hub"-Liste war überholt

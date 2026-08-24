@@ -93,7 +93,7 @@ def make_shot_combo() -> QComboBox:
 
 class AssignmentPage(QWidget):
     """Encapsulated assignment step. Kept loosely coupled from ReviewPage so a
-    later UX redesign can move it. Never blocks the Keyboardstellen export."""
+    later UX redesign can move it. Never blocks the Markerstellen export."""
 
     continue_clicked = pyqtSignal()
 
@@ -151,7 +151,7 @@ class AssignmentPage(QWidget):
             "Der automatische Folgenschnitt nutzt jede sinnvolle Kamera-"
             "Kombination (auch Close/Totale als Fallback) – je vollständiger "
             "die Zuordnung, desto besser das Ergebnis. Ohne vollständige "
-            "Zuordnung werden trotzdem die Keyboardstellen exportiert."
+            "Zuordnung werden trotzdem die Markerstellen exportiert."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
@@ -459,7 +459,7 @@ class AssignmentPage(QWidget):
             self._status_label.setText("Zuordnung vollständig — Folgenschnitt-XML wird erzeugt.")
         else:
             self._status_label.setText(
-                "Folgenschnitt-Zuordnung unvollständig — Keyboardstellen werden "
+                "Folgenschnitt-Zuordnung unvollständig — Markerstellen werden "
                 "trotzdem exportiert."
             )
 

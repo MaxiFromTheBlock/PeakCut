@@ -5,7 +5,7 @@ Beschreibt WELCHE Datei, WELCHER Ausschnitt darin (media_*), und wie der
 auf die Mix-Timeline abbildet (timeline_*) — damit der Controller die
 Player-Position in Timeline-Koordinaten umrechnen kann.
 
-- Key:            Keyboard-Datei, media == timeline.
+- Key:            Marker-Datei, media == timeline.
 - Speak/Smart+Mix: Mix-Datei, media == timeline.
 - Speak/Smart ohne Mix: get_speech_audio_segment -> temporär gerenderte WAV
   (gecacht über Hash), media_start=0, timeline_start=window.start_ms.
@@ -67,10 +67,10 @@ def _source_fingerprint(project):
 
 def _preview_path(project, window):
     root = material_root(_media_paths(project),
-                         getattr(project, "keyboard_track", None))
+                         getattr(project, "marker_track", None))
     out_dir = os.path.join(root, ARCHIVE_DIR, _PREVIEW_DIR)
     key = (f"{window.mode}|{window.start_ms}|{window.end_ms}|"
-           f"{getattr(project, 'keyboard_track', '')}|"
+           f"{getattr(project, 'marker_track', '')}|"
            f"{_source_fingerprint(project)}")
     name = hashlib.sha1(key.encode("utf-8")).hexdigest()[:16] + ".wav"
     return out_dir, os.path.join(out_dir, name)
@@ -84,9 +84,9 @@ def resolve_playback_audio_source(session, window):
     mode = normalize_playback_mode(window.mode)
 
     if mode == PLAYBACK_MODE_KEY:
-        kb = getattr(project, "keyboard_track", None)
+        kb = getattr(project, "marker_track", None)
         if not kb:
-            return _disabled("Keine Keyboard-Datei vorhanden.")
+            return _disabled("Keine Marker-Datei vorhanden.")
         return _file_source(kb, window)
 
     # speak / smart: Mix bevorzugt

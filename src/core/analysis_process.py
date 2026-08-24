@@ -15,7 +15,7 @@ Usage:
 
 Where config_json contains:
 {
-    "keyboard_track": "/path/to/keyboard.wav",
+    "marker_track": "/path/to/marker.wav",
     "mic_tracks": ["/path/to/mic1.wav", ...],
     "videos": ["/path/to/video1.mp4", ...],
     "reference_track": "/path/to/mix.wav",
@@ -62,7 +62,7 @@ def run_analysis(config_data):
 
     # .get statt [] — ohne Marker (Fremdproduktion ohne Fusspedal) fehlt der
     # Schluessel ganz; das ist ein legitimer Fall, kein KeyError.
-    keyboard_track = config_data.get("keyboard_track")
+    marker_track = config_data.get("marker_track")
     mic_tracks = config_data.get("mic_tracks", [])
     videos = config_data.get("videos", [])
     reference_track = config_data.get("reference_track")
@@ -134,7 +134,7 @@ def run_analysis(config_data):
     # Step 3: Peak detection — nur wenn ueberhaupt ein Marker bestaetigt wurde.
     #
     # Capability-driven (core/project_capabilities.py, Max-Entscheid 2026-08-17):
-    # Der Marker schaltet NUR die Keyboardstellen frei. Fremdproduktionen haben
+    # Der Marker schaltet NUR die Markerstellen frei. Fremdproduktionen haben
     # kein Fusspedal — Video-Sync (Step 1) und Sprecher-Aktivitaet (Step 2) sind
     # dort trotzdem die Grundlage des Folgenschnitts. Vorher warf ein frueher
     # Return genau diese bereits berechneten Ergebnisse weg.
@@ -142,24 +142,24 @@ def run_analysis(config_data):
     # WICHTIGE ABGRENZUNG — zwei verschiedene Dinge, bewusst getrennt:
     #   kein Marker gesetzt      -> legitimer Fall, weiterarbeiten, Flag setzen
     #   Marker gesetzt, Datei weg -> Materialfehler, muss LAUT bleiben, sonst
-    #                                laeuft eine HM-Folge still ohne Keyboardstellen durch
+    #                                laeuft eine HM-Folge still ohne Markerstellen durch
     #
     # KEIN frueher Return (Carl-Gate A): ein fehlender Marker darf NUR Step 3
     # auslassen, nicht die Pipeline beenden — sonst wuerde ein kuenftiger
     # markerunabhaengiger Step 4 stillschweigend mit uebersprungen.
-    if not keyboard_track:
+    if not marker_track:
         results["skipped_steps"]["peak_detection"] = "marker_missing"
         progress("Kein Marker — Keyboardstellen entfallen, Sync + Sprecher-Aktivitaet bleiben")
 
-    elif not os.path.exists(keyboard_track):
-        error(f"Marker-Datei nicht gefunden: {keyboard_track}")
-        results["error"] = "No keyboard file"
+    elif not os.path.exists(marker_track):
+        error(f"Marker-Datei nicht gefunden: {marker_track}")
+        results["error"] = "No marker file"
 
     else:
         progress("Analysiere Peaks...")
         try:
             raw_peaks = detect_peaks(
-                keyboard_track,
+                marker_track,
                 cfg.get("threshold_factor", 0.3),
                 cfg.get("min_gap_ms", 12000)
             )

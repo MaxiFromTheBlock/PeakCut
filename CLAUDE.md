@@ -24,7 +24,7 @@ Wenn Claude eine Idee von Max bekommt:
 
 ## Project Overview
 
-PeakCut ist eine Python/PyQt6 Desktop-App für Podcast-Nachbearbeitung. Sie erkennt Keyboard-Peaks (Fußpedal-Marker) in Audioaufnahmen und exportiert nummerierte Clips mit Timecodes.
+PeakCut ist eine Python/PyQt6 Desktop-App für Podcast-Nachbearbeitung. Sie erkennt Marker-Peaks in Audioaufnahmen und exportiert nummerierte Clips mit Timecodes.
 
 **Produktiv im Einsatz für:** Postproduction des [Hotel Matze](https://mitvergnuegen.com/hotelmatze/) Podcasts (Max ist aktuell einziger User)
 
@@ -182,13 +182,13 @@ src/
 ```
 PeakCutProject (project.py)
   - export_dir (settable property: default ~/Downloads/{guest_name} - PeakCut Export/)
-  - keyboard_track, mic_tracks, videos
+  - marker_track, mic_tracks, videos
   - set_files(), get_all_file_paths(), get_reference_track()
   - guest_name (settable property: user-set oder auto-detected aus Mix-Dateiname)
 
 PeakCutSession (session.py)
   - status_update: StatusUpdate (callback-basiert, Qt-frei)
-  - State: peaks, current_peak, mode, keyboard_audio, mic_audios, video_offsets
+  - State: peaks, current_peak, mode, marker_audio, mic_audios, video_offsets
   - Methods: play_current(), switch_mode(), ignore_peak(), set_current_peak()
   - load_analysis_results(dict) — loads peaks + offsets from subprocess
   - load_audio_lazy() — deferred parallel audio loading (ThreadPoolExecutor), sets duration bounds on peaks
@@ -266,15 +266,15 @@ Aller State lebt in `PeakCutSession`. Kein globaler State.
 
 | Klasse | State |
 |--------|-------|
-| `PeakCutSession` | `peaks`, `current_peak`, `mode`, `keyboard_audio`, `mic_audios`, `video_offsets` |
+| `PeakCutSession` | `peaks`, `current_peak`, `mode`, `marker_audio`, `mic_audios`, `video_offsets` |
 | `config.py` | `_config` (JSON-basiert, lazy-loaded, thread-safe via `_lock`) |
 
 ---
 
 ## Data Flow
 
-1. **User klickt "Import Files"** → Datei-Dialog, Dateien kategorisiert (keyboard/mics/videos)
-2. **Falls Keyboard nicht auto-erkannt** → Dialog zur Auswahl
+1. **User klickt "Import Files"** → Datei-Dialog, Dateien kategorisiert (marker/mics/videos)
+2. **Falls Marker nicht auto-erkannt** → Dialog zur Auswahl
 3. **Pre-flight Validation** → Alle Dateien existenzgeprüft
 4. **Gastname-Dialog** → Auto-detected aus Mix-Dateiname, User kann editieren/bestätigen
 5. **Analyse startet** → `AnalysisWorker` (QThread) spawnt `analysis_process.py` als Subprocess (10-Min-Timeout)
@@ -355,7 +355,7 @@ Status-Updates laufen über `session.status_update` Callbacks + stderr vom Subpr
 |-----|---------|--------------|
 | `threshold_factor` | 0.3 | Peak-Erkennung Schwellwert (% vom Max-Sample) |
 | `min_gap_ms` | 12000 | Minimaler Abstand zwischen Peaks (ms) |
-| `preview_duration_ms` | 1000 | Keyboard-Mode Preview Länge |
+| `preview_duration_ms` | 1000 | Marker-Mode Preview Länge |
 | `context_duration_ms` | 15000 | Mic-Mode Kontext (±15s) |
 | `fps` | 25 | Framerate für Timecode-Berechnung |
 | `tts_voice` | "Anna" | macOS TTS Stimme |
@@ -382,7 +382,7 @@ Shortcuts sind nur auf der Review-Page aktiv (Page Index 3).
 **Achtung: zwei Wege im Repo, bewusst — nicht verwechseln.**
 
 ### 1. Namens-Heuristik (`core/import_classifier.py`) — der Weg, den die PyQt-App geht
-- **Marker/Keyboard**: Dateiname enthält `keyboard`, `keys` oder `klavier`
+- **Marker**: Dateiname enthält `keyboard`, `keys` oder `klavier`
 - **Mix/Referenz**: Token `mix`/`mixdown` **oder** Gerätemuster `_MIX_DEVICE_RE = ^p\d+mix(?:down)?$`
   (fängt die HM-Studio-Konvention „P8Mix" — Commit `91cc8ae`, Wurzelfix des Phasing-Bugs
   bei Johanna Klug). `remix`/`mixer`/`pmix` bleiben bewusst draußen.
@@ -512,7 +512,7 @@ Mini ✓** (auf main gelandet 2026-05-25) → **#76 Wiedergabe-UX**
 
 **Phasing-Wurzel diagnostiziert 2026-05-21:** Beim Import landet die
 Mix-Datei in `project.mic_tracks` (main_window 232-237 sortiert alles
-außer „keyboard/keys/klavier" als Mic). MP3Exporter (`exporters.py`
+außer der Marker-Spur („keyboard/keys/klavier") als Mic). MP3Exporter (`exporters.py`
 142-144) und `session.play_current` Mic-Mode (`session.py` 100-107)
 overlay-summieren `mic_audios[0]` + `mic_audios[1:]` — die Mix-Datei
 steckt aber als eine dieser „Mic-Spuren" mit drin. Folge: ProTools-

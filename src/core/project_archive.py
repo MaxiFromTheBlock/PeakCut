@@ -87,7 +87,7 @@ def _broad_dirs():
     }
 
 
-def material_root(media_paths, keyboard_track=None):
+def material_root(media_paths, marker_track=None):
     paths = [os.path.abspath(p) for p in media_paths if p]
     root = None
     if paths:
@@ -98,7 +98,7 @@ def material_root(media_paths, keyboard_track=None):
     if root and not os.path.isdir(root):
         root = os.path.dirname(root)
     if not root or root in _broad_dirs():
-        anchor = keyboard_track or (paths[0] if paths else None)
+        anchor = marker_track or (paths[0] if paths else None)
         root = os.path.dirname(os.path.abspath(anchor)) if anchor else os.getcwd()
     return root
 
@@ -345,7 +345,7 @@ def _media_paths(project):
 def save_project_archive(session, root=None):
     project = session.project
     if root is None:
-        root = material_root(_media_paths(project), project.keyboard_track)
+        root = material_root(_media_paths(project), project.marker_track)
     archive_dir = os.path.join(root, ARCHIVE_DIR)
     os.makedirs(archive_dir, exist_ok=True)
     _assert_archive_write_allowed(os.path.join(archive_dir, ARCHIVE_FILE))

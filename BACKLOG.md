@@ -138,6 +138,19 @@
 ## ✔️ Abnahme & Validierung
 
 ## 🤔 Offene Entscheidungen (Max)
+- **Keyboard→Marker-Umbenennung Teil 2: Export-Dateinamen + XML-Sequenznamen** (Pin-1-Slice) `[S]` · braucht: Max-Entscheidung + Carl-Gate
+  Max-Entscheid 2026-06-20: „Keyboard" wird geräteunabhängig zu „Marker" (der Moderator
+  markiert seit zwei Folgen mit einer Kickdrum statt Keyboard). Oberflächentexte, interne
+  Bezeichner, Kommentare und Doku sind umbenannt (block-sicher, dieser Commit — Bericht
+  `.superpowers/rename/block-sicher-report.md`). **Offen bleibt der Byte-ändernde Teil:**
+  die drei Export-Dateinamen (`Keyboardstellen - {Gast}.{mp3,txt,xml}`), die beiden
+  XML-Sequenznamen/-IDs (`Keyboardstellen raw`/`smart`), die TXT-Kopfzeile „KEYBOARD
+  PEAKS", der eingefrorene Pin-1-Prüfwert (`tests/test_audio_routing_safety.py`) sowie
+  das Mitziehen in PeakCut-web (`engine/export_parity.py`) und CheckIn
+  (`uebergabe.py` sucht die Marker-MP3 heute über den Textbaustein „keyboardstellen" im
+  Dateinamen). Braucht zuerst Max' Namensentscheidung (Markerstellen? etwas anderes?),
+  danach ein Carl-Gate für die Byte-Änderung — nicht ohne Vier-Augen mergen. Detailplan
+  + Reihenfolge: `.superpowers/rename/block-sicher.md` Abschnitt „NICHT in dieser Runde".
 - **Distributions-Pfad festlegen** · braucht: Max-Entscheidung
   Bewusst „interne Repo-App" bleiben ODER saubere Releases/Versionierung + Code
   Signing. „Dazwischen" tut langfristig weh.

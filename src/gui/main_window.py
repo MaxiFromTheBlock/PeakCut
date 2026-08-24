@@ -178,8 +178,8 @@ class MainWindow(QMainWindow):
                 return
             items = [os.path.basename(f) for f in audio_files]
             item, ok = QInputDialog.getItem(
-                self, "Keyboard-Spur wählen",
-                "Welche Datei ist die Keyboard-Spur?",
+                self, "Marker-Spur wählen",
+                "Welche Datei ist die Marker-Spur?",
                 items, 0, False
             )
             if not ok:
@@ -258,7 +258,7 @@ class MainWindow(QMainWindow):
 
         # Roadmap #3 Stufe A: Transkription früh & parallel anstoßen —
         # NACH AnalysisWorker.start(), eigener entkoppelter Job,
-        # bremst den Analyse-/Keyboardstellen-Weg nie. Notbremse:
+        # bremst den Analyse-/Markerstellen-Weg nie. Notbremse:
         # smart_boundary_enabled=False -> läuft gar nicht. Kein Mix ->
         # Worker skippt selbst kontrolliert.
         if config.get("smart_boundary_enabled"):
