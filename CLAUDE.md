@@ -382,7 +382,9 @@ Shortcuts sind nur auf der Review-Page aktiv (Page Index 3).
 **Achtung: zwei Wege im Repo, bewusst — nicht verwechseln.**
 
 ### 1. Namens-Heuristik (`core/import_classifier.py`) — der Weg, den die PyQt-App geht
-- **Marker**: Dateiname enthält `keyboard`, `keys` oder `klavier`
+- **Marker**: Dateiname enthält `keyboard`, `keys`, `klavier` oder `marker`
+  (`_MARKER_TOKENS` in `import_classifier.py` — die drei alten Tokens bleiben
+  dauerhaft, reale Quelldateien heißen weiter `MIC4_Keyboard.WAV`)
 - **Mix/Referenz**: Token `mix`/`mixdown` **oder** Gerätemuster `_MIX_DEVICE_RE = ^p\d+mix(?:down)?$`
   (fängt die HM-Studio-Konvention „P8Mix" — Commit `91cc8ae`, Wurzelfix des Phasing-Bugs
   bei Johanna Klug). `remix`/`mixer`/`pmix` bleiben bewusst draußen.
@@ -587,7 +589,13 @@ nicht kopieren, von unten unterlaufen. **Create Mix** kein Flaggschiff
 (HM mischt in Pro Tools via CheckIn), höchstens später Preview-Mix für
 fremde Teams.
 
-### Deployment-Topologie: Hybrid (KEIN Web-Rewrite)
+### Deployment-Topologie: Hybrid (KEIN Web-Rewrite) — ÜBERHOLT 2026-08-17
+
+> ⚠️ **Max-Entscheid 2026-08-17: die neue Oberfläche (PeakCut-web) SOLL die
+> PyQt-App ersetzen.** Der Abschnitt unten beschreibt die vorherige Hybrid-Politik
+> und ist als Begründungs-Historie erhalten — er gilt NICHT mehr als Richtung für
+> Paketierung, Engine-Selbststart oder CheckIn-Anbindung.
+
 
 Interaktives (PyQt, Scrubbing, LUT-Preview, NLE-Nähe) bleibt am
 Studio-Mac. NAS = Hintergrund-Rückgrat:
@@ -922,7 +930,13 @@ Carl-Gate vom 2026-08-24 mit verbindlichen Leitplanken.
   falsche MP3 geliefert und die Checkliste blieb unbemerkt bei 3 von 4.
 - **Echte Exportkette geprüft:** C1-Paritätsgate gegen Max' Ilka-Akte 🟢,
   Marker-XML + Marker-TXT + Folgenschnitt-XML byte-identisch Web↔Desktop,
-  Akte read-only. 910 Kern-Tests grün, Web 363 grün, CheckIn 61 grün.
+  Akte read-only. 910 Kern-Tests grün, Web 363 grün, CheckIn 64 grün.
+- **Zwei Carl-Nachschärfungen danach** (beide in CheckIn): (1) Exaktheit schlägt
+  Namensvariante — eine `Marker - Andere Person.mp3` darf den exakten alten Namen
+  des richtigen Gastes nicht verdrängen; bei mehreren nicht-exakten Treffern bricht
+  es mit `UebergabeError` ab statt alphabetisch zu raten. (2) Dieser Fehler erreicht
+  die Oberfläche: rote Statuszeile, Zähler auf „Fehler", gesperrter Knopf — vorher
+  verschluckte `refreshUebergabe` ihn im catch, und der Knopf startet deaktiviert.
 - **Offen:** Max' Premiere-Import von Raw- und Smart-XML als Abnahme-Riegel.
 
 ### Marker + Vergleichbarkeit Keyboardstellen ↔ Sinnabschnitte (develop, 2026-06-18)
@@ -1610,4 +1624,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-08-24 (Keyboard→Marker-Umbenennung abgeschlossen: sieben Export-Literale umgestellt, Pin-1 bewusst neu eingefroren mit nachgewiesenem Ein-Zeilen-Byte-Diff, Strukturtest für `marker-smart`, CheckIn mit dauerhafter Dual-Read-Kompatibilität zuerst ausgerollt, Web-Paritätsgate auf `Marker*` umgestellt; 910 Kern / 363 Web / 61 CheckIn grün, C1-Gate gegen die Ilka-Akte 🟢 read-only. Offen: Max' Premiere-Abnahme. Davor 2026-08-23 (Carl-Gate B gruen, Vertrag eingefroren, gemeinsamer Merge Kern+Web freigegeben; Bau 2026-08-19/21 auf feature/kandidaten-quellenunabhaengig: Kandidaten quellenunabhängig — `.peakcut`-Schema v5→v6, `ClipCandidate` trägt jetzt `candidate_id`/`origin`/`anchor_ms` (optionales `peak_id`), Reconciliation statt Replace, zentrale Marker-Sicht `core/candidate_view.py` statt fünf blinder Joins. Fix-Welle danach: zweiter Absturzweg `review_page.on_ignore` geschlossen, Web-Engine-Import `candidate_view` auf Modulebene gehoben, Web-README auf v6 nachgezogen, zwei stumpf gewordene Tests per Mutationstest geschärft, aufgeschobene Punkte in BACKLOG.md gerettet. 909 Kern-Tests grün, Web 362 grün, Pin-1 stabil, reale Ilka-Akte read-only migrationsgeprüft (31/31 korrekt, SHA vorher==nachher). Davor 2026-06-20: Core-Extraction der Zuordnungs-Datenschicht nach `core/folgenschnitt_assignment.py`. Todos in App/BACKLOG.md.)*
+*Zuletzt aktualisiert: 2026-08-24 (Keyboard→Marker-Umbenennung abgeschlossen: sieben Export-Literale umgestellt, Pin-1 bewusst neu eingefroren mit nachgewiesenem Ein-Zeilen-Byte-Diff, Strukturtest für `marker-smart`, CheckIn mit dauerhafter Dual-Read-Kompatibilität zuerst ausgerollt, Web-Paritätsgate auf `Marker*` umgestellt; 910 Kern / 363 Web-Engine / 64 CheckIn grün, C1-Gate gegen die Ilka-Akte 🟢 read-only. Offen: Max' Premiere-Abnahme. Davor 2026-08-23 (Carl-Gate B gruen, Vertrag eingefroren, gemeinsamer Merge Kern+Web freigegeben; Bau 2026-08-19/21 auf feature/kandidaten-quellenunabhaengig: Kandidaten quellenunabhängig — `.peakcut`-Schema v5→v6, `ClipCandidate` trägt jetzt `candidate_id`/`origin`/`anchor_ms` (optionales `peak_id`), Reconciliation statt Replace, zentrale Marker-Sicht `core/candidate_view.py` statt fünf blinder Joins. Fix-Welle danach: zweiter Absturzweg `review_page.on_ignore` geschlossen, Web-Engine-Import `candidate_view` auf Modulebene gehoben, Web-README auf v6 nachgezogen, zwei stumpf gewordene Tests per Mutationstest geschärft, aufgeschobene Punkte in BACKLOG.md gerettet. 909 Kern-Tests grün, Web 362 grün, Pin-1 stabil, reale Ilka-Akte read-only migrationsgeprüft (31/31 korrekt, SHA vorher==nachher). Davor 2026-06-20: Core-Extraction der Zuordnungs-Datenschicht nach `core/folgenschnitt_assignment.py`. Todos in App/BACKLOG.md.)*

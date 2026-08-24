@@ -412,8 +412,12 @@ class TestExportPipeline:
 
         assert result != ""
         assert os.path.exists(result)
-        assert result.endswith(".mp3")
-        assert "Testgast" in result
+        # Exakter Dateiname — das ist der Uebergabevertrag zu CheckIn.
+        # Die Endungspruefung allein liesse eine Rueckbenennung durch
+        # (Audit 2026-08-24: einzige der sieben Export-Stellen ohne Riegel).
+        assert os.path.basename(result) == "Marker - Testgast.mp3", (
+            f"MP3-Dateiname weicht ab: {os.path.basename(result)!r}. "
+            f"CheckIn erwartet 'Marker - {{Gast}}.mp3'.")
 
         # Exported MP3 should have reasonable size (not empty, not huge)
         size = os.path.getsize(result)

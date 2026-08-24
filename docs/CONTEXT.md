@@ -45,7 +45,7 @@ Dieses Dokument ist die Kurzversion fuer den PO.
   Masken starten komplett leer (kein geratener Default); Namen einmal
   tippen → überall wählbar. Hörprobe pro Mic. Review-Dropdown zeigt die
   Zuordnung, Screenshots erben das Label.
-- Harte Leitplanke: Keyboardstellen-Export bricht NIE wegen Folgenschnitt;
+- Harte Leitplanke: Marker-Export bricht NIE wegen Folgenschnitt;
   unvollständige Zuordnung → nur Hinweis, Folgenschnitt-XML entfällt. Eine
   bewusst leere Zuordnung wird NICHT heimlich durch Defaults ersetzt.
 
@@ -147,11 +147,16 @@ vom 12./17.08.:
 7. **Kalter Handdurchlauf** (Max) → Export-Vergleich → `develop` → `main`.
 8. Danach: Sicherheits-Kleinkram, CI im Web-Repo, Electron-Aktualisierung, ARCH-1.
 
-Nicht in dieser Reihenfolge verankert, aber offen (→ BACKLOG.md): **Keyboard→Marker-
-Umbenennung Teil 2** (Max-Entscheid 2026-06-20). Oberflächentexte/interne Bezeichner/
-Doku sind umbenannt; der Byte-ändernde Teil (Export-Dateinamen, XML-Sequenznamen,
-Pin-1-Prüfwert, Mitziehen in `export_parity.py` + CheckIn) wartet auf Max' Namens-
-entscheidung + ein Carl-Gate.
+**Keyboard→Marker ist seit 2026-08-24 vollständig durch** (Carl-Schluss-Gate grün).
+Auch der Byte-ändernde Teil: die drei Export-Dateinamen heißen jetzt
+`Marker - {Gast}.{mp3,txt,xml}`, die Sequenzen `Marker raw`/`Marker smart`
+(Smart-ID `marker-smart`), die TXT-Kopfzeile `MARKER`. Pin-1 wurde bewusst neu
+eingefroren — der normalisierte Byte-Diff der Raw-XML umfasst genau die Sequenzzeile.
+`export_parity.py` sucht nach `Marker*`, behält aber seine Wörterbuch-Schlüssel;
+CheckIn ging zuerst live und liest beide Namen dauerhaft. Bewusst NICHT umbenannt
+(Kompatibilitätsgrenze): `CAP_KEYBOARDSTELLEN`, die `keyboardstellen_*`-Protokoll-IDs,
+`keyboard_track` als Archiv-Lese-Alias, die Erkennungstokens und reale Quelldateinamen.
+Offen ist nur noch Max' Premiere-Import (→ BACKLOG.md, „Abnahme & Validierung").
 
 Am Kern selbst weiter offen: Produkt-Validierung (#70 Prompt-Tuning + Cutter-Sign-off),
 Slice A (Dialog-Totale Cross-Talk), Export-Steuerung in den Kern (ARCH-1, vor NAS),
@@ -171,7 +176,8 @@ markergebundene Kandidaten. `.peakcut`-Schema **v5 → v6**. Neues Qt-freies Mod
 (XML-Export, Smart-Playback, Ignorieren, Grenzen-Pipeline, Web-Serialisierer) — ein
 Fremdkandidat mit kollidierender Legacy-`peak_id` konnte dort vorher den echten
 Marker-Kandidaten verdrängen. Vier-Augen mit Carl (Spec + Gate A), TDD über 4 Tasks +
-Abschluss-Review + Fix-Welle, 888 Kern-Tests grün, Web 362 grün, Pin-1 stabil. Reale
+Abschluss-Review + Fix-Welle, 888 Kern-Tests grün, Web 362 grün (Stand dieses Slices;
+aktuell 910/363), Pin-1 stabil. Reale
 Ilka-Akte read-only migrationsgeprüft (31/31 korrekt, SHA vorher==nachher). Merge-
 Auflagen: v6 gleichzeitig auf `feature/redesign`+`develop`+`main`, Web-Merge zusammen
 mit dem Kern-Merge. **Offen (→ BACKLOG.md):** zwei herkunftsblinde Aggregate in
