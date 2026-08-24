@@ -427,7 +427,7 @@ class TestExportPipeline:
         assert os.path.exists(result)
 
         content = open(result).read()
-        assert "KEYBOARD PEAKS" in content
+        assert "MARKER" in content
         # 2 active peaks (peak at index 1 is ignored)
         peak_headers = [l for l in content.splitlines() if l.strip().startswith("[PEAK")]
         assert len(peak_headers) == 2

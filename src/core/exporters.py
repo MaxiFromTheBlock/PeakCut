@@ -160,7 +160,7 @@ class MP3Exporter(BaseExporter):
 
         gastname = session.project.guest_name
         mp3_path = os.path.join(session.project.export_dir,
-                                f"Keyboardstellen - {gastname}.mp3")
+                                f"Marker - {gastname}.mp3")
         result.export(mp3_path, format="mp3", bitrate="192k")
 
         _log.info("MP3 export done: %s (%d active peaks)", mp3_path, len(active_peaks))
@@ -185,7 +185,7 @@ class TXTExporter(BaseExporter):
 
         gastname = session.project.guest_name
         txt_path = os.path.join(session.project.export_dir,
-                                f"Keyboardstellen - {gastname}.txt")
+                                f"Marker - {gastname}.txt")
 
         with open(txt_path, "w") as f:
             # Video offsets (if any)
@@ -199,7 +199,7 @@ class TXTExporter(BaseExporter):
 
             # Peak timestamps
             f.write("=" * 40 + "\n")
-            f.write("KEYBOARD PEAKS\n")
+            f.write("MARKER\n")
             f.write("=" * 40 + "\n\n")
             for peak_num, peak in active_peaks:
                 f.write(f"[PEAK {peak_num}]\n")
@@ -271,7 +271,7 @@ class XMLExporter(BaseExporter):
 
         gastname = session.project.guest_name
         xml_path = os.path.join(session.project.export_dir,
-                                f"Keyboardstellen - {gastname}.xml")
+                                f"Marker - {gastname}.xml")
 
         with open(xml_path, "w") as f:
             # Header
@@ -279,7 +279,7 @@ class XMLExporter(BaseExporter):
             f.write('<!DOCTYPE xmeml>\n')
             f.write('<xmeml version="5">\n')
             f.write(f'  <sequence id="peakcut-sequence">\n')
-            f.write(f'    <name>Keyboardstellen raw</name>\n')
+            f.write(f'    <name>Marker raw</name>\n')
             f.write(f'    <duration>{total_frames}</duration>\n')
             f.write(f'    {rate_block}\n')
             f.write(f'    {tc_block}\n')

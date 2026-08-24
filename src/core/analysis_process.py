@@ -149,7 +149,7 @@ def run_analysis(config_data):
     # markerunabhaengiger Step 4 stillschweigend mit uebersprungen.
     if not marker_track:
         results["skipped_steps"]["peak_detection"] = "marker_missing"
-        progress("Kein Marker — Keyboardstellen entfallen, Sync + Sprecher-Aktivitaet bleiben")
+        progress("Kein Marker — Marker-XML entfaellt, Sync + Sprecher-Aktivitaet bleiben")
 
     elif not os.path.exists(marker_track):
         error(f"Marker-Datei nicht gefunden: {marker_track}")

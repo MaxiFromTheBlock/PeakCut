@@ -115,7 +115,7 @@ class TestXMLExporter:
 
         content = open(XMLExporter().export(session)).read()
 
-        assert "<name>Keyboardstellen raw</name>" in content
+        assert "<name>Marker raw</name>" in content
         assert "<name>PeakCut</name>" not in content
 
     @patch("core.exporters._probe_video_info", return_value=(1920, 1080))

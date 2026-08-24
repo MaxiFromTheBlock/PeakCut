@@ -173,11 +173,25 @@ def test_xml_audio_clips_are_premiere_importable(tmp_path):
     assert "<samplecharacteristics>" in xml      # Sequenz-Audioformat
 
 
-def test_sequence_named_keyboardstellen_smart(tmp_path):
+def test_sequence_named_marker_smart(tmp_path):
     s = _session(tmp_path, _cands())
     xml = open(SinnabschnittXMLExporter().export(s), encoding="utf-8").read()
-    assert "<name>Keyboardstellen smart</name>" in xml
+    assert "<name>Marker smart</name>" in xml
     assert "PeakCut Sinnabschnitte" not in xml
+    assert "Keyboardstellen" not in xml
+
+
+def test_smart_sequence_id_is_marker_smart(tmp_path):
+    """Strukturriegel für die Smart-XML — Pin-1 deckt nur die Raw-XML ab.
+
+    Carl-Gate 2026-08-24: die Smart-Sequenz-ID gehört zum ausdrücklich
+    umbenannten Exportdokument und wird mit umgestellt. Weil kein
+    Byte-Pin sie schützt, hält dieser Test die ID fest.
+    """
+    s = _session(tmp_path, _cands())
+    xml = open(SinnabschnittXMLExporter().export(s), encoding="utf-8").read()
+    assert '<sequence id="marker-smart">' in xml
+    assert 'keyboardstellen-smart' not in xml
 
 
 def test_xml_has_video_and_audio_tracks(tmp_path):

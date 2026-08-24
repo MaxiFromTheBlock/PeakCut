@@ -1,7 +1,7 @@
 """Slice "Marker + Vergleichbarkeit" — Task 1 (Carl-Plan).
 
 Gemeinsame Nummern-/Span-/Marker-Helfer für die kompakten Clip-an-Clip-
-XMLs (Keyboardstellen raw + Keyboardstellen smart). EINE Wahrheit für die
+XMLs (Marker raw + Marker smart). EINE Wahrheit für die
 Stellennummer (peak.index -> Stelle 1..N über aktive Peaks) und die
 kumulativen Record-Positionen, damit beide XMLs dieselben Marker-Nummern
 tragen.

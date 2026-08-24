@@ -11,7 +11,7 @@ Marker-Slice 2026-06-17: die XML ist jetzt eine kompakte Multicam-Liste
 Markerstellen-XML, damit Max beide in Premiere direkt vergleichen kann.
 Die Stellennummern kommen aus der gemeinsamen Marker-Nummernkarte
 (xml_sequence_helpers), NICHT aus candidate.peak_id. Sequenz heißt
-"Keyboardstellen smart". Der Markerstellen-Exporter bleibt ein eigener,
+"Marker smart". Der Markerstellen-Exporter bleibt ein eigener,
 unabhängiger Codepfad.
 """
 
@@ -126,8 +126,8 @@ class SinnabschnittXMLExporter:
             f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
             f.write('<!DOCTYPE xmeml>\n')
             f.write('<xmeml version="5">\n')
-            f.write('  <sequence id="keyboardstellen-smart">\n')
-            f.write('    <name>Keyboardstellen smart</name>\n')
+            f.write('  <sequence id="marker-smart">\n')
+            f.write('    <name>Marker smart</name>\n')
             f.write(f'    <duration>{total_frames}</duration>\n')
             f.write(f'    {rate}\n')
             f.write(f'    {tc}\n')

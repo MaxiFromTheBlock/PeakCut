@@ -182,7 +182,7 @@ def build_archive_payload(session, material_root, speaker_activity_csv_ref=None)
 
     marker = _rel(project.marker_track, material_root)
     # v4 additiv: mic_tracks bleibt die VOLLE Liste (Mix bleibt drin). Der
-    # Keyboardstellen-XML-Audioblock = mic_tracks (exporters.py) — den Mix hier
+    # Marker-XML-Audioblock = mic_tracks (exporters.py) — den Mix hier
     # zu entfernen würde die Cutter-XML ändern (Pin-1!). Der Mix bekommt
     # ZUSÄTZLICH einen eigenen Slot; das echte Strippen von mic_tracks zieht
     # Task 5 (Exporter-Umhängung), nicht Task 4.

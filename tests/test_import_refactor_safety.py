@@ -16,7 +16,7 @@ was der Import-Umbau NICHT verändern darf:
 
 2. **Gastname stabil** für HM-typische Mix-Dateinamen (#77 Task 6 stellt
    ``guest_name.py`` auf den zentralen Klassifizierer um — darf die Namen nicht
-   verschieben, sonst driftet der ``Keyboardstellen - {Gastname}.xml``-Dateiname).
+   verschieben, sonst driftet der ``Marker - {Gastname}.xml``-Dateiname).
 
 3. **Charakterisierung des heutigen Legacy-Imports** (KEIN Soll-Zustand): der Mix
    landet in den Audio-/Mic-Files, die ``.docx`` wird verworfen. Macht die
@@ -91,7 +91,7 @@ def _export_xml(s) -> str:
          patch("core.exporters._probe_video_info", return_value=(1920, 1080)):
         XMLExporter().export(s)
     xml_path = os.path.join(
-        s.project.export_dir, f"Keyboardstellen - {s.project.guest_name}.xml")
+        s.project.export_dir, f"Marker - {s.project.guest_name}.xml")
     with open(xml_path, encoding="utf-8") as f:
         return f.read()
 
