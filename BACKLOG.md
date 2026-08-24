@@ -82,9 +82,6 @@
   Few-Shot-Beispiele + Anti-Muster + HM-Stilprofil, messbar über A/B-Vergleich.
   Beinhaltet die **Aufhänger-Wahl** (welcher Satz ist der beste Einstieg — z. B.
   Stelle 7: Frage „Woher kommt das?" vs. die Erklärung). Gate (erfüllt): nach #76.
-- **Totale bei schnellem Dialog/Cross-Talk** (Slice A) `[L]` · braucht: Max-Material
-  Heute nur in Monolog-Blöcken ≥90s; soll bei Cross-Talk kommen, aber NICHT bei
-  humorvollem Schlagabtausch. Wartet auf Max' Material-Markierung aus 1plus1.
 
 ## 🏗️ Fundament & Architektur
 - **Export-Steuerung aus der Oberfläche in den Kern holen** (ARCH-1) `[M]` · braucht: Carl-Plan
@@ -139,9 +136,6 @@
   ffmpeg-Versionspin. Loser „irgendwann"-Sammelposten.
 
 ## ✔️ Abnahme & Validierung
-- **Cutter-Sign-off** `[S]` · braucht: Max-Material
-  1 sauberen, vollständig zugeordneten Folgenschnitt-Export von Alex abnehmen lassen.
-  Reine Bestätigung, kein Blocker (XML frame-identisch zur gelobten Version verriegelt).
 
 ## 🤔 Offene Entscheidungen (Max)
 - **Distributions-Pfad festlegen** · braucht: Max-Entscheidung
