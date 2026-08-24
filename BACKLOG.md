@@ -6,7 +6,7 @@
 >
 > **„#76", „#77", „G1", „ARCH-1" usw. sind nur Namen/Label — KEINE Aufgabenzahl.**
 >
-> Stand: **2026-08-17** (davor 2026-06-18) · Quelle: Carl-Gesundheitscheck 12.08. +
+> Stand: **2026-08-24** (davor 2026-08-17) · Quelle: Carl-Gesundheitscheck 12.08. +
 > Ultracode-Sweep 17.08., Befunde am Code gegengeprüft.
 >
 > Je Punkt: **[Aufwand S/M/L/XL]** · **braucht:** Carl-Plan / Max-Entscheidung / Max-Material / nichts.
@@ -118,6 +118,29 @@
   `core/material_scanner.py` in die PyQt-App zu erledigen (siehe Punkt darunter).
 
 ## 🧹 Hygiene & Wartung
+
+**Aus dem Abschluss-Audit 2026-08-24 (49 Prüfer, jeder Befund gegengeprüft):**
+
+- **CheckIn-Oberfläche: fünf Altlasten als Bündel** `[S]` · vier davon sitzen im
+  heute angefassten Übergabe-Weg, keine verliert Daten:
+  (1) toter Aufruf `onDesktopChanged` wirft bei jedem Start einen Fehler in die
+  Konsole; (2) der Übergabe-Knopf wird nach einem späteren Refresh wieder klickbar
+  und zeigt dann „0 Dateien kopiert" (die Zeile `uebergabeBtn.disabled =
+  !result.uebergabe_folder` überschreibt den Erfolgszustand — Altbestand, nicht neu);
+  (3) der Aufgabenzähler zählt eine erledigte Übergabe als offen; (4) roher
+  Python-Fehlertext landet als Knopfbeschriftung; (5) tote Konstante
+  `CHECKLIST_LABELS` (die echten Labels stehen in `index.html`).
+- **NAS-Sortierwerkzeug kennt nur den alten Namen** `[S]` · `inventory_episode.sh`
+  sucht `Keyboardstellen`. Heute harmlos, weil dort über den Ordnerpfad einsortiert
+  wird, nicht über den Dateinamen — aber bewusst gestaffelt und deshalb hier
+  festgehalten, statt nur in einer lokalen Datei.
+- **Cockpit-Doku auf den neuen Dateinamen ziehen** `[XS]` ·
+  `HM/6_Cockpit/Infrastruktur.md:166` und `Roadmap.md:62` beschreiben die Übergabe
+  noch mit `Keyboardstellen - {Gast}.mp3`.
+- **Kein automatischer Wächter in Web und CheckIn** `[M]` · braucht: Carl-Klärung.
+  Der Kern hat eine automatische Testprüfung, die anderen beiden nicht — CheckIn ist
+  die Brücke zur laufenden Produktion und damit das einzige Programm ohne Netz.
+
 - **Zwei kosmetische Restpunkte aus dem Kandidaten-Umbau** `[S]` · braucht: nichts
   **Präzisiert 2026-08-23 beim Merge — Zeilen am Code nachgeprüft.** Der frühere
   Sammelposten nannte vier Punkte; zwei davon waren zu dem Zeitpunkt bereits behoben
@@ -136,21 +159,17 @@
   ffmpeg-Versionspin. Loser „irgendwann"-Sammelposten.
 
 ## ✔️ Abnahme & Validierung
+- **Marker-XML in Premiere importieren** (Max) `[S]` · letzter Riegel vor dem
+  Produktivgebrauch der Umbenennung.
+  Belege liegen in `~/Desktop/MF/Vibecoding/PeakCut/Abnahmen/2026-08-24 Marker/`
+  (`_WAS-IST-DAS.md` erklärt, welche Datei welche ist). Zu importieren:
+  `Marker - Ilka Bessin.xml` — echt aus der Ilka-Akte erzeugt, 31 Marker.
+  Die Smart-XML dort ist nur eine Strukturprobe aus der Testvorrichtung; für eine
+  echte Smart-XML braucht es eine Akte mit bewerteten Sinnabschnitten.
+  Carl hat Kern, Web und CheckIn am 2026-08-24 abgenommen — nur diese Sichtprüfung
+  in Premiere fehlt noch.
 
 ## 🤔 Offene Entscheidungen (Max)
-- **Keyboard→Marker-Umbenennung Teil 2: Export-Dateinamen + XML-Sequenznamen** (Pin-1-Slice) `[S]` · braucht: Max-Entscheidung + Carl-Gate
-  Max-Entscheid 2026-06-20: „Keyboard" wird geräteunabhängig zu „Marker" (der Moderator
-  markiert seit zwei Folgen mit einer Kickdrum statt Keyboard). Oberflächentexte, interne
-  Bezeichner, Kommentare und Doku sind umbenannt (block-sicher, dieser Commit — Bericht
-  `.superpowers/rename/block-sicher-report.md`). **Offen bleibt der Byte-ändernde Teil:**
-  die drei Export-Dateinamen (`Keyboardstellen - {Gast}.{mp3,txt,xml}`), die beiden
-  XML-Sequenznamen/-IDs (`Keyboardstellen raw`/`smart`), die TXT-Kopfzeile „KEYBOARD
-  PEAKS", der eingefrorene Pin-1-Prüfwert (`tests/test_audio_routing_safety.py`) sowie
-  das Mitziehen in PeakCut-web (`engine/export_parity.py`) und CheckIn
-  (`uebergabe.py` sucht die Marker-MP3 heute über den Textbaustein „keyboardstellen" im
-  Dateinamen). Braucht zuerst Max' Namensentscheidung (Markerstellen? etwas anderes?),
-  danach ein Carl-Gate für die Byte-Änderung — nicht ohne Vier-Augen mergen. Detailplan
-  + Reihenfolge: `.superpowers/rename/block-sicher.md` Abschnitt „NICHT in dieser Runde".
 - **Distributions-Pfad festlegen** · braucht: Max-Entscheidung
   Bewusst „interne Repo-App" bleiben ODER saubere Releases/Versionierung + Code
   Signing. „Dazwischen" tut langfristig weh.
@@ -171,6 +190,7 @@
 ---
 
 ## ✅ Erledigt (Historie, Kurzform)
+- **Keyboard→Marker Teil 2 (Byte-ändernder Teil) durch** (2026-08-24, Carl-Schluss-Gate grün) — Max-Entscheid „Marker überall". Sieben Export-Literale umgestellt: die drei Dateinamen (`Marker - {Gast}.{mp3,txt,xml}`), TXT-Kopfzeile `KEYBOARD PEAKS`→`MARKER`, Raw-Sequenzname `Marker raw`, Smart-Sequenz-ID `marker-smart`, Smart-Sequenzname `Marker smart`. **Pin-1 bewusst neu eingefroren** (`e45cc987…`→`a70a8b8c…`); der normalisierte Byte-Diff der Raw-XML umfasst genau die Sequenzzeile — vor dem Einfrieren gemessen, Sequenz-ID `peakcut-sequence` unberührt. Eigener Strukturtest für `marker-smart` (Pin-1 deckt nur Raw). Kompatibilitätsgrenze unangetastet: `CAP_KEYBOARDSTELLEN`, die `keyboardstellen_*`-Protokoll-IDs (auch die Wörterbuch-Schlüssel im Web-Paritätsgate), `keyboard_track` als Archiv-Lese-Alias, Erkennungstokens `keyboard`/`keys`/`klavier`, reale Quelldateinamen. CheckIn ging bewusst ZUERST live (eigenes Repo, `main`=`13b6351`): liest neuen und alten Namen dauerhaft (kein Ablaufdatum), Exaktheit schlägt Namensvariante, Mehrdeutigkeit bricht laut ab und wird in der Oberfläche angezeigt; geschrieben wird nur der neue Name. 910 Kern / 363 Web-Engine / 64 CheckIn grün, C1-Paritätsgate gegen die echte Ilka-Akte 🟢 read-only. Kern `main`=`d140202`, Web `develop`=`bc641e6` (Web-`main` bewusst nicht nachgezogen). Offen: nur noch Max' Premiere-Import (→ Abnahme & Validierung).
 - **Stellen quellenunabhängig + Namensdrift begradigt** (2026-08-23, Carl-Gate B grün) — `ClipCandidate` trägt `candidate_id`/`origin`/`anchor_ms` (optionales `peak_id`), Akten-Schema v5→v6 mit Migration beim Hydrieren, Reconciliation statt Replace (Neu-Analyse vernichtet keine Fremdquellen und kein Entscheidungslog mehr), zentrale Marker-Sicht statt fünf blinder `peak_id`-Joins, Invarianten an der Wurzel (`origin != marker` ⇒ `peak_id is None`, reservierter Namensraum `marker:`), Identitäts-Validierung an der Archivgrenze. Kanonisch: `session.candidate_decisions` / Akten-Sektion `candidate_decisions` / Klasse `CandidateDecision`; `peak_decisions` nur noch als Legacy-JSON-Schlüssel, `PeakDecision`-Alias entfernt. 909 Kern-Tests, Pin-1 byte-identisch, reales Ilka-Paritäts-Gate 6/6.
 - **Gate B / Block A — v6-Strenge, Kandidaten-Identität, Wurzel-Invarianten** — drei Vertragslücken aus Carls Abschluss-Gate geschlossen (2026-08-21): (A1) die v6-Strenge hing an `if "candidate_id" in d` statt an der Schema-Version — eine beschädigte Schema-6-Akte tarnte sich als Legacy und lud still als `marker:0`; jetzt entscheidet `schema_v >= 6` (Kandidaten UND Decisions). (A2) neue zentrale Sammlungs-Prüfung `validate_candidate_collection` in BEIDE Richtungen (Laden + vor dem Schreiben): doppelte `candidate_id` → `ProjectArchiveError`, nach dem Hydrieren Sortierung nach `(anchor_ms, candidate_id)`. (A3) die peak_id-Kollisionsklasse ist an der Wurzel geschlossen (`ClipCandidate.__post_init__`): `origin != marker` erzwingt `peak_id is None`, Marker-ID muss zur `peak_id` passen, Namensraum `marker:` reserviert. Die zentrale Marker-Sicht bleibt als zweite Verteidigungslinie; die Kollisionstests arbeiten dafür mit absichtlich ungültigen Objekten (`tests/malformed_candidates.py`). 903 Tests grün, Pin-1 stabil
 - **Marker + Vergleichbarkeit Keyboardstellen ↔ Sinnabschnitte** — Carl-Plan, TDD (5 Tasks, 785 Tests). Beide XMLs: Video + Ton (smart hat jetzt dieselben Tonspuren wie raw), nummerierte Bereich-Marker „Stelle N" (synchron trotz peak_id-Versatz), Clip-Namen = Quelldateien, Sequenzen „Keyboardstellen raw"/„smart". Pin-1 bewusst neu eingefroren. Max in Premiere abgenommen (Philip Siefer). Carl-Schluss-Check offen (2026-06-18)
