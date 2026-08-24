@@ -145,7 +145,7 @@ class AnalysisWorker(QThread):
         guest_person = guest if guest and guest.lower() != "unknown" else "Gast"
 
         config_data = {
-            "keyboard_track": project.keyboard_track,
+            "marker_track": project.marker_track,
             "mic_tracks": project.mic_tracks,
             "videos": project.videos,
             "reference_track": project.get_reference_track(),
@@ -312,7 +312,7 @@ class ExportWorker(QThread):
     def run(self):
         try:
             # Hard guardrail: Folgenschnitt prep must never break the base
-            # (Keyboardstellen) export. Any failure becomes a skip notice.
+            # (Markerstellen) export. Any failure becomes a skip notice.
             try:
                 reason = prepare_folgenschnitt_for_export(self.session)
             except Exception:

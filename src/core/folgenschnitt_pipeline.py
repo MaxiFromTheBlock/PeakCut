@@ -2,7 +2,7 @@
 
 Baut zur Export-Zeit Sprecher-Turns + Schnittentscheidungen aus dem
 Zuordnungs-Schritt. Harte Leitplanke: eine unvollständige oder ungültige
-Zuordnung darf NIE den Keyboardstellen-Export brechen. Jedes Problem hier
+Zuordnung darf NIE den Markerstellen-Export brechen. Jedes Problem hier
 endet in einem Skip-Grund, nie in einer Exception, die zum Export-Worker
 durchschlägt.
 """

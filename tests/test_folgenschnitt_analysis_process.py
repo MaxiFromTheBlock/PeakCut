@@ -30,7 +30,7 @@ def test_run_analysis_includes_speaker_activity_for_two_mics(tmp_path):
     _write_wav(mic2_path, mic2, sr)
 
     results = run_analysis({
-        "keyboard_track": str(keyboard_path),
+        "marker_track": str(keyboard_path),
         "mic_tracks": [str(mic1_path), str(mic2_path)],
         "videos": [],
         "reference_track": None,

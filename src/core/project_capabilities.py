@@ -1,7 +1,7 @@
 """Contract-Slice (Carl): capability-driven Modell — welche Outputs sind moeglich?
 
 PeakCut ist nicht EINE Pipeline mit EINER Pflicht, sondern mehrere Faehigkeiten, jede mit
-eigenem Minimum. NICHTS ist global Pflicht — der Marker schaltet NUR die Keyboardstellen
+eigenem Minimum. NICHTS ist global Pflicht — der Marker schaltet NUR die Markerstellen
 frei; ohne ihn gibt es trotzdem Folgenschnitt + Screenshots. Der Mix ist OPTIONAL (sonst
 echte-Mics-Fallback). Diese Logik lebt zentral hier (nicht verstreut), UI + Engine lesen
 denselben Vertrag: enabled / missing / warnings / evidence.
@@ -63,7 +63,7 @@ def compute_capabilities(slots: ConfirmedImportSlots) -> ProjectCapabilities:
         evidence=(f"{len(slots.videos)} Video(s)",) if has_video else (),
     )
 
-    # Keyboardstellen: braucht den Marker (das einzig PeakCut-spezifisch Essenzielle).
+    # Markerstellen: braucht den Marker (das einzig PeakCut-spezifisch Essenzielle).
     has_marker = slots.marker is not None
     caps[CAP_KEYBOARDSTELLEN] = Capability(
         CAP_KEYBOARDSTELLEN, enabled=has_marker,

@@ -109,7 +109,7 @@ def _export_and_hash(tmp_path, unused_clips_mode):
 
     xml_path = os.path.join(
         s.project.export_dir,
-        f"Keyboardstellen - {s.project.guest_name}.xml",
+        f"Marker - {s.project.guest_name}.xml",
     )
     raw = open(xml_path, "rb").read()
     normalized = _normalize(raw, session_dir)

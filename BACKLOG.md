@@ -82,9 +82,6 @@
   Few-Shot-Beispiele + Anti-Muster + HM-Stilprofil, messbar über A/B-Vergleich.
   Beinhaltet die **Aufhänger-Wahl** (welcher Satz ist der beste Einstieg — z. B.
   Stelle 7: Frage „Woher kommt das?" vs. die Erklärung). Gate (erfüllt): nach #76.
-- **Totale bei schnellem Dialog/Cross-Talk** (Slice A) `[L]` · braucht: Max-Material
-  Heute nur in Monolog-Blöcken ≥90s; soll bei Cross-Talk kommen, aber NICHT bei
-  humorvollem Schlagabtausch. Wartet auf Max' Material-Markierung aus 1plus1.
 
 ## 🏗️ Fundament & Architektur
 - **Export-Steuerung aus der Oberfläche in den Kern holen** (ARCH-1) `[M]` · braucht: Carl-Plan
@@ -139,11 +136,21 @@
   ffmpeg-Versionspin. Loser „irgendwann"-Sammelposten.
 
 ## ✔️ Abnahme & Validierung
-- **Cutter-Sign-off** `[S]` · braucht: Max-Material
-  1 sauberen, vollständig zugeordneten Folgenschnitt-Export von Alex abnehmen lassen.
-  Reine Bestätigung, kein Blocker (XML frame-identisch zur gelobten Version verriegelt).
 
 ## 🤔 Offene Entscheidungen (Max)
+- **Keyboard→Marker-Umbenennung Teil 2: Export-Dateinamen + XML-Sequenznamen** (Pin-1-Slice) `[S]` · braucht: Max-Entscheidung + Carl-Gate
+  Max-Entscheid 2026-06-20: „Keyboard" wird geräteunabhängig zu „Marker" (der Moderator
+  markiert seit zwei Folgen mit einer Kickdrum statt Keyboard). Oberflächentexte, interne
+  Bezeichner, Kommentare und Doku sind umbenannt (block-sicher, dieser Commit — Bericht
+  `.superpowers/rename/block-sicher-report.md`). **Offen bleibt der Byte-ändernde Teil:**
+  die drei Export-Dateinamen (`Keyboardstellen - {Gast}.{mp3,txt,xml}`), die beiden
+  XML-Sequenznamen/-IDs (`Keyboardstellen raw`/`smart`), die TXT-Kopfzeile „KEYBOARD
+  PEAKS", der eingefrorene Pin-1-Prüfwert (`tests/test_audio_routing_safety.py`) sowie
+  das Mitziehen in PeakCut-web (`engine/export_parity.py`) und CheckIn
+  (`uebergabe.py` sucht die Marker-MP3 heute über den Textbaustein „keyboardstellen" im
+  Dateinamen). Braucht zuerst Max' Namensentscheidung (Markerstellen? etwas anderes?),
+  danach ein Carl-Gate für die Byte-Änderung — nicht ohne Vier-Augen mergen. Detailplan
+  + Reihenfolge: `.superpowers/rename/block-sicher.md` Abschnitt „NICHT in dieser Runde".
 - **Distributions-Pfad festlegen** · braucht: Max-Entscheidung
   Bewusst „interne Repo-App" bleiben ODER saubere Releases/Versionierung + Code
   Signing. „Dazwischen" tut langfristig weh.

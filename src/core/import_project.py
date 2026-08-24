@@ -2,7 +2,7 @@
 
 Keine Namensheuristik mehr — die WAHRHEIT sind die vom Nutzer bestaetigten Rollen
 (ConfirmedImportSlots). Carl-Adapter Opt. 2: das Laufzeit-PeakCutProject bekommt fuer den
-legacy XMLExporter Mics + [Mix] in mic_tracks (der Keyboardstellen-XML-Audioblock baut
+legacy XMLExporter Mics + [Mix] in mic_tracks (der Markerstellen-XML-Audioblock baut
 direkt von dort -> Pin-1), waehrend mix_track exakt die bestaetigte Mix-Rolle traegt.
 Qt-frei, testbar.
 """

@@ -1,7 +1,7 @@
 """Slice "Marker + Vergleichbarkeit" — Task 1 (Carl-Plan).
 
 Gemeinsame Nummern-/Span-/Marker-Helfer für die kompakten Clip-an-Clip-
-XMLs (Keyboardstellen raw + Keyboardstellen smart). EINE Wahrheit für die
+XMLs (Marker raw + Marker smart). EINE Wahrheit für die
 Stellennummer (peak.index -> Stelle 1..N über aktive Peaks) und die
 kumulativen Record-Positionen, damit beide XMLs dieselben Marker-Nummern
 tragen.
@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from core.xml_sequence_helpers import (  # noqa: E402
-    build_peak_number_map, build_keyboard_spans, build_smart_spans,
+    build_peak_number_map, build_peak_spans, build_smart_spans,
     active_smart_candidates, marker_xml, sequence_markers_xml)
 from core.peak import Peak  # noqa: E402
 from core.project import PeakCutProject  # noqa: E402
@@ -58,7 +58,7 @@ def test_peak_number_map_skips_ignored_like_keyboardstellen():
 
 def test_keyboard_spans_record_positions_are_cumulative():
     s = _session([_peak(0, 60000), _peak(1, 120000)])
-    spans = build_keyboard_spans(s)
+    spans = build_peak_spans(s)
     assert [sp.number for sp in spans] == [1, 2]
     assert spans[0].rec_start_f == 0
     for sp in spans:
@@ -147,7 +147,7 @@ def test_marker_xml_spans_clip_in_to_out():
 
 def test_sequence_markers_span_whole_stelle():
     s = _session([_peak(0, 60000), _peak(1, 120000)])
-    spans = build_keyboard_spans(s)
+    spans = build_peak_spans(s)
     xml = sequence_markers_xml(spans)
     assert xml.count("<marker>") == 2
     assert "<name>Stelle 1</name>" in xml and "<name>Stelle 2</name>" in xml

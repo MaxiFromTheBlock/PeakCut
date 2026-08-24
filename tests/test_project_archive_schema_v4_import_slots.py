@@ -209,7 +209,7 @@ def _xml_hash_for(session, tmp_root):
         XMLExporter().export(session)
     xml_path = os.path.join(
         session.project.export_dir,
-        f"Keyboardstellen - {session.project.guest_name}.xml")
+        f"Marker - {session.project.guest_name}.xml")
     with open(xml_path, "rb") as f:
         raw = f.read()
     raw = raw.replace(str(tmp_root).encode("utf-8"), b"__ROOT__")

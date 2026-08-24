@@ -24,7 +24,7 @@ Wenn Claude eine Idee von Max bekommt:
 
 ## Project Overview
 
-PeakCut ist eine Python/PyQt6 Desktop-App für Podcast-Nachbearbeitung. Sie erkennt Keyboard-Peaks (Fußpedal-Marker) in Audioaufnahmen und exportiert nummerierte Clips mit Timecodes.
+PeakCut ist eine Python/PyQt6 Desktop-App für Podcast-Nachbearbeitung. Sie erkennt Marker-Peaks in Audioaufnahmen und exportiert nummerierte Clips mit Timecodes.
 
 **Produktiv im Einsatz für:** Postproduction des [Hotel Matze](https://mitvergnuegen.com/hotelmatze/) Podcasts (Max ist aktuell einziger User)
 
@@ -64,9 +64,9 @@ PeakCut/                       ← Container-Ordner (KEIN Git-Repo)
 
 # Export Output (nicht im Repo)
 ~/Downloads/{Gastname} - PeakCut Export/
-├── Keyboardstellen - {Gastname}.mp3
-├── Keyboardstellen - {Gastname}.txt
-├── Keyboardstellen - {Gastname}.xml
+├── Marker - {Gastname}.mp3
+├── Marker - {Gastname}.txt
+├── Marker - {Gastname}.xml
 └── {Gastname} - Screenshots/
 
 # User Data (gebundelte App)
@@ -182,13 +182,13 @@ src/
 ```
 PeakCutProject (project.py)
   - export_dir (settable property: default ~/Downloads/{guest_name} - PeakCut Export/)
-  - keyboard_track, mic_tracks, videos
+  - marker_track, mic_tracks, videos
   - set_files(), get_all_file_paths(), get_reference_track()
   - guest_name (settable property: user-set oder auto-detected aus Mix-Dateiname)
 
 PeakCutSession (session.py)
   - status_update: StatusUpdate (callback-basiert, Qt-frei)
-  - State: peaks, current_peak, mode, keyboard_audio, mic_audios, video_offsets
+  - State: peaks, current_peak, mode, marker_audio, mic_audios, video_offsets
   - Methods: play_current(), switch_mode(), ignore_peak(), set_current_peak()
   - load_analysis_results(dict) — loads peaks + offsets from subprocess
   - load_audio_lazy() — deferred parallel audio loading (ThreadPoolExecutor), sets duration bounds on peaks
@@ -266,15 +266,15 @@ Aller State lebt in `PeakCutSession`. Kein globaler State.
 
 | Klasse | State |
 |--------|-------|
-| `PeakCutSession` | `peaks`, `current_peak`, `mode`, `keyboard_audio`, `mic_audios`, `video_offsets` |
+| `PeakCutSession` | `peaks`, `current_peak`, `mode`, `marker_audio`, `mic_audios`, `video_offsets` |
 | `config.py` | `_config` (JSON-basiert, lazy-loaded, thread-safe via `_lock`) |
 
 ---
 
 ## Data Flow
 
-1. **User klickt "Import Files"** → Datei-Dialog, Dateien kategorisiert (keyboard/mics/videos)
-2. **Falls Keyboard nicht auto-erkannt** → Dialog zur Auswahl
+1. **User klickt "Import Files"** → Datei-Dialog, Dateien kategorisiert (marker/mics/videos)
+2. **Falls Marker nicht auto-erkannt** → Dialog zur Auswahl
 3. **Pre-flight Validation** → Alle Dateien existenzgeprüft
 4. **Gastname-Dialog** → Auto-detected aus Mix-Dateiname, User kann editieren/bestätigen
 5. **Analyse startet** → `AnalysisWorker` (QThread) spawnt `analysis_process.py` als Subprocess (10-Min-Timeout)
@@ -355,7 +355,7 @@ Status-Updates laufen über `session.status_update` Callbacks + stderr vom Subpr
 |-----|---------|--------------|
 | `threshold_factor` | 0.3 | Peak-Erkennung Schwellwert (% vom Max-Sample) |
 | `min_gap_ms` | 12000 | Minimaler Abstand zwischen Peaks (ms) |
-| `preview_duration_ms` | 1000 | Keyboard-Mode Preview Länge |
+| `preview_duration_ms` | 1000 | Marker-Mode Preview Länge |
 | `context_duration_ms` | 15000 | Mic-Mode Kontext (±15s) |
 | `fps` | 25 | Framerate für Timecode-Berechnung |
 | `tts_voice` | "Anna" | macOS TTS Stimme |
@@ -382,7 +382,7 @@ Shortcuts sind nur auf der Review-Page aktiv (Page Index 3).
 **Achtung: zwei Wege im Repo, bewusst — nicht verwechseln.**
 
 ### 1. Namens-Heuristik (`core/import_classifier.py`) — der Weg, den die PyQt-App geht
-- **Marker/Keyboard**: Dateiname enthält `keyboard`, `keys` oder `klavier`
+- **Marker**: Dateiname enthält `keyboard`, `keys` oder `klavier`
 - **Mix/Referenz**: Token `mix`/`mixdown` **oder** Gerätemuster `_MIX_DEVICE_RE = ^p\d+mix(?:down)?$`
   (fängt die HM-Studio-Konvention „P8Mix" — Commit `91cc8ae`, Wurzelfix des Phasing-Bugs
   bei Johanna Klug). `remix`/`mixer`/`pmix` bleiben bewusst draußen.
@@ -512,7 +512,7 @@ Mini ✓** (auf main gelandet 2026-05-25) → **#76 Wiedergabe-UX**
 
 **Phasing-Wurzel diagnostiziert 2026-05-21:** Beim Import landet die
 Mix-Datei in `project.mic_tracks` (main_window 232-237 sortiert alles
-außer „keyboard/keys/klavier" als Mic). MP3Exporter (`exporters.py`
+außer der Marker-Spur („keyboard/keys/klavier") als Mic). MP3Exporter (`exporters.py`
 142-144) und `session.play_current` Mic-Mode (`session.py` 100-107)
 overlay-summieren `mic_audios[0]` + `mic_audios[1:]` — die Mix-Datei
 steckt aber als eine dieser „Mic-Spuren" mit drin. Folge: ProTools-
@@ -526,7 +526,7 @@ sowohl im Cutter-MP3 als auch in der Speak-Mode-Wiedergabe.
   Regel: Mix vorhanden → Speech-Audio = Mix allein; sonst Overlay
   der echten Mics. MP3Exporter + `session.play_current` +
   `assignment_page` nutzen Helper. **XMLExporter + folgenschnitt_
-  exporter BLEIBEN unangetastet** — Pin-1 (Keyboardstellen-XML byte-
+  exporter BLEIBEN unangetastet** — Pin-1 (Marker-XML byte-
   identisch). Trade-off: Hören sauber, XML-Pfade behalten Mix-als-
   Mic-Semantik bis zum Import-Refactor.
 - **#76:** Carls bestehender Plan wird leicht angepasst — Speak/
@@ -863,7 +863,7 @@ auch aus Transkript-Analyse, automatischer Clip-Findung oder von Hand.
 - **Reales Risiko geprüft:** Migration an Max' echter Ilka-Akte read-only
   nachgefahren — 31/31 Kandidaten korrekt, Anker == `peak.position_ms`, keine
   inhaltliche Abweichung, Akte-SHA vorher==nachher. KEIN Verlust.
-- **909 Kern-Tests grün** (Web: 362 passed/10 skipped/1 deselected), Pin-1
+- **909 Kern-Tests grün** (Web: 362 passed/10 skipped/1 deselected; Stand 08-23), Pin-1
   byte-identisch. Merge-Auflagen aus dem Abschluss-Review: v6 gleichzeitig auf
   `feature/redesign`+`develop`+`main` landen (kein Zweig bleibt zurück),
   Web-Merge zusammen mit dem Kern-Merge, vor dem ersten v6-Schreiben Kopie von
@@ -892,6 +892,38 @@ Verhaltensänderung**, damit das Web den Kern *aufruft* statt ihn nachzubauen
   P1/P2).** P3: `_default_unused_clips_mode` bewusst NICHT nach `gui`
   zurück-exportiert (kleinere Oberfläche). Slice-1-Auflage (Carl): expliziter
   Test, dass das Qt-freie Engine-venv `core.folgenschnitt_assignment` laden kann.
+
+### Keyboard → Marker: Umbenennung abgeschlossen (feature/redesign + develop, 2026-08-24)
+
+Max' Entscheid „Marker überall". Das Wort „Keyboardstellen" stammt aus der Zeit,
+als die Stellen ausschließlich per Keyboard-Fußtaster gesetzt wurden; seit Schema
+v6 sind die Stellen quellenunabhängig, der alte Name war falsch und irreführend.
+Carl-Gate vom 2026-08-24 mit verbindlichen Leitplanken.
+
+- **Sieben Export-Literale** umgestellt: MP3-/TXT-/XML-Dateiname, TXT-Kopfzeile
+  (`KEYBOARD PEAKS` → `MARKER`), Raw-Sequenzname (`Marker raw`), Smart-Sequenz-ID
+  (`marker-smart`) und Smart-Sequenzname (`Marker smart`).
+- **Pin-1 bewusst neu eingefroren.** Der normalisierte Byte-Diff der Raw-XML
+  gegen den Vorstand umfasst GENAU die Sequenzzeile — vor dem Einfrieren
+  nachgewiesen, nicht behauptet. Sequenz-ID bleibt `peakcut-sequence`.
+  Alter Hash bleibt im Test als Spur dokumentiert.
+- **Eigener Strukturtest für `marker-smart`,** weil Pin-1 nur die Raw-XML deckt.
+- **Kompatibilitätsgrenze (Carl-Leitplanke, NICHT umbenannt):** Archiv-Legacy-
+  Reader (`keyboard_track` als Alias/alter Lese-Schlüssel), stabile IPC-/
+  Artefakt-/Capability-IDs (`keyboardstellen_xml/_txt/_mp3`,
+  `CAP_KEYBOARDSTELLEN`), Erkennungstokens `keyboard`/`keys`/`klavier` und reale
+  Quelldateinamen wie `MIC4_Keyboard.WAV`. Kanonisch neu ist `marker_track`.
+- **Web-Paritätsgate:** Wörterbuch-Schlüssel bleiben (stabile IDs), gesucht wird
+  nach `Marker*.xml`/`.txt`.
+- **CheckIn zuerst ausgerollt** (eigenes Repo, `feature/marker-dual-read`):
+  dauerhafte Lesekompatibilität ohne Ablaufdatum — neuer und alter Name werden
+  gelesen, Marker gewinnt deterministisch, geschrieben wird nur der neue Name.
+  Die frühere breite Substring-Suche ist raus; sie hat bei Namensdrift still die
+  falsche MP3 geliefert und die Checkliste blieb unbemerkt bei 3 von 4.
+- **Echte Exportkette geprüft:** C1-Paritätsgate gegen Max' Ilka-Akte 🟢,
+  Marker-XML + Marker-TXT + Folgenschnitt-XML byte-identisch Web↔Desktop,
+  Akte read-only. 910 Kern-Tests grün, Web 363 grün, CheckIn 61 grün.
+- **Offen:** Max' Premiere-Import von Raw- und Smart-XML als Abnahme-Riegel.
 
 ### Marker + Vergleichbarkeit Keyboardstellen ↔ Sinnabschnitte (develop, 2026-06-18)
 
@@ -1578,4 +1610,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-08-23 (Carl-Gate B gruen, Vertrag eingefroren, gemeinsamer Merge Kern+Web freigegeben; Bau 2026-08-19/21 auf feature/kandidaten-quellenunabhaengig: Kandidaten quellenunabhängig — `.peakcut`-Schema v5→v6, `ClipCandidate` trägt jetzt `candidate_id`/`origin`/`anchor_ms` (optionales `peak_id`), Reconciliation statt Replace, zentrale Marker-Sicht `core/candidate_view.py` statt fünf blinder Joins. Fix-Welle danach: zweiter Absturzweg `review_page.on_ignore` geschlossen, Web-Engine-Import `candidate_view` auf Modulebene gehoben, Web-README auf v6 nachgezogen, zwei stumpf gewordene Tests per Mutationstest geschärft, aufgeschobene Punkte in BACKLOG.md gerettet. 909 Kern-Tests grün, Web 362 grün, Pin-1 stabil, reale Ilka-Akte read-only migrationsgeprüft (31/31 korrekt, SHA vorher==nachher). Davor 2026-06-20: Core-Extraction der Zuordnungs-Datenschicht nach `core/folgenschnitt_assignment.py`. Todos in App/BACKLOG.md.)*
+*Zuletzt aktualisiert: 2026-08-24 (Keyboard→Marker-Umbenennung abgeschlossen: sieben Export-Literale umgestellt, Pin-1 bewusst neu eingefroren mit nachgewiesenem Ein-Zeilen-Byte-Diff, Strukturtest für `marker-smart`, CheckIn mit dauerhafter Dual-Read-Kompatibilität zuerst ausgerollt, Web-Paritätsgate auf `Marker*` umgestellt; 910 Kern / 363 Web / 61 CheckIn grün, C1-Gate gegen die Ilka-Akte 🟢 read-only. Offen: Max' Premiere-Abnahme. Davor 2026-08-23 (Carl-Gate B gruen, Vertrag eingefroren, gemeinsamer Merge Kern+Web freigegeben; Bau 2026-08-19/21 auf feature/kandidaten-quellenunabhaengig: Kandidaten quellenunabhängig — `.peakcut`-Schema v5→v6, `ClipCandidate` trägt jetzt `candidate_id`/`origin`/`anchor_ms` (optionales `peak_id`), Reconciliation statt Replace, zentrale Marker-Sicht `core/candidate_view.py` statt fünf blinder Joins. Fix-Welle danach: zweiter Absturzweg `review_page.on_ignore` geschlossen, Web-Engine-Import `candidate_view` auf Modulebene gehoben, Web-README auf v6 nachgezogen, zwei stumpf gewordene Tests per Mutationstest geschärft, aufgeschobene Punkte in BACKLOG.md gerettet. 909 Kern-Tests grün, Web 362 grün, Pin-1 stabil, reale Ilka-Akte read-only migrationsgeprüft (31/31 korrekt, SHA vorher==nachher). Davor 2026-06-20: Core-Extraction der Zuordnungs-Datenschicht nach `core/folgenschnitt_assignment.py`. Todos in App/BACKLOG.md.)*

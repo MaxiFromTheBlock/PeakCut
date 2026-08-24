@@ -56,8 +56,21 @@ _TMP_PLACEHOLDER = "__TMPDIR__"
 # "Keyboardstellen raw" statt "PeakCut". Von Max gewünschte, beabsichtigte
 # Änderung — kein versehentlicher Drift. Abnahme-Riegel bleibt Max' Premiere-
 # Import; dieser Hash schützt ab jetzt genau diesen Stand.
+#
+# Bewusst neu eingefroren 2026-08-24 (Keyboard→Marker-Umbenennung, Carl-Gate
+# vom 2026-08-24): Max' Entscheid „Marker überall" — das Wort „Keyboardstellen"
+# stammt aus der Zeit, als die Stellen ausschließlich per Keyboard-Fußtaster
+# gesetzt wurden. Seit die Stellen quellenunabhängig sind (Schema v6), ist der
+# Name falsch und irreführend. Geändert hat sich am erzeugten Raw-XML AUSSCHLIESS-
+# LICH die Sequenzzeile:
+#     <name>Keyboardstellen raw</name>  ->  <name>Marker raw</name>
+# Der normalisierte Byte-Diff gegen den Vorstand umfasst genau diese eine Zeile
+# (nachgewiesen vor dem Einfrieren, nicht behauptet). Sequenz-ID bleibt
+# „peakcut-sequence", Audio-/Videoblöcke, Marker und Zeitbasis sind unberührt.
+# Alter Hash (Stand 2026-06-17): e45cc9878781f1e9871c6ea8d18ab8dbea8878e2c703f3c6876cd7af071993ba
+# Abnahme-Riegel bleibt Max' Premiere-Import.
 _XML_PIN_HASH_MIX_IN_MICS = (
-    "e45cc9878781f1e9871c6ea8d18ab8dbea8878e2c703f3c6876cd7af071993ba"
+    "a70a8b8cd1d7a7bd9500911fc7867e24013cd7c1f6a707dd52ade95fbb3b3a86"
 )
 
 
@@ -115,7 +128,7 @@ def _xml_hash(tmp_path) -> tuple[str, bytes]:
     ):
         XMLExporter().export(s)
     xml_path = os.path.join(
-        s.project.export_dir, f"Keyboardstellen - {s.project.guest_name}.xml"
+        s.project.export_dir, f"Marker - {s.project.guest_name}.xml"
     )
     raw = open(xml_path, "rb").read()
     normalized = _normalize(raw, tmp_path / "session")
@@ -229,7 +242,7 @@ def test_guest_name_extraction_stable_for_typical_mix_filenames():
     eine spätere Heuristik-Verschärfung (z.B. #71a is_mix_track-
     Umstellung) versehentlich die ältere guest_name-Heuristik mit
     verschiebt und damit Keyboardstellen-XML-Dateinamen
-    (`Keyboardstellen - {Gastname}.xml`) driften — was Pin-1
+    (`Marker - {Gastname}.xml`) driften — was Pin-1
     indirekt brechen würde.
 
     Auch die heutigen 'Unknown'-Ergebnisse sind bewusst eingefroren:

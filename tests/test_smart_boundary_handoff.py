@@ -168,8 +168,8 @@ def test_rev_sinnabschnitt_never_in_base_export_handoff():
     selbst nie eine Sinnabschnitt-Datei und ergänzt die Liste nicht."""
     events = []
     fs = _fake_self(events, enabled=False)   # Notbremse: nur Basis-Pfad
-    exported = ["Keyboardstellen - X.xml", "Keyboardstellen - X.mp3",
-                "Keyboardstellen - X.txt"]
+    exported = ["Marker - X.xml", "Marker - X.mp3",
+                "Marker - X.txt"]
     with patch("gui.review_page.SinnabschnittTXTExporter") as T, \
          patch("gui.review_page.SinnabschnittXMLExporter") as X:
         ReviewPage._on_export_done(fs, exported)

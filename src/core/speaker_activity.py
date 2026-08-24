@@ -31,7 +31,7 @@ def build_default_mic_assignments(
 ) -> list[MicAssignment]:
     """Build MVP default assignments.
 
-    The defensive filter is load-bearing: mix/keyboard tracks must never be
+    The defensive filter is load-bearing: mix/marker tracks must never be
     mistaken for a person's microphone. Filter first, then pair the first two
     real speaker mics with default_people positionally — never pair against
     the raw mic_tracks list.

@@ -1,7 +1,7 @@
 """Slice "Marker + Vergleichbarkeit" — Task 5 (Safety/Integration, Carl).
 
 Der eigentliche Beweis der Vergleichbarkeit: Keyboardstellen-XML
-("Keyboardstellen raw") und Sinnabschnitt-XML ("Keyboardstellen smart")
+("Marker raw") und Sinnabschnitt-XML ("Marker smart")
 tragen für gemeinsame Stellen DIESELBEN Marker-Nummern — obwohl die eine
 über Peaks und die andere über Smart-Kandidaten läuft (candidate.peak_id
 ist um ignorierte Peaks versetzt).
@@ -92,5 +92,5 @@ def test_export_filenames_unchanged(tmp_path):
     s = _full_session(tmp_path)
     kb = XMLExporter().export(s)
     sm = SinnabschnittXMLExporter().export(s)
-    assert os.path.basename(kb) == "Keyboardstellen - Hartmut Rosa.xml"
+    assert os.path.basename(kb) == "Marker - Hartmut Rosa.xml"
     assert os.path.basename(sm) == "Sinnabschnitte - Hartmut Rosa.xml"

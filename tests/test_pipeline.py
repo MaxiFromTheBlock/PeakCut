@@ -276,7 +276,7 @@ class TestAnalysisSubprocess:
         if videos is None:
             videos = [test_material["video_a"], test_material["video_b"]]
         config_data = {
-            "keyboard_track": test_material["keyboard"],
+            "marker_track": test_material["keyboard"],
             "mic_tracks": [test_material["mic"]],
             "videos": videos,
             "reference_track": test_material["mic"],
@@ -363,10 +363,10 @@ class TestSessionLoading:
 
         session.load_audio_lazy()
 
-        assert session.keyboard_audio is not None
+        assert session.marker_audio is not None
         assert len(session.mic_audios) == 1
         # Audio should be roughly the expected duration
-        assert abs(len(session.keyboard_audio) - DURATION_MS) < 100
+        assert abs(len(session.marker_audio) - DURATION_MS) < 100
 
     def test_session_status_callback(self, test_material, test_config):
         """Status updates should fire callbacks (Qt-free)."""
@@ -427,7 +427,7 @@ class TestExportPipeline:
         assert os.path.exists(result)
 
         content = open(result).read()
-        assert "KEYBOARD PEAKS" in content
+        assert "MARKER" in content
         # 2 active peaks (peak at index 1 is ignored)
         peak_headers = [l for l in content.splitlines() if l.strip().startswith("[PEAK")]
         assert len(peak_headers) == 2

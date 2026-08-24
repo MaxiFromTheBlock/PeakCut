@@ -144,7 +144,7 @@ def test_session_load_audio_lazy_loads_structural_mix_without_shifting_mics(monk
 
     session.load_audio_lazy()
 
-    assert session.keyboard_audio is audio_by_path["/m/Marker.wav"]
+    assert session.marker_audio is audio_by_path["/m/Marker.wav"]
     assert session.mix_audio is audio_by_path["/m/Sheila Mix.mp3"]
     assert session.mic_audios == [
         audio_by_path["/m/MIC1.wav"],

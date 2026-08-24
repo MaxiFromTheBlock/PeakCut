@@ -27,7 +27,7 @@ TRANSCRIPT_REF = f"{ARCHIVE_DIR}/{TRANSCRIPT_NAME}"
 def transcript_root(project):
     """Exakt dieselbe Wurzel-Auflösung wie save_project_archive
     (sonst divergierender .peakcut/-Ordner / toter Verweis)."""
-    return material_root(_media_paths(project), project.keyboard_track)
+    return material_root(_media_paths(project), project.marker_track)
 
 
 def transcript_sidecar_path(project):

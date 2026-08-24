@@ -46,7 +46,7 @@ class PeakCutSession:
         self.mode: str = normalize_playback_mode(config.get("playback_mode"))
 
         # Audio data
-        self.keyboard_audio: AudioSegment | None = None
+        self.marker_audio: AudioSegment | None = None
         self.mix_audio: AudioSegment | None = None
         self.mic_audios: list[AudioSegment] = []
 
@@ -323,13 +323,13 @@ class PeakCutSession:
     def load_audio_lazy(self):
         """Load audio segments on demand (after analysis results are loaded).
 
-        Loads marker/keyboard + structural mix + legacy mic tracks in
+        Loads marker + structural mix + legacy mic tracks in
         parallel via ThreadPool. During #77 Gate B, mic_tracks still may
         contain the Mix; mic_audios therefore intentionally stays 1:1
         aligned to project.mic_tracks while mix_audio is exposed
         separately.
         """
-        if self.keyboard_audio is None and self.project.keyboard_track:
+        if self.marker_audio is None and self.project.marker_track:
             self.status_update.emit("Lade Audio...")
             all_paths = []
 
@@ -337,7 +337,7 @@ class PeakCutSession:
                 if path and path not in all_paths:
                     all_paths.append(path)
 
-            add_path(self.project.keyboard_track)
+            add_path(self.project.marker_track)
             add_path(getattr(self.project, "mix_track", None))
             for path in self.project.mic_tracks:
                 add_path(path)
@@ -346,14 +346,14 @@ class PeakCutSession:
                 results = list(executor.map(AudioSegment.from_file, all_paths))
             loaded = dict(zip(all_paths, results))
 
-            self.keyboard_audio = loaded[self.project.keyboard_track]
+            self.marker_audio = loaded[self.project.marker_track]
             mix_track = getattr(self.project, "mix_track", None)
             self.mix_audio = loaded.get(mix_track) if mix_track else None
             self.mic_audios = [
                 loaded[path] for path in self.project.mic_tracks
             ]
             # Set duration bounds on peaks so out_point_ms can't exceed audio length
-            duration_ms = len(self.keyboard_audio)
+            duration_ms = len(self.marker_audio)
             for peak in self.peaks:
                 peak._duration_ms = duration_ms
             self.status_update.emit("Audio geladen")
