@@ -137,9 +137,14 @@
 - **Cockpit-Doku auf den neuen Dateinamen ziehen** `[XS]` ·
   `HM/6_Cockpit/Infrastruktur.md:166` und `Roadmap.md:62` beschreiben die Übergabe
   noch mit `Keyboardstellen - {Gast}.mp3`.
-- **Kein automatischer Wächter in Web und CheckIn** `[M]` · braucht: Carl-Klärung.
-  Der Kern hat eine automatische Testprüfung, die anderen beiden nicht — CheckIn ist
-  die Brücke zur laufenden Produktion und damit das einzige Programm ohne Netz.
+- **Kein automatischer Wächter im Web-Repo** `[M]` · Der Kern hat eine automatische
+  Testprüfung, CheckIn seit 2026-08-25 auch — das Web-Repo als einziges noch nicht.
+  ✅ CheckIn erledigt (Carl-Entscheid 2026-08-25, CheckIn `main`=`1e3178e`): jeder
+  Push und Pull Request laufen auf macos-latest gegen 64 Python-Tests + Syntaxprüfung
+  von `main.js`/`preload.js`/`renderer/app.js`; `pruefung` ist Pflicht-Check für
+  `main`. Der frühere `npm test` war ein Scheintest (`echo "No tests yet"`, Exit 0
+  ohne Prüfung) — ersetzt durch `scripts/checks.sh`, dieselbe Wahrheit lokal und
+  in CI. Drei Mutationen belegen, dass der Wächter anschlägt.
 
 - **Zwei kosmetische Restpunkte aus dem Kandidaten-Umbau** `[S]` · braucht: nichts
   **Präzisiert 2026-08-23 beim Merge — Zeilen am Code nachgeprüft.** Der frühere
