@@ -119,6 +119,17 @@
 
 ## 🧹 Hygiene & Wartung
 
+**Aus dem Abschluss-Audit 2026-08-25 (41 Prüfer, jeder Befund gegengeprüft):**
+
+- **CheckIn meldet „PeakCut läuft", auch wenn der Start scheitert** `[XS]` ·
+  Der Knopf zeigt Erfolg, ohne zu prüfen, ob Interpreter und Skript da sind.
+  Heute stimmen die Pfade — aber genau eine Verschiebung wie die vom 25.08.
+  würde den Knopf zum Lügner machen, und der neue Wächter merkt es nicht.
+- **Read-only-Wache des Paritätsgates schaut nur in die oberste Ebene** `[S]` ·
+  Die Prüfsummen der Akte werden nicht rekursiv gebildet. Eine Änderung in einem
+  Unterordner der `.peakcut`-Ablage würde nicht auffallen. Heute kein Schaden
+  (ein Prüfer hat den kompletten Ordner unabhängig verglichen: unverändert).
+
 **Aus dem Abschluss-Audit 2026-08-24 (49 Prüfer, jeder Befund gegengeprüft):**
 
 - **CheckIn-Oberfläche: fünf Altlasten als Bündel** `[S]` · vier davon sitzen im
