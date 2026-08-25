@@ -6,7 +6,7 @@
 >
 > **„#76", „#77", „G1", „ARCH-1" usw. sind nur Namen/Label — KEINE Aufgabenzahl.**
 >
-> Stand: **2026-08-24** (davor 2026-08-17) · Quelle: Carl-Gesundheitscheck 12.08. +
+> Stand: **2026-08-25** (davor 2026-08-24) · Quelle: Carl-Gesundheitscheck 12.08. +
 > Ultracode-Sweep 17.08., Befunde am Code gegengeprüft.
 >
 > Je Punkt: **[Aufwand S/M/L/XL]** · **braucht:** Carl-Plan / Max-Entscheidung / Max-Material / nichts.
