@@ -1,5 +1,10 @@
 # Stellen quellenunabhängig machen — Implementation Plan
 
+> ⚠️ **Umzugsnotiz 2026-08-25:** Das Web-Repo liegt seit diesem Datum unter
+> `~/Desktop/MF/Vibecoding/PeakCut/web/` (vorher `.../PeakCut-web/`). Die
+> Befehlszeilen weiter unten nennen noch den alten Pfad — sie sind Historie
+> und werden bewusst nicht umgeschrieben.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** `session.clip_candidates` wird die allgemeine Stellen-Liste mit eigener Identität und Herkunft, ohne dass sich für eine Hotel-Matze-Folge irgendetwas sichtbar ändert.
