@@ -62,6 +62,16 @@ PeakCut/                       ← Container-Ordner (KEIN Git-Repo)
     ├── PeakCut.spec           ← PyInstaller Build-Config (in .gitignore)
     └── PeakCut.icns           ← App Icon (in .gitignore)
 
+# Nachbarschaft (seit 2026-08-25 ein Dach, zwei Repos)
+~/Desktop/MF/Vibecoding/PeakCut/
+├── App/          ← DIESES Repo (Kern, PyQt-App)
+├── web/          ← Repo PeakCut-web (Electron+React + Engine)
+├── Abnahmen/     ← Abnahme-Belege (z. B. 2026-08-24 Marker)
+├── Design/       ← Design-Handoff
+├── Release/      ← Installationsdoku
+└── Icon/
+Der äußere Ordner ist KEIN Repo — keine Verschachtelung, keine Submodule.
+
 # Export Output (nicht im Repo)
 ~/Downloads/{Gastname} - PeakCut Export/
 ├── Marker - {Gastname}.mp3
@@ -901,6 +911,30 @@ Verhaltensänderung**, damit das Web den Kern *aufruft* statt ihn nachzubauen
   zurück-exportiert (kleinere Oberfläche). Slice-1-Auflage (Carl): expliziter
   Test, dass das Qt-freie Engine-venv `core.folgenschnitt_assignment` laden kann.
 
+### Ordner-Umzug + CheckIn-Wächter (2026-08-25)
+
+- **Ein PeakCut-Ordner statt zwei.** Das Web-Repo liegt jetzt unter
+  `PeakCut/web/` (vorher `Vibecoding/PeakCut-web/`). Beides eigene Git-Repos in
+  einem gewöhnlichen Ordner. Der Repo-NAME auf GitHub bleibt `PeakCut-web`.
+- **Pfadauflösung zentral** in `web/engine/peakcut_paths.py`: `PEAKCUT_APP_SRC`
+  gewinnt und wird streng geprüft (gesetzt-aber-falsch fällt NIEMALS auf die
+  Nachbarschaft zurück, leer auch nicht), sonst `../App/src`, sonst als
+  Übergang `../PeakCut/App/src`. Erkannt wird ein Kern an
+  `core/project_archive.py`, nicht an „Ordner da".
+- **Audit-Fund am Vertrauensanker:** Das Paritätsgate startet beide Seiten in
+  einem minimalen Environment. Der Desktop bekam den Kern eingebacken, das
+  Web-Kind löste selbst auf — bei gesetzter Vorgabe verglich das Gate zwei
+  VERSCHIEDENE Kerne und meldete grün. Die Vorgabe wird jetzt durchgereicht,
+  zwei Tests halten es fest.
+- **CheckIn hat einen Wächter** (Carl-Entscheid): jeder Push und Pull Request
+  auf macos-latest, 64 Tests + Syntaxprüfung von `main.js`/`preload.js`/
+  `renderer/app.js`. `pruefung` ist Pflicht-Check für `main`. Der frühere
+  `npm test` war ein Scheintest (`echo "No tests yet"`).
+- Beweise im neuen Pfad: Kern 910, Web-Engine 378, Web-Oberfläche 235
+  (`npm test`; `test:render` sind nur 175), typecheck, build, `/health` 200,
+  C1-Paritätsgate 🟢 read-only mit identischen Prüfsummen wie vor dem Umzug —
+  mit UND ohne gesetzte Kern-Vorgabe.
+
 ### Keyboard → Marker: Umbenennung abgeschlossen (feature/redesign + develop, 2026-08-24)
 
 Max' Entscheid „Marker überall". Das Wort „Keyboardstellen" stammt aus der Zeit,
@@ -1624,4 +1658,4 @@ Maerz-Aenderungen aus 6 Wochen Produktivnutzung (entspricht "Haertetest bestande
 
 ---
 
-*Zuletzt aktualisiert: 2026-08-24 (Keyboard→Marker-Umbenennung abgeschlossen: sieben Export-Literale umgestellt, Pin-1 bewusst neu eingefroren mit nachgewiesenem Ein-Zeilen-Byte-Diff, Strukturtest für `marker-smart`, CheckIn mit dauerhafter Dual-Read-Kompatibilität zuerst ausgerollt, Web-Paritätsgate auf `Marker*` umgestellt; 910 Kern / 363 Web-Engine / 64 CheckIn grün, C1-Gate gegen die Ilka-Akte 🟢 read-only. Offen: Max' Premiere-Abnahme. Davor 2026-08-23 (Carl-Gate B gruen, Vertrag eingefroren, gemeinsamer Merge Kern+Web freigegeben; Bau 2026-08-19/21 auf feature/kandidaten-quellenunabhaengig: Kandidaten quellenunabhängig — `.peakcut`-Schema v5→v6, `ClipCandidate` trägt jetzt `candidate_id`/`origin`/`anchor_ms` (optionales `peak_id`), Reconciliation statt Replace, zentrale Marker-Sicht `core/candidate_view.py` statt fünf blinder Joins. Fix-Welle danach: zweiter Absturzweg `review_page.on_ignore` geschlossen, Web-Engine-Import `candidate_view` auf Modulebene gehoben, Web-README auf v6 nachgezogen, zwei stumpf gewordene Tests per Mutationstest geschärft, aufgeschobene Punkte in BACKLOG.md gerettet. 909 Kern-Tests grün, Web 362 grün, Pin-1 stabil, reale Ilka-Akte read-only migrationsgeprüft (31/31 korrekt, SHA vorher==nachher). Davor 2026-06-20: Core-Extraction der Zuordnungs-Datenschicht nach `core/folgenschnitt_assignment.py`. Todos in App/BACKLOG.md.)*
+*Zuletzt aktualisiert: 2026-08-25 (Ordner-Umzug PeakCut-web → PeakCut/web, zentrale Pfadauflösung, Audit-Fund am Paritätsgate behoben, CheckIn-Wächter live. Davor 2026-08-24 (Keyboard→Marker-Umbenennung abgeschlossen: sieben Export-Literale umgestellt, Pin-1 bewusst neu eingefroren mit nachgewiesenem Ein-Zeilen-Byte-Diff, Strukturtest für `marker-smart`, CheckIn mit dauerhafter Dual-Read-Kompatibilität zuerst ausgerollt, Web-Paritätsgate auf `Marker*` umgestellt; 910 Kern / 363 Web-Engine / 64 CheckIn grün, C1-Gate gegen die Ilka-Akte 🟢 read-only. Offen: Max' Premiere-Abnahme. Davor 2026-08-23 (Carl-Gate B gruen, Vertrag eingefroren, gemeinsamer Merge Kern+Web freigegeben; Bau 2026-08-19/21 auf feature/kandidaten-quellenunabhaengig: Kandidaten quellenunabhängig — `.peakcut`-Schema v5→v6, `ClipCandidate` trägt jetzt `candidate_id`/`origin`/`anchor_ms` (optionales `peak_id`), Reconciliation statt Replace, zentrale Marker-Sicht `core/candidate_view.py` statt fünf blinder Joins. Fix-Welle danach: zweiter Absturzweg `review_page.on_ignore` geschlossen, Web-Engine-Import `candidate_view` auf Modulebene gehoben, Web-README auf v6 nachgezogen, zwei stumpf gewordene Tests per Mutationstest geschärft, aufgeschobene Punkte in BACKLOG.md gerettet. 909 Kern-Tests grün, Web 362 grün, Pin-1 stabil, reale Ilka-Akte read-only migrationsgeprüft (31/31 korrekt, SHA vorher==nachher). Davor 2026-06-20: Core-Extraction der Zuordnungs-Datenschicht nach `core/folgenschnitt_assignment.py`. Todos in App/BACKLOG.md.)*

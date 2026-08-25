@@ -12,7 +12,7 @@
 | | Repo / Zweig | Was |
 |---|---|---|
 | **Kern + PyQt-Oberfläche** | `PeakCut/App` · `feature/redesign` | Das produktive PeakCut. Analyse, Erkennung, Zuordnung, alle Exporter + die Oberfläche, mit der Max arbeitet. Python 3.11 + PyQt6. |
-| **Neue Oberfläche** | `PeakCut-web` · `develop` | Electron + React. Rechnet **nichts** selbst, ruft den Kern nebenan auf (`engine/engine_core.py` hängt `../../PeakCut/App/src` in den Import-Pfad). „web" = Bautechnik der Oberfläche, **kein** Server, keine Cloud. |
+| **Neue Oberfläche** | `PeakCut-web` · `develop` | Electron + React. Rechnet **nichts** selbst, ruft den Kern nebenan auf. Seit dem Umzug 2026-08-25 liegen beide unter einem Dach: `PeakCut/App` (Kern) + `PeakCut/web` (Oberfläche); die Auflösung steht zentral in `web/engine/peakcut_paths.py`. „web" = Bautechnik der Oberfläche, **kein** Server, keine Cloud. |
 
 **Zielbild (Max-Entscheid 2026-08-17): Die neue Oberfläche soll die PyQt-App
 ersetzen.** Damit sind Paketierung (installierbar per Doppelklick), Selbst-Start der
@@ -177,7 +177,7 @@ markergebundene Kandidaten. `.peakcut`-Schema **v5 → v6**. Neues Qt-freies Mod
 Fremdkandidat mit kollidierender Legacy-`peak_id` konnte dort vorher den echten
 Marker-Kandidaten verdrängen. Vier-Augen mit Carl (Spec + Gate A), TDD über 4 Tasks +
 Abschluss-Review + Fix-Welle, 888 Kern-Tests grün, Web 362 grün (Stand dieses Slices;
-aktuell 910/363), Pin-1 stabil. Reale
+aktuell 910/378), Pin-1 stabil. Reale
 Ilka-Akte read-only migrationsgeprüft (31/31 korrekt, SHA vorher==nachher). Merge-
 Auflagen: v6 gleichzeitig auf `feature/redesign`+`develop`+`main`, Web-Merge zusammen
 mit dem Kern-Merge. **Offen (→ BACKLOG.md):** zwei herkunftsblinde Aggregate in
