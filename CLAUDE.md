@@ -131,7 +131,7 @@ Wird aktuell nicht genutzt, weil keine DMG mehr verteilt wird. Infrastruktur ble
 ## Commands
 
 ```bash
-cd /Users/max/Desktop/MF/Vibecoding/PeakCut/App
+cd "$(git rev-parse --show-toplevel)"
 
 # App starten (Development)
 "./venv311/bin/python" src/main_pyqt.py

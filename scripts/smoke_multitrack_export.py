@@ -8,12 +8,12 @@ und legt die XMLs in getrennte Download-Ordner. Max importiert beide
 in Premiere, vergleicht.
 
 Aufruf:
-  cd ~/Desktop/MF/Vibecoding/PeakCut/App
-  ./venv311/bin/python scripts/smoke_multitrack_export.py
+  ./venv311/bin/python scripts/smoke_multitrack_export.py --akte /pfad/zur/.peakcut/project.json
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 
@@ -30,17 +30,13 @@ from core.folgenschnitt_pipeline import prepare_folgenschnitt_for_export
 from core.project_archive import load_project_archive
 
 
-ARCHIVE = (
-    "/Users/max/Desktop/Fremdproduktion/Material für Peakcut/"
-    "Teil 2/.peakcut/project.json"
-)
 BASE_CONFIG = {"fps": 25, "context_duration_ms": 15000}
 
 
-def _export_for_mode(mode: str) -> str:
+def _export_for_mode(mode: str, archive: str) -> str:
     """Frische Session laden (kein State-Sharing zwischen Modi),
     Mode setzen, Decisions berechnen, Multitrack-XML schreiben."""
-    session = load_project_archive(ARCHIVE, dict(BASE_CONFIG))
+    session = load_project_archive(archive, dict(BASE_CONFIG))
     session.folgenschnitt_unused_clips_mode = mode
 
     out_dir = os.path.expanduser(f"~/Downloads/Teil 2 - Smoke {mode}")
@@ -67,10 +63,23 @@ def _export_for_mode(mode: str) -> str:
 
 
 def main():
-    print(f"Akte: {ARCHIVE}")
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--akte",
+        default=os.environ.get("PEAKCUT_SMOKE_AKTE"),
+        help="Pfad zu .peakcut/project.json (oder PEAKCUT_SMOKE_AKTE)",
+    )
+    args = parser.parse_args()
+    if not args.akte:
+        parser.error("--akte oder PEAKCUT_SMOKE_AKTE ist erforderlich")
+    archive = os.path.realpath(os.path.expanduser(args.akte))
+    if not os.path.isfile(archive):
+        parser.error(f"Akte nicht gefunden: {archive}")
+
+    print(f"Akte: {archive}")
     print()
     for mode in (UNUSED_CLIPS_DISABLE, UNUSED_CLIPS_REMOVE):
-        _export_for_mode(mode)
+        _export_for_mode(mode, archive)
     print()
     print("Fertig. Beide XMLs in ~/Downloads/Teil 2 - Smoke <mode>/")
     print("Naechster Schritt: beide in Premiere (frisches Projekt) importieren.")

@@ -88,9 +88,9 @@ security delete-generic-password -s "$SERVICE" -a "$ACCOUNT" >/dev/null 2>&1 \
 
 echo
 echo "Validieren → Speichern → Re-Lesen → Re-Validieren …"
-RAW_KEY="$RAW_KEY" "$PY" - << 'PY'
+REPO_ROOT="$REPO_ROOT" RAW_KEY="$RAW_KEY" "$PY" - << 'PY'
 import os, sys
-sys.path.insert(0, "/Users/max/Desktop/MF/Vibecoding/PeakCut/App/src")
+sys.path.insert(0, os.path.join(os.environ["REPO_ROOT"], "src"))
 from core.credentials import validate_api_key, default_credential_provider
 
 raw = os.environ.get('RAW_KEY', '')

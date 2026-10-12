@@ -19,5 +19,7 @@ dist/
 bundled_ffmpeg/
 *.spec
 *.icns
+!PeakCut.spec
+!PeakCut.icns
 *.dmg
 .superpowers/
